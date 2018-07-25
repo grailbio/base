@@ -1,0 +1,20 @@
+// Package identity defines interfaces for Vanadium identity providers.
+package identity
+
+import (
+    "v.io/v23/security"
+    "v.io/v23/security/access"
+)
+
+// Ec2Blesser returns a blessing given the provided EC2 instance identity
+// document.
+type Ec2Blesser interface {
+  // BlessEc2 uses the provided EC2 instance identity document in PKCS#7
+  // format to return a blessing to the client.
+  BlessEc2(pkcs7b64 string) (blessing security.WireBlessings | error)  {access.Read}
+}
+
+// GoogleBlesser returns a blessing giving the provided Google ID token.
+type GoogleBlesser interface {
+  BlessGoogle(idToken string) (blessing security.WireBlessings | error)  {access.Read}
+}
