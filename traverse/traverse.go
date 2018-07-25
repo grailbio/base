@@ -7,12 +7,13 @@ package traverse
 
 import (
 	"fmt"
-	"github.com/grailbio/base/errorreporter"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
+
+	"github.com/grailbio/base/errorreporter"
 )
 
 type panicErr struct {
@@ -72,12 +73,17 @@ func (t Traverse) WithReporter(reporter Reporter) Traverse {
 // Panics are recovered in ops and propagated to the calling
 // goroutine, printing the original stack trace. Do guarantees that,
 // after it returns, no more ops will be invoked.
-func (t Traverse) Do(op func(i int) error) (err error) {
+func (t Traverse) Do(op func(i int) error) error {
+	var er errorreporter.T
 	return t.DoRange(func(start, end int) error {
-		for i := start; i < end && err == nil; i++ {
-			err = op(i)
+		for i := start; i < end && er.Err() == nil; i++ {
+			err := op(i)
+			if err != nil {
+				er.Set(err)
+				return err
+			}
 		}
-		return err
+		return nil
 	})
 }
 
