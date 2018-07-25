@@ -1,0 +1,321 @@
+package ticket
+
+import "v.io/v23/security/access"
+
+// TicketConfig Controls fields
+type Control enum {
+    PagerDutyId
+    Rationale
+    TicketId
+}
+
+// AwsCredentials describes a set of (potentially temporary) AWS credentials.
+type AwsCredentials struct {
+    Region string
+    AccessKeyId string
+    SecretAccessKey string
+    SessionToken string
+
+    // Expiration indicates the date on which the credentials expire.
+    Expiration string
+}
+
+
+// Builder.
+
+// AwsAssumeRoleBuilder describes the information required to obtain a temporary
+// set of AWS credentials (which can be described using AwsCredentials) using
+// the AssumeRole call from Security Token Service (STS).
+type AwsAssumeRoleBuilder struct {
+    Region string
+    Role string
+    TtlSec int32
+}
+
+// AwsSessionBuilder describes the information required to obtain a temporary
+// set of AWS credentials (described using AwsCredentials) then using
+// the GetSessionToken call from Security Token Service (STS).
+type AwsSessionBuilder struct {
+    AwsCredentials AwsCredentials
+    // TTL in seconds for the generated AWS credential from 900-129600.
+    TtlSec int32
+}
+
+// TlsCertAuthorityBuilder describes a Certification Authority capable to
+// generate a particular cert.
+type TlsCertAuthorityBuilder struct {
+    // PEM-encoded certificate and private key of the Certificate Authority.
+    Authority string
+
+    // TTL for the generated cert.
+    TtlSec int32
+
+    // Common Name of the generated cert.
+    CommonName string
+
+    // Subject Alternate Name list.
+    // Note: x509 spec says if SAN is set, CN is usually ignored.
+    //       Include CN in SAN list if you want the CN to be verified.
+    San []string
+}
+
+type SshCertAuthorityBuilder struct {
+    // ssh-encoded private key of the Certificate Authority.
+    CaPrivateKey string
+
+    // ssh-encoded Certificate
+    CaCertificate string
+
+    // ssh-encoded Public key that will be signed to create the certificate.
+    PublicKey string
+
+    // Additional SSH Cert options like
+    //    permit-X11-forwarding
+    //    permit-agent-forwarding
+    //    permit-port-forwarding
+    //    permit-pty
+    //    permit-user-rc
+    ExtensionsOptions []string
+
+    // Additional SSH Options that are required to be valid/accepted
+    CriticalOptions []string
+
+    // The Usernames that this key can connect as - defaults as
+    //   ubuntu
+    //   core
+    //   ec2-user
+    Principals []string
+
+    // TTL for the generated cert - user cert < 60 ; host cert < 2628000 (5 years)
+    TtlMin int32
+}
+
+// B2AccountAuthorizationBuilder describes the information required to
+// obtain a B2 account authorization.
+type B2AccountAuthorizationBuilder struct {
+   AccountId string
+   ApplicationKey string
+}
+
+// VanadiumBuilder describes the information required to build Vanadium
+// blessings.
+type VanadiumBuilder struct {
+    BlessingName string
+}
+
+// Tickets.
+
+// AwsTicket is a ticket that contains a set of (potentially temporary)
+// AWS credentials.
+type AwsTicket struct {
+    AwsAssumeRoleBuilder ?AwsAssumeRoleBuilder
+    AwsSessionBuilder ?AwsSessionBuilder
+
+    AwsCredentials AwsCredentials
+}
+
+// S3Ticket describes an AWS S3 object or prefix.
+type S3Ticket struct {
+    AwsAssumeRoleBuilder ?AwsAssumeRoleBuilder
+    AwsSessionBuilder ?AwsSessionBuilder
+
+    AwsCredentials AwsCredentials
+    Endpoint string
+    Bucket string
+    Prefix string
+}
+
+// EcrTicket describes an AWS EC2 Container Registry.
+type EcrTicket struct {
+    AwsAssumeRoleBuilder ?AwsAssumeRoleBuilder
+
+    // The base64-encoded authorization token which can be presented directly to
+    // the Docker registry.
+    // Reference: https://docs.docker.com/registry/spec/auth/token/
+    AuthorizationToken string
+
+    // Expiration indicates the date on which the authorization token expire.
+    Expiration string
+
+    // The register URL ("https://${ACCOUNTID}.dkr.ecr.region.amazonaws.com").
+    Endpoint string
+}
+
+// SshCert describes a ssh public Certifcate
+type SshCert struct {
+    // ssh-encoded certificate (host or user).
+    Cert string
+}
+
+// TlsCredentials describes a generic set of Tls credentials that include:
+// the CA that accepted by the client (only peers that present a certificate
+// sign by this CA are accepted), the client certificate and the client
+// private key.
+type TlsCredentials struct {
+    // PEM-encoded public certificate of the Certificate Authority.
+    AuthorityCert string
+
+    // PEM-encoded client certificate.
+    Cert string
+
+    // PEM-encoded client private key.
+    Key string
+}
+
+// TlsServerTicket describes a TLS server.
+type TlsServerTicket struct {
+    TlsCertAuthorityBuilder ?TlsCertAuthorityBuilder
+
+    Credentials TlsCredentials
+}
+
+// TlsClientTicket describes a TLS client.
+type TlsClientTicket struct {
+    TlsCertAuthorityBuilder ?TlsCertAuthorityBuilder
+
+    Credentials TlsCredentials
+
+    // Endpoints indicate the servers the client can connect to.
+    Endpoints []string
+}
+
+// DockerTicket instance represents a Docker repository and the TLS
+// certificate material required to verify and authenticate to it.
+// TODO(razvanm): Remove DockerTicket and replace with DockerServerTicket
+//                and DockerClientTicket
+type DockerTicket struct {
+    TlsCertAuthorityBuilder ?TlsCertAuthorityBuilder
+
+    Credentials TlsCredentials
+    Url string
+}
+
+// DockerServerTicket instance represents a Docker Server and the TLS
+// certificate material required for clients to verify and authenticate it.
+type DockerServerTicket struct {
+    TlsCertAuthorityBuilder ?TlsCertAuthorityBuilder
+
+    Credentials TlsCredentials
+}
+
+// DockerClientTicket instance represents the TLS certificate material required
+// for clients to authenticate against a specific DockerServer.
+type DockerClientTicket struct {
+    TlsCertAuthorityBuilder ?TlsCertAuthorityBuilder
+
+    Credentials TlsCredentials
+
+    // Url indicates the Docker host the client can connect to.
+    Url string
+}
+
+// SshCertificateTicket describes a SSH Signed Certificate.
+// SSH Certificates are essentially a version of TLS certs but they have additional
+// optional parameters and can take a public key as part of their signing request.
+type SshCertificateTicket struct {
+    SshCertAuthorityBuilder ?SshCertAuthorityBuilder
+    AwsComputeInstancesBuilder ?AwsComputeInstancesBuilder
+
+    ComputeInstances []ComputeInstance
+    Credentials SshCert
+    // Recommended username to use
+    Username string
+}
+
+type AwsComputeInstancesBuilder struct {
+    // Instance Filters that will produce a list of instance IDs and related information
+    // https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstances.html
+    InstanceFilters []Parameter
+
+    // AWS ARN for a role that should be used to perform the instance lookups
+    AwsAccountLookupRole string
+
+    // AWS region to use for the lookup
+    Region string
+}
+
+// Simplification of describeInstance data to provide to ticket-server users
+type ComputeInstance struct {
+    PublicIp string
+    PrivateIp string
+    InstanceId string
+    Tags []Parameter
+}
+
+// B2Ticket instance contains a B2 account level authorization
+// token plus URLs and configuration values for the account.
+type B2Ticket struct {
+    B2AccountAuthorizationBuilder ?B2AccountAuthorizationBuilder
+
+    AccountId string
+    AuthorizationToken string
+    ApiUrl string
+    DownloadUrl string
+    RecommendedPartSize int64
+    AbsoluteMinimumPartSize int64
+}
+
+// VanadiumTicket describes a set of Vanadium blessings. This allows
+// obtaining a completely new blessings (role blessings) by the owners
+// of certain blessings.
+type VanadiumTicket struct {
+    VanadiumBuilder ?VanadiumBuilder
+
+    // v.io/v23/security.WireBlessings in VOM + Base64 format.
+    Blessing string
+}
+
+// GenericTicket describes a generic unstructured piece of data. This
+// can be used to store arbitrary secrets for example.
+type GenericTicket struct {
+    Data []byte
+}
+
+// Ticket is a union of all our tickets.
+type Ticket union {
+    AwsTicket AwsTicket
+    S3Ticket S3Ticket
+    SshCertificateTicket SshCertificateTicket
+    EcrTicket EcrTicket
+    TlsServerTicket TlsServerTicket
+    TlsClientTicket TlsClientTicket
+    DockerTicket DockerTicket
+    DockerServerTicket DockerServerTicket
+    DockerClientTicket DockerClientTicket
+    B2Ticket B2Ticket
+    VanadiumTicket VanadiumTicket
+    GenericTicket GenericTicket
+}
+
+// TicketConfig describes a ticket and its associated permissions.
+type TicketConfig struct {
+    Ticket Ticket
+    Permissions access.Permissions
+    Controls map[Control]bool
+}
+
+type Config struct {
+    Tickets map[string]TicketConfig
+    Permissions access.Permissions
+}
+
+// Key/Value pair that can be passed into the GET request.
+type Parameter struct {
+    Key string
+    Value string
+}
+
+
+// TicketService provides a way to obtain a ticket. The access can be
+// restricted by setting the permissions appropriately.
+type TicketService interface {
+    GetPermissions() (perms access.Permissions, version string | error) {access.Read}
+    SetPermissions(perms access.Permissions, version string) error {access.Admin}
+    Get() (Ticket | error) {access.Read}
+    GetWithParameters(parameters []Parameter) (Ticket | error) {access.Read}
+    GetWithArgs(args map[string]string) (Ticket | error) {access.Read}
+}
+
+type ListService interface {
+    List() ([]string | error) {access.Read}
+}

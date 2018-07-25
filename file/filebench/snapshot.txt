@@ -1,0 +1,108 @@
+For reference, whoever's changing base/file code may occasionally run this benchmark and
+update the snapshot below. It can be useful for showing code reviewers the result of a change,
+or just so readers can get a sense of performance without running the benchmarks themselves.
+
+Of course, since we're not totally controlling the environment or the data, be careful to
+set a baseline before evaluating your change.
+
+Some context for the numbers below:
+  * S3 performance guidelines [1] suggest that each request should result in around 85–90 MB/s
+    of read throughput. Our numbers are MiB/s (not sure if they mean M = 1000^2 or Mi = 1024^2) and
+    it looks like our sequential reads ramp up to the right vicinity.
+  * EC2 documentation offers network performance expectations (Gbps):
+      * m5.x:      1.25 (base) - 10 (burst)
+      * m5.4x:     5           - 10
+      * m5.12x:   12
+      * m5.24x:   25
+      * m5n.24x: 100
+    Note that a 1000 in the table below is MiB/s which is 8*1.024^2 ~= 8.4 Gbps.
+
+[1] https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance-design-patterns.html#optimizing-performance-parallelization
+[2] https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/general-purpose-instances.html#general-purpose-network-performance
+
+Very brief summary and speculations about our current S3 performance for non-parallel(!) clients:
+  * Could be improved for small sequential reads (few MiB at a time) in the current io.Reader
+    model by adding (read-ahead) buffering (basically speculating about future reads).
+  * Can't get much better for large reads (GiBs) with large buffers (100s MiBs) on small instance
+    types because we're getting close to documented network performance.
+  * Can probably get better for large reads with large buffers on large, network-optimized (*n)
+    instances where we're not especially close to network limits yet. Maybe this requires more
+    careful CPU and allocation usage.
+Parallel clients might matter more:
+  * Clients reading many small files in parallel (like machine learning training reading V3
+    fragments file columns) may already do chunked reads pretty effectively. We should measure to
+    verify, though; maybe the chunks are not right-sized.
+  * Clients reading very large files may benefit even more from a parallel-friendly API (ReaderAt):
+      * Copies to disk could be accelerated without huge memory buffers.
+        Examples: `grail-file cp`, biofs/gfilefs, reflow interning, bigslice shuffling.
+      * Copies to memory could be accelerated without duplicated memory buffers:
+        Examples: bio/align/mapper's index (if it was Go), FASTA.
+
+Results:
+Rows are read chunk sizes (MiB), columns are number of sequential chunks.
+Data cells are average MiB/s for the entire sequential read.
+
+Note: During development, the results seemed worse on some days, peaking around 75 MiB/s rather
+than 95 MiB/s. It was consistent for several runs within that day. Unclear if the cause was
+something local in the benchmarking machines (or in our builds) or the S3 service.
+
+The numbers below were generated using the bigmachine runner in us-west-2 reading a GRAIL-internal
+113 GiB file residing in an S3 bucket in us-west-2. The first columns are reading directly from S3;
+the next ones are through FUSE.
+
+A couple of the FUSE numbers seem surprisingly high. I suspect this is due to parts of reads being
+served by the page cache, due to randomly overlapping with earlier benchmark tasks. We could try
+to confirm this and clear the page cache in the future, though for now it's just useful to alert
+about issues causing widespread slowness.
+
+[0] m5.4xlarge
+        s3://                                                       /tmp/s3
+        1        8      64    512    p1      p8      p64    p512    1          8     64    512    p1    p8     p64    p512
+0       0        0      0     3      0       0       0      1       0          0     0     2      0     0      0      2
+1       4        24     41    46     5       34      198    142     5          26    41    74     4     30     167    417
+8       22       37     41    44     21      140     620    942     23         44    65           22    112    756
+16      35       46     49           35      203     867            34         48                 28    182
+32      55       50     65           51      317     999            40         51                 43    267
+128     177      245                 217     960                    51                            53
+512     728      415                 447     1075                   48                            38
+1024    855                          839
+4096    1077                         1025
+
+[1] m5.12xlarge
+        s3://                                                        /tmp/s3
+        1        8      64    512    p1      p8      p64     p512    1          8     64    512    p1    p8     p64    p512
+0       0        0      0     2      0       0       0       1       0          0     0     2      0     0      0      2
+1       5        27     45    59     4       34      213     648     5          26    50    71     4     34     213    537
+8       29       47     41    50     27      142     823     1209    29         45    83           29    152    732
+16      37       53     64           32      165     822             31         48                 28    230
+32      74       64     84           65      346     1258            45         57                 50    236
+128     231      181                 202     854                     55                            46
+512     360      615                 541     1297                    52                            57
+1024    1000                         1076
+4096    1297                         1280
+
+[2] m5.24xlarge
+        s3://                                                        /tmp/s3
+        1        8      64    512    p1      p8      p64     p512    1          8     64    512    p1    p8     p64    p512
+0       0        0      0     2      0       0       0       1       0          0     0     2      0     0      0      2
+1       5        26     46    52     5       37      188     492     3          30    50    69     4     30     170    661
+8       31       46     52    50     28      169     897     2119    25         50    62           27    158    811
+16      41       54     54           37      166     1365            36         50                 39    208
+32      66       83     29           55      279     1873            42         69                 44    282
+128     168      199                 182     1224                    54                            52
+512     555      643                 495     2448                    59                            55
+1024    789                          907
+4096    2395                         2410
+
+[3] m5n.24xlarge
+        s3://                                                        /tmp/s3
+        1        8      64    512    p1      p8      p64     p512    1          8     64    512    p1    p8     p64    p512
+0       0        0      0     2      0       0       0       1       0          0     0     2      0     0      0      1
+1       4        28     53    55     5       32      214     954     4          28    50    52     4     31     188    849
+8       24       44     60    55     24      165     865     2811    25         42    43           26    144    788
+16      38       55     62           43      181     992             38         52                 39    202
+32      55       80     64           60      314     2407            42         59                 48    283
+128     171      179                 190     1005                    56                            51
+512     462      549                 469     4068                    56                            70
+1024    1343                         821
+4096    2921                         3010
