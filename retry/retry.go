@@ -7,6 +7,7 @@ package retry
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -30,7 +31,7 @@ type Policy interface {
 func Wait(ctx context.Context, policy Policy, retry int) error {
 	keepgoing, wait := policy.Retry(retry)
 	if !keepgoing {
-		return errors.E(errors.TooManyTries, "retry policy ran out of tries")
+		return errors.E(errors.TooManyTries, fmt.Sprintf("gave up after %d tries", retry))
 	}
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < wait {
 		return errors.E(errors.Timeout, "ran out of time while waiting for retry")
@@ -65,4 +66,31 @@ func (b *backoff) Retry(retries int) (bool, time.Duration) {
 		wait = b.max
 	}
 	return true, wait
+}
+
+type maxtries struct {
+	policy Policy
+	max    int
+}
+
+// MaxTries returns a policy that enforces a maximum number of
+// attempts. The provided policy is invoked when the current number
+// of tries is within the permissible limit. If policy is nil, the
+// returned policy will permit an immediate retry when the number of
+// tries is within the allowable limits.
+func MaxTries(policy Policy, n int) Policy {
+	if n < 1 {
+		panic("retry.MaxTries: n < 1")
+	}
+	return &maxtries{policy, n - 1}
+}
+
+func (m *maxtries) Retry(retries int) (bool, time.Duration) {
+	if retries > m.max {
+		return false, time.Duration(0)
+	}
+	if m.policy != nil {
+		return m.policy.Retry(retries)
+	}
+	return true, time.Duration(0)
 }
