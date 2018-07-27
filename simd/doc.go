@@ -25,18 +25,16 @@
 //
 // Two classes of functions are exported:
 //
-// - Functions with 'Unsafe' in their names will assume it is safe to use the
-// main vectorized loop to process the entire slice; this may involve memory
-// accesses a few bytes beyond the end of the slice.  MakeUnsafe() and related
-// functions can be used to allocate a slice with sufficient capacity for this
-// to work (this currently means bytesPerVec extra bytes; simply rounding up to
-// a multiple of bytesPerVec is not always enough).  They may have other
-// preconditions as well, and won't check those, either.
+// - Functions with 'Unsafe' in their names are very performant, but are
+// memory-unsafe, do not validate documented preconditions, and may have the
+// unusual property of reading/writing to a few bytes *past* the end of the
+// given slices.  The MakeUnsafe() function and its relatives allocate
+// byte-slices with sufficient extra capacity for all Unsafe functions with the
+// latter property to work properly.
 //
 // - Their safe analogues work properly on ordinary slices, and often panic
 // when documented preconditions are not met.  When a precondition is not
 // explicitly checked (due to computational cost), safe functions may return
-// garbage values when the condition is not met, but they will not corrupt
-// unrelated memory or perform out-of-bounds read operations.  (Unsafe
-// functions may do either of those things when misused.)
+// garbage values when the condition is not met, but they are memory-safe: they
+// will not corrupt unrelated memory or perform out-of-bounds read operations.
 package simd
