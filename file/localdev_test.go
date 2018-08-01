@@ -1,5 +1,3 @@
-// +build arc-ignore phabricator-ignore
-
 package file_test
 
 import (

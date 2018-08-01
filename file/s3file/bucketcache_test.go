@@ -2,14 +2,11 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// +build arc-ignore phabricator-ignore
-
 package s3file_test
 
 import (
 	"context"
 	"flag"
-	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -19,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// For bazel, you can use `bazel run` to specify flags for a manual run of a test.
+// Or specify `args` in a separate go_test rule.
 var (
 	manualFlag = flag.Bool("run-manual-test", false, "If true, run tests that access AWS.")
 )
@@ -27,10 +26,7 @@ func maybeSkipManualTest(t *testing.T) {
 	if *manualFlag {
 		return
 	}
-	if os.Getenv("TEST_TMPDIR") == "" {
-		return
-	}
-	t.Skip("not enabled")
+	t.Skip("Skipping; set -run-manual-test to run the test.")
 }
 
 func getBucketRegion(t *testing.T, ctx context.Context, bucket string) string {
