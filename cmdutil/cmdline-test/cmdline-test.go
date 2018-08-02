@@ -43,7 +43,6 @@ func runner(_ *cmdline.Env, args []string) error {
 	vlog.Infof("-----")
 	for i, a := range args {
 		vlog.Infof("T: %d: %v", i, a)
-		vlog.VI(2).Infof("V2: %d: %v", i, a)
 	}
 	return nil
 }
@@ -53,7 +52,6 @@ func runnerWithRPC(ctx *context.T, _ *cmdline.Env, args []string) error {
 	vlog.Infof("-----")
 	for i, a := range args {
 		vlog.Infof("T: %d: %v", i, a)
-		vlog.VI(2).Infof("V2: %d: %v", i, a)
 	}
 	return nil
 }

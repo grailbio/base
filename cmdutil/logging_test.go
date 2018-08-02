@@ -36,8 +36,6 @@ func testLogging(t *testing.T, sh *gosh.Shell, tempdir, logger, naked string) {
 	}{
 		{logger, []string{"logging"}, "T"},
 		{logger, []string{"access"}, "T"},
-		{logger, []string{"-v=2", "logging"}, "V2"},
-		{logger, []string{"-v=2", "access"}, "V2"},
 		{naked, nil, "T"},
 	} {
 		args := append(tc.args, "--log_dir="+tempdir, "a", "b")
