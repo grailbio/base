@@ -51,6 +51,7 @@ type s3Info struct {
 	size    int64
 	modTime time.Time
 	etag    string // = GetObjectOutput.ETag
+	sha256  string
 }
 
 type s3Obj struct {
@@ -59,6 +60,20 @@ type s3Obj struct {
 }
 
 type accessMode int
+
+const (
+	sha256MetadataKey = "Content-Sha256"
+	unknownSHA256     = "s3file: no sha256 found in metadata"
+)
+
+// GetSHA256Metadata extracts the Content-Sha256 key from S3 object metadata. If
+// the key is not found, it returns unknownSHA256.
+func getSHA256Metadata(meta map[string]*string) string {
+	if val := meta[sha256MetadataKey]; val != nil {
+		return *val
+	}
+	return unknownSHA256
+}
 
 const (
 	readonly  accessMode = iota // file is opened by Open.
@@ -310,6 +325,7 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 				size:    *resp.ContentLength,
 				modTime: *resp.LastModified,
 				etag:    *resp.ETag,
+				sha256:  getSHA256Metadata(resp.Metadata),
 			}}
 		}
 	})
@@ -437,6 +453,7 @@ func newInfo(path string, output *s3.GetObjectOutput) *s3Info {
 		size:    *output.ContentLength,
 		modTime: *output.LastModified,
 		etag:    *output.ETag,
+		sha256:  getSHA256Metadata(output.Metadata),
 	}
 }
 
@@ -562,9 +579,12 @@ func (f *s3File) startGetObjectRequest(ctx context.Context, client s3iface.S3API
 		output.Body.Close() // nolint: errcheck
 		return fmt.Errorf("read %v: File does not exist", f.name)
 	}
-	if f.info != nil && f.info.etag != *output.ETag {
+	outputSHA256 := getSHA256Metadata(output.Metadata)
+	if f.info != nil &&
+		(f.info.sha256 != outputSHA256 || (f.info.sha256 == unknownSHA256 && f.info.etag != *output.ETag)) {
 		output.Body.Close() // nolint: errcheck
-		return fmt.Errorf("read %v: File version changed from %v to %v", f.name, f.info.etag, *output.ETag)
+		return fmt.Errorf("read %v: File version changed from %v to %v, sha256 from %v to %v", f.name, f.info.etag, *output.ETag,
+			f.info.sha256, outputSHA256)
 	}
 	f.bodyReader = output.Body // take ownership
 	if f.info == nil {

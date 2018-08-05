@@ -20,6 +20,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/base/file/s3file"
 	"github.com/grailbio/testutil/assert"
@@ -126,16 +127,21 @@ func TestS3(t *testing.T) {
 	testutil.TestAll(ctx, t, impl, "s3://b/dir")
 }
 
+// WriteFile creates a file with the given contents. Path should be of form
+// s3://bucket/key.
+func writeFile(ctx context.Context, t *testing.T, impl file.Implementation, path, data string) {
+	f, err := impl.Create(ctx, path)
+	assert.NoError(t, err)
+	_, err = f.Writer(ctx).Write([]byte(data))
+	assert.NoError(t, err)
+	assert.NoError(t, f.Close(ctx))
+}
+
 func TestListBucketRoot(t *testing.T) {
 	provider := &testProvider{clients: []s3iface.S3API{newClient(t)}}
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
-
-	f, err := impl.Create(ctx, "s3://b/0.txt")
-	assert.NoError(t, err)
-	_, err = f.Writer(ctx).Write([]byte("data"))
-	assert.NoError(t, err)
-	assert.NoError(t, f.Close(ctx))
+	writeFile(ctx, t, impl, "s3://b/0.txt", "data")
 
 	l := impl.List(ctx, "s3://b", true)
 	assert.True(t, l.Scan(), "err: %v", l.Err())
@@ -246,6 +252,49 @@ func TestCancellation(t *testing.T) {
 		assert.Regexp(t, err, "Request cancelled")
 		assert.Regexp(t, f.Close(ctx), "Request cancelled")
 	}
+}
+
+func testOverwriteWhileReading(t *testing.T, impl file.Implementation, pathPrefix string) {
+	ctx := context.Background()
+	path := pathPrefix + "/test.txt"
+	writeFile(ctx, t, impl, path, "test0")
+	f, err := impl.Open(ctx, path)
+	assert.NoError(t, err)
+
+	r := f.Reader(ctx)
+	data, err := ioutil.ReadAll(r)
+	assert.NoError(t, err)
+	assert.EQ(t, "test0", string(data))
+
+	_, err = r.Seek(0, io.SeekStart)
+	assert.NoError(t, err)
+
+	writeFile(ctx, t, impl, path, "test0")
+
+	data, err = ioutil.ReadAll(r)
+	assert.NoError(t, err)
+	assert.EQ(t, "test0", string(data))
+
+	_, err = r.Seek(0, io.SeekStart)
+	assert.NoError(t, err)
+	writeFile(ctx, t, impl, path, "test1")
+	_, err = ioutil.ReadAll(r)
+	assert.Regexp(t, err, "File version changed")
+}
+
+func TestOverwriteWhileReading(t *testing.T) {
+	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	testOverwriteWhileReading(t, impl, "s3://b/test")
+}
+
+func TestOverwriteWhileReadingAWS(t *testing.T) {
+	if *s3BucketFlag == "" {
+		t.Skip("Skipping. Set -s3-bucket to run the test.")
+	}
+	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	testOverwriteWhileReading(t, impl, fmt.Sprintf("s3://%s/tmp/testoverwrite", *s3BucketFlag))
 }
 
 func TestAWS(t *testing.T) {
