@@ -90,6 +90,28 @@ func TestCp(t *testing.T) {
 	assert.Equal(t, expected0, readFile(file.Join(dstDir, "tmp0.txt")))
 }
 
+func TestCpRecursive(t *testing.T) {
+	ctx := context.Background()
+	tmpDir, cleanup := testutil.TempDir(t, "", "")
+	defer cleanup()
+
+	srcDir := file.Join(tmpDir, "dir")
+	path0 := "/dir/tmp0.txt"
+	path1 := "/dir/dir2/tmp1.txt"
+	path2 := "/dir/dir2/dir3/tmp2.txt"
+	expected0 := "tmp0"
+	expected1 := "tmp1"
+	expected2 := "tmp2"
+	assert.NoError(t, file.WriteFile(ctx, srcDir+path0, []byte(expected0)))
+	assert.NoError(t, file.WriteFile(ctx, srcDir+path1, []byte(expected1)))
+	assert.NoError(t, file.WriteFile(ctx, srcDir+path2, []byte(expected2)))
+	dstDir := file.Join(tmpDir, "dir1")
+	assert.NoError(t, runCp([]string{srcDir, dstDir}, cprmOpts{recursive: true}))
+	assert.Equal(t, expected0, readFile(dstDir+path0))
+	assert.Equal(t, expected1, readFile(dstDir+path1))
+	assert.Equal(t, expected2, readFile(dstDir+path2))
+}
+
 func TestRm(t *testing.T) {
 	ctx := context.Background()
 	tmpDir, cleanup := testutil.TempDir(t, "", "")
@@ -112,6 +134,23 @@ func TestRm(t *testing.T) {
 
 	assert.NoError(t, runRm([]string{src2Path}, cprmOpts{}))
 	assert.Regexp(t, "no such file", readFile(src0Path))
+	assert.Regexp(t, "no such file", readFile(src1Path))
+	assert.Regexp(t, "no such file", readFile(src2Path))
+}
+
+func TestRmRecursive(t *testing.T) {
+	ctx := context.Background()
+	tmpDir, cleanup := testutil.TempDir(t, "", "")
+	defer cleanup()
+	src0Path := file.Join(tmpDir, "dir/tmp0.txt")
+	src1Path := file.Join(tmpDir, "dir/dir2/tmp1.txt")
+	src2Path := file.Join(tmpDir, "dir/dir2/dir3/tmp2.txt")
+	assert.NoError(t, file.WriteFile(ctx, src0Path, []byte("0")))
+	assert.NoError(t, file.WriteFile(ctx, src1Path, []byte("1")))
+	assert.NoError(t, file.WriteFile(ctx, src2Path, []byte("2")))
+
+	assert.NoError(t, runRm([]string{file.Join(tmpDir, "dir/dir2")}, cprmOpts{recursive: true}))
+	assert.Equal(t, "0", readFile(src0Path))
 	assert.Regexp(t, "no such file", readFile(src1Path))
 	assert.Regexp(t, "no such file", readFile(src2Path))
 }

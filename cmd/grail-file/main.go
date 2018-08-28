@@ -16,6 +16,7 @@ import (
 	"github.com/grailbio/base/traverse"
 	"github.com/grailbio/base/vcontext"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 	"v.io/x/lib/cmdline"
 )
 
@@ -118,17 +119,38 @@ This command prints contents of the files to the stdout. It supports globs defin
 const parallelism = 16
 
 type cprmOpts struct {
-	verbose bool
+	verbose   bool
+	recursive bool
+}
+
+// forEachFile runs the callback for every file under the directory in
+// parallel. It returns any of the errors returned by the callback.
+func forEachFile(ctx context.Context, dir string, callback func(path string) error) error {
+	eg, egCtx := errgroup.WithContext(ctx)
+	lister := file.List(egCtx, dir, true /*recursive*/)
+	for lister.Scan() {
+		path := lister.Path()
+		eg.Go(func() error { return callback(path) })
+	}
+	err := eg.Wait()
+	if e := lister.Err(); e != nil && err == nil {
+		err = e
+	}
+	return err
 }
 
 func runRm(args []string, opts cprmOpts) error {
 	ctx := vcontext.Background()
 	args = expandGlobs(ctx, args)
-	return traverse.Each(len(args)).Limit(parallelism).Do(func(i int) error {
+	return traverse.Each(len(args)).Do(func(i int) error {
+		path := args[i]
 		if opts.verbose {
-			log.Printf("%s", args[i])
+			log.Printf("%s\n", path)
 		}
-		return file.Remove(ctx, args[i])
+		if err := file.Remove(ctx, path); err == nil || !opts.recursive {
+			return err
+		}
+		return forEachFile(ctx, path, func(path string) error { return file.Remove(ctx, path) })
 	})
 }
 
@@ -143,38 +165,62 @@ func newRmCmd() *cmdline.Command {
 This command removes files. It supports globs defined in https://github.com/gobwas/glob.`,
 	}
 	c.Flags.BoolVar(&opts.verbose, "v", false, "Enable verbose logging")
+	c.Flags.BoolVar(&opts.recursive, "R", false, "Recursive remove")
 	return c
 }
 
 func runCp(args []string, opts cprmOpts) error {
 	ctx := vcontext.Background()
-	copyFile := func(src, dst string) error {
+
+	// Copy a regular file. The first return value is true if the source exists as
+	// a regular file.
+	copyRegularFile := func(src, dst string) (bool, error) {
 		if opts.verbose {
 			log.Printf("%s -> %s", src, dst)
 		}
 		in, err := file.Open(ctx, src)
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer in.Close(ctx) // nolint: errcheck
+		// If the file "src" doesn't exist, either Open or Stat should fail.
+		if _, err := in.Stat(ctx); err != nil {
+			return false, err
+		}
 		out, err := file.Create(ctx, dst)
 		if err != nil {
-			return errors.Wrapf(err, "cp %v->%v", src, dst)
+			return true, errors.Wrapf(err, "cp %v->%v", src, dst)
 		}
 		if _, err := io.Copy(out.Writer(ctx), in.Reader(ctx)); err != nil {
 			_ = out.Close(ctx)
-			return errors.Wrapf(err, "cp %v->%v", src, dst)
+			return true, errors.Wrapf(err, "cp %v->%v", src, dst)
 		}
 		err = out.Close(ctx)
 		if err != nil {
 			err = errors.Wrapf(err, "cp %v->%v", src, dst)
 		}
-		return err
+		return true, err
+	}
+
+	// Copy a regular file or a directory.
+	copyFile := func(src, dst string) error {
+		if srcExists, err := copyRegularFile(src, dst); srcExists || !opts.recursive {
+			return err
+		}
+		return forEachFile(ctx, src, func(path string) error {
+			suffix := path[len(src):]
+			for len(suffix) > 0 && suffix[0] == '/' {
+				suffix = suffix[1:]
+			}
+			_, e := copyRegularFile(file.Join(src, suffix), file.Join(dst, suffix))
+			return e
+		})
 	}
 
 	copyFileInDir := func(src, dstDir string) error {
 		return copyFile(src, file.Join(dstDir, file.Base(src)))
 	}
+
 	nArg := len(args)
 	if nArg < 2 {
 		return errors.New("Usage: cp src... dst")
@@ -219,6 +265,7 @@ The third form copies each of "src" to destdir/<base>.
 This command supports globs defined in https://github.com/gobwas/glob.  `,
 	}
 	c.Flags.BoolVar(&opts.verbose, "v", false, "Enable verbose logging")
+	c.Flags.BoolVar(&opts.recursive, "R", false, "Recursive copy")
 	return c
 }
 
@@ -228,28 +275,59 @@ type lsOpts struct {
 }
 
 func runLs(out io.Writer, args []string, opts lsOpts) error {
-	const iso8601 = "2006-01-02T15:04:05-0700"
+	type result struct {
+		err   error
+		lines []string      // list of entries found for an arg.
+		done  chan struct{} // binary semaphore.
+	}
+	longOutput := func(path string, info file.Info) string {
+		// TODO(saito) prettyprint
+		const iso8601 = "2006-01-02T15:04:05-0700"
+		return fmt.Sprintf("%s\t%d\t%s", path, info.Size(), info.ModTime().Format(iso8601))
+	}
 	ctx := vcontext.Background()
 	args = expandGlobs(ctx, args)
-	for _, arg := range args {
-		lister := file.List(ctx, arg, opts.recursive)
-		for lister.Scan() {
-			// TODO(saito) prettyprint
-			switch {
-			case lister.IsDir():
-				fmt.Fprintf(out, "%s/\n", lister.Path())
-			case opts.longOutput:
-				info := lister.Info()
-				fmt.Fprintf(out, "%s\t%d\t%s\n", lister.Path(), info.Size(), info.ModTime().Format(iso8601))
-			default:
-				fmt.Fprintf(out, "%s\n", lister.Path())
+	results := make([]result, len(args))
+	for i := range args {
+		results[i].done = make(chan struct{})
+		go func(path string, r *result) {
+			defer func() { r.done <- struct{}{} }()
+			// Check if the file is a regular file
+			if info, err := file.Stat(ctx, path); err == nil {
+				if opts.longOutput {
+					r.lines = []string{longOutput(path, info)}
+				} else {
+					r.lines = []string{path}
+				}
+				return
 			}
+			lister := file.List(ctx, path, opts.recursive)
+			for lister.Scan() {
+				switch {
+				case lister.IsDir():
+					r.lines = append(r.lines, lister.Path()+"/")
+				case opts.longOutput:
+					r.lines = append(r.lines, longOutput(lister.Path(), lister.Info()))
+				default:
+					r.lines = append(r.lines, lister.Path())
+				}
+			}
+			r.err = lister.Err()
+		}(args[i], &results[i])
+	}
+	// Print the results in order.
+	var err error
+	for i := range results {
+		r := &results[i]
+		<-r.done
+		for _, line := range r.lines {
+			fmt.Fprintln(out, line)
 		}
-		if err := lister.Err(); err != nil {
-			return err
+		if r.err != nil && err == nil {
+			err = r.err
 		}
 	}
-	return nil
+	return err
 }
 
 func newLsCmd() *cmdline.Command {
