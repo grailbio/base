@@ -2,7 +2,8 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package traverse provides facilities for concurrent and parallel slice traversal.
+// Package traverse provides facilities for concurrent and parallel
+// computing over slices or user-defined collections.
 package traverse
 
 import (
@@ -61,7 +62,9 @@ func (t Traverse) Sharded(nshards int) Traverse {
 }
 
 // WithReporter will use the given reporter to report the progress on the jobs.
-// Ex. traverse.Each(9).WithReporter(traverse.DefaultReporter{Name: "Processing:"}).Do(func(i int) error { ...
+// Example:
+//
+//	traverse.Each(9).WithReporter(traverse.DefaultReporter{Name: "Processing"}).Do(func(i int) error { ...
 func (t Traverse) WithReporter(reporter Reporter) Traverse {
 	t.debugStatus = &status{&sync.Mutex{}, reporter, 0, 0, 0}
 	return t
@@ -88,15 +91,24 @@ func (t Traverse) Do(op func(i int) error) error {
 }
 
 // DoRange is similar to Do above, except it accepts a function that runs
-// over a block of indices [start, end).  This can be more efficient if
-// running sharded traverse on an input where the operation for each index
-// if very simple/fast.  For example, to add 1 to each element of a []int
-// traverse.Each(len(slice)).Limit(10).Sharded(10).DoRange(func(start, end int) error {
-//     for i := start; i < end; i++ {
-//         slice[i]++
-//     }
-//     return nil
-// }
+// over a range of indices [start, end). DoRange is useful when the
+// computation for each index is very cheap since DoRange
+// amortizes the communication overhead implied by parallelization
+// by chunking the input.
+//
+// For example, the following performs a cheap computation over some
+// inputs, placing the results in output.
+//
+// 	traverse.Parallel(len(output)).DoRange(func(start, end int) error {
+//		for i := start; i < end; i++ {
+//			output[i] = cheapComputation(input[i))
+//		}
+//		return nil
+//	})
+//
+// By default, DoRange splits input indices into as many segments as
+// can be run concurrently. This default sharding strategy can be adjusted
+// by Traverse.Sharded.
 func (t Traverse) DoRange(op func(start, end int) error) error {
 	if t.n == 0 {
 		return nil
