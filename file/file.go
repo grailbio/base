@@ -35,20 +35,28 @@ type File interface {
 	// REQUIRES: Close has not been called
 	Writer(ctx context.Context) io.Writer
 
-	// Close commits the contents of a written file, invalidating the
-	// File and all Readers and Writers created from the file. Exactly
-	// one of Discard or Close should be called. No other File or
-	// io.ReadSeeker, io.Writer methods shall be called after Close.
-	Close(ctx context.Context) error
-
 	// Discard discards a file before it is closed, relinquishing any
 	// temporary resources implied by pending writes. This should be
 	// used if the caller decides not to complete writing the file.
 	// Discard is a best-effort operation. Discard is not defined for
 	// files opened for reading. Exactly one of Discard or Close should
-	// be called. No other File,  io.ReadSeeker, or io.Writer methods
+	// be called. No other File, io.ReadSeeker, or io.Writer methods
 	// shall be called after Discard.
 	Discard(ctx context.Context) error
+
+	// Closer commits the contents of a written file, invalidating the
+	// File and all Readers and Writers created from the file. Exactly
+	// one of Discard or Close should be called. No other File or
+	// io.ReadSeeker, io.Writer methods shall be called after Close.
+	Closer
+}
+
+// Closer cleans up a resource. Generally, resource provider implementations
+// will return a Closer when opening a resource (like File above).
+type Closer interface {
+	// Close tries to clean up the resource. Implementations can define whether
+	// Close can be called more than once and whether callers should retry on error.
+	Close(context.Context) error
 }
 
 // NewErrorReader returns a new io.ReadSeeker object that returns "err" on any
