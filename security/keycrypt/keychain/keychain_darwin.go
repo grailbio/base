@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// +build darwin
+// +build darwin,cgo
 
 // Secrets are stored directly into the macOS Keychain under the name
 // com.grail.keycrypt.$namespace; Keycrypt names are stored into the
@@ -11,7 +11,6 @@ package keychain
 
 import (
 	"github.com/grailbio/base/security/keycrypt"
-
 	keychain "github.com/keybase/go-keychain"
 )
 
