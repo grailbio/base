@@ -118,11 +118,6 @@ func Join(elems ...string) string {
 	if len(elems) == 0 {
 		return filepath.Join(elems...)
 	}
-	scheme, suffix, err := ParsePath(elems[0])
-	if scheme == "" || err != nil {
-		return filepath.Join(elems...)
-	}
-
 	// Remove leading or trailing "/"s from the string.
 	clean := func(p string) string {
 		var s, e int
@@ -143,7 +138,7 @@ func Join(elems ...string) string {
 	}
 
 	newElems := make([]string, 0, len(elems))
-	newElems = append(newElems, scheme+"://"+clean(suffix))
+	newElems = append(newElems, elems[0])
 	for i := 1; i < len(elems); i++ {
 		e := clean(elems[i])
 		if e != "" {
