@@ -250,7 +250,7 @@ func newCpCmd() *cmdline.Command {
 		Short:    "Copy files",
 		ArgsName: "srcfiles... dstfile-or-dir",
 		Long: `
-This command copies files. It can be invoked in two forms:
+This command copies files. It can be invoked in three forms:
 
 1. cp src dst
 2. cp src dst/
@@ -258,7 +258,9 @@ This command copies files. It can be invoked in two forms:
 
 The first form first tries to copy file src to dst. If dst exists as a
 directory, it copies src to dst/<base>, where <base> is the basename of the
-source file.  The second form copies file src to dst/<base>.
+source file.
+
+The second form copies file src to dst/<base>.
 
 The third form copies each of "src" to destdir/<base>.
 
