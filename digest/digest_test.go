@@ -197,3 +197,15 @@ func TestGob(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestParse(t *testing.T) {
+	for _, hash := range []string{"", "<zero>"} {
+		h, err := Parse(hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := h, (Digest{}); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
