@@ -17,12 +17,18 @@ import (
 // amd64 compile-time constants.
 
 // BytesPerWord is the number of bytes in a machine word.
+// We don't use unsafe.Sizeof(uintptr(1)) since there are advantages to having
+// this as an untyped constant, and there's essentially no drawback since this
+// is an _amd64-specific file.
 const BytesPerWord = 8
 
 // Log2BytesPerWord is log2(BytesPerWord).  This is relevant for manual
 // bit-shifting when we know that's a safe way to divide and the compiler does
 // not (e.g. dividend is of signed int type).
 const Log2BytesPerWord = uint(3)
+
+// BitsPerWord is the number of bits in a machine word.
+const BitsPerWord = BytesPerWord * 8
 
 // const minPageSize = 4096  may be relevant for safe functions soon.
 
