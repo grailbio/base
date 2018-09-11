@@ -52,7 +52,9 @@ func Init() Shutdown {
 	} else if err != nil {
 		os.Exit(2)
 	}
-	vlog.ConfigureLibraryLoggerFromFlags()
+	if err := vlog.ConfigureLibraryLoggerFromFlags(); err != nil {
+		vlog.Error(err)
+	}
 	log.SetOutputter(vlogOutputter{})
 	pprof.Start()
 	_, ok := os.LookupEnv("GOPS")
