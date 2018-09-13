@@ -18,11 +18,13 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	awsrequest "github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errorreporter"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/log"
+	"github.com/grailbio/base/retry"
 	"github.com/pkg/errors"
 )
 
@@ -162,7 +164,7 @@ type s3File struct {
 
 type s3Lister struct {
 	ctx                         context.Context
-	clients                     []s3iface.S3API
+	policy                      retryPolicy
 	dir, scheme, bucket, prefix string
 
 	object  s3Obj
@@ -185,27 +187,69 @@ type s3Writer struct {
 	f   *s3File
 }
 
-func shouldRetry(path string, err error, clients *[]s3iface.S3API) bool {
+type retryPolicy struct {
+	clients []s3iface.S3API
+	policy  retry.Policy
+	retries int
+}
+
+// BackoffPolicy defines backoff timing parameters. It is exposed publicly only
+// for unittests.
+var BackoffPolicy = retry.Backoff(500*time.Millisecond, time.Minute, 1.2)
+
+func newRetryPolicy(clients []s3iface.S3API) retryPolicy {
+	return retryPolicy{clients: clients, policy: BackoffPolicy}
+}
+
+// client returns the s3 client to be use by the caller.
+func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
+
+// shouldRetry determines if the caller should retry after seeing the given
+// error.  It will modify r.clients if it thinks the caller should retry with a
+// different client.
+func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 	if err == nil {
-		return false
-	}
-	if len(*clients) <= 1 {
-		// No more alternate clients to try
 		return false
 	}
 	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
 			// No point in trying again.
+			r.clients = nil
 			return false
 		case "NotFound":
 			// GetObject seems to return this error rather ErrCodeNoSuchKey
+			r.clients = nil
 			return false
+		case awsrequest.ErrCodeSerialization, awsrequest.ErrCodeRead, "SlowDown":
+			// Transient errors. Retry with the same client.
+			if retry.Wait(ctx, r.policy, r.retries) != nil {
+				// Context timeout or cancellation
+				r.clients = nil
+				return false
+			}
+			r.retries++
+			return true
 		default:
-			// Should retry with a different ticket.
+			// Possible cases:
+			//
+			//- permission errors: we retry using a different client.
+			//
+			//- non-retriable errors: we retry using a different client, and it will
+			// fail again, and we eventually give up. The code it at least correct, if
+			// suboptimal.
+			//
+			// - transient errors we don't yet know. We'll abort when we shouldn't,
+			// but there's not much we can do. We'll add these errors to the above
+			// case as we discover them.
 		}
 	}
-	*clients = (*clients)[1:]
+	if len(r.clients) <= 1 {
+		// No more alternate clients to try
+		r.clients = nil
+		return false
+	}
+	r.clients = r.clients[1:]
 	return true
 }
 
@@ -286,7 +330,7 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 	}
 	return &s3Lister{
 		ctx:     ctx,
-		clients: clients,
+		policy:  newRetryPolicy(clients),
 		dir:     dir,
 		scheme:  scheme,
 		bucket:  bucket,
@@ -306,12 +350,13 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 		if err != nil {
 			return response{err: err}
 		}
+		policy := newRetryPolicy(clients)
 		for {
-			resp, err := clients[0].HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+			resp, err := policy.client().HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 				Bucket: aws.String(bucket),
 				Key:    aws.String(key),
 			})
-			if shouldRetry(path, err, &clients) {
+			if policy.shouldRetry(ctx, err) {
 				continue
 			}
 			if err != nil {
@@ -343,9 +388,10 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		if err != nil {
 			return response{err: err}
 		}
+		policy := newRetryPolicy(clients)
 		for {
-			_, err = clients[0].DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
-			if shouldRetry(path, err, &clients) {
+			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+			if policy.shouldRetry(ctx, err) {
 				continue
 			}
 			return response{err: err}
@@ -465,11 +511,12 @@ func (f *s3File) maybeFillInfo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	policy := newRetryPolicy(clients)
 	for {
-		output, err := clients[0].GetObjectWithContext(ctx, &s3.GetObjectInput{
+		output, err := policy.client().GetObjectWithContext(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(f.bucket),
 			Key:    aws.String(f.key)})
-		if shouldRetry(f.name, err, &clients) {
+		if policy.shouldRetry(ctx, err) {
 			continue
 		}
 		if err != nil {
@@ -602,11 +649,12 @@ func (f *s3File) handleRead(req request) {
 		return
 	}
 	maxRetries := maxRetries(clients)
+	policy := newRetryPolicy(clients)
 	retries := 0
 	for len(buf) > 0 {
 		if f.bodyReader == nil {
-			err = f.startGetObjectRequest(req.ctx, clients[0])
-			if shouldRetry(f.name, err, &clients) {
+			err = f.startGetObjectRequest(req.ctx, policy.client())
+			if policy.shouldRetry(req.ctx, err) {
 				continue
 			}
 			if err != nil {
@@ -699,15 +747,16 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		bufPool:     sync.Pool{New: func() interface{} { return make([]byte, uploadPartSize) }},
 		nextPartNum: 1,
 	}
+	policy := newRetryPolicy(clients)
 	for {
-		resp, err := clients[0].CreateMultipartUploadWithContext(ctx, params)
-		if shouldRetry(path, err, &clients) {
+		resp, err := policy.client().CreateMultipartUploadWithContext(ctx, params)
+		if policy.shouldRetry(ctx, err) {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		u.client = clients[0]
+		u.client = policy.client()
 		u.uploadID = *resp.UploadId
 		if u.uploadID == "" {
 			panic(fmt.Sprintf("empty uploadID: %+v", resp))
@@ -726,6 +775,8 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 func (u *s3Uploader) uploadThread() {
 	defer u.sg.Done()
 	for chunk := range u.reqCh {
+		policy := newRetryPolicy([]s3iface.S3API{chunk.client})
+	retry:
 		params := &s3.UploadPartInput{
 			Bucket:     aws.String(u.bucket),
 			Key:        aws.String(u.key),
@@ -734,6 +785,9 @@ func (u *s3Uploader) uploadThread() {
 			PartNumber: &chunk.partNum,
 		}
 		resp, err := chunk.client.UploadPartWithContext(u.ctx, params)
+		if policy.shouldRetry(u.ctx, err) {
+			goto retry
+		}
 		u.bufPool.Put(chunk.buf)
 		if err != nil {
 			u.err.Set(err)
@@ -777,12 +831,17 @@ func (u *s3Uploader) write(buf []byte) {
 }
 
 func (u *s3Uploader) abort() error {
-	_, err := u.client.AbortMultipartUploadWithContext(u.ctx, &s3.AbortMultipartUploadInput{
-		Bucket:   aws.String(u.bucket),
-		Key:      aws.String(u.key),
-		UploadId: aws.String(u.uploadID),
-	})
-	return err
+	policy := newRetryPolicy([]s3iface.S3API{u.client})
+	for {
+		_, err := u.client.AbortMultipartUploadWithContext(u.ctx, &s3.AbortMultipartUploadInput{
+			Bucket:   aws.String(u.bucket),
+			Key:      aws.String(u.key),
+			UploadId: aws.String(u.uploadID),
+		})
+		if !policy.shouldRetry(u.ctx, err) {
+			return err
+		}
+	}
 }
 
 // finish finishes writing. It can be called only by the request thread.
@@ -793,17 +852,23 @@ func (u *s3Uploader) finish() error {
 	}
 	close(u.reqCh)
 	u.sg.Wait()
+	policy := newRetryPolicy([]s3iface.S3API{u.client})
 	if u.err.Err() == nil {
 		if len(u.parts) == 0 {
 			// Special case: an empty file. CompleteMUltiPartUpload with empty parts causes an error,
 			// so work around the bug by issuing a separate PutObject request.
 			u.abort() // nolint: errcheck
-			_, err := u.client.PutObjectWithContext(u.ctx, &s3.PutObjectInput{
-				Bucket: aws.String(u.bucket),
-				Key:    aws.String(u.key),
-				Body:   bytes.NewReader(nil),
-			})
-			u.err.Set(err)
+			for {
+				_, err := u.client.PutObjectWithContext(u.ctx, &s3.PutObjectInput{
+					Bucket: aws.String(u.bucket),
+					Key:    aws.String(u.key),
+					Body:   bytes.NewReader(nil),
+				})
+				if !policy.shouldRetry(u.ctx, err) {
+					u.err.Set(err)
+					break
+				}
+			}
 		} else {
 			// Parts must be sorted in PartNumber order.
 			sort.Slice(u.parts, func(i, j int) bool {
@@ -815,8 +880,13 @@ func (u *s3Uploader) finish() error {
 				UploadId:        aws.String(u.uploadID),
 				MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
 			}
-			_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params)
-			u.err.Set(err)
+			for {
+				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params)
+				if !policy.shouldRetry(u.ctx, err) {
+					u.err.Set(err)
+					break
+				}
+			}
 		}
 	}
 	if u.err.Err() != nil {
@@ -902,8 +972,8 @@ func (l *s3Lister) Scan() bool {
 			req.Delimiter = aws.String(pathSeparator)
 		}
 
-		res, err := l.clients[0].ListObjectsV2WithContext(l.ctx, req)
-		if shouldRetry(l.dir, err, &l.clients) {
+		res, err := l.policy.client().ListObjectsV2WithContext(l.ctx, req)
+		if l.policy.shouldRetry(l.ctx, err) {
 			continue
 		}
 		if err != nil {

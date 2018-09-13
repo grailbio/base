@@ -7,22 +7,25 @@ package s3file_test
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/base/file/s3file"
+	"github.com/grailbio/base/retry"
 	"github.com/grailbio/testutil/assert"
 	"github.com/grailbio/testutil/s3test"
 )
@@ -116,7 +119,9 @@ func (p *testProvider) NotifyResult(ctx context.Context, op, path string, client
 func newClient(t *testing.T) *s3test.Client { return s3test.NewClient(t, "b") }
 func permErrorClient(t *testing.T) s3iface.S3API {
 	c := s3test.NewClient(t, "b")
-	c.Err = errors.New("test permission error")
+	c.Err = func(api string, input interface{}) error {
+		return fmt.Errorf("test permission error: %s", string(debug.Stack()))
+	}
 	return c
 }
 
@@ -125,6 +130,29 @@ func TestS3(t *testing.T) {
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testutil.TestAll(ctx, t, impl, "s3://b/dir")
+}
+
+func TestS3WithRetries(t *testing.T) {
+	oldPolicy := s3file.BackoffPolicy
+	s3file.BackoffPolicy = retry.Backoff(0, 0, 1.0)
+	defer func() {
+		s3file.BackoffPolicy = oldPolicy
+	}()
+
+	ctx := context.Background()
+	for iter := 0; iter < 50; iter++ {
+		r := rand.New(rand.NewSource(int64(iter)))
+		client := newClient(t)
+		client.Err = func(api string, input interface{}) error {
+			if r.Intn(3) == 0 {
+				return awserr.New(request.ErrCodeSerialization, fmt.Sprintf("test failure %s (%s)", api, string(debug.Stack())), nil)
+			}
+			return nil
+		}
+		provider := &testProvider{clients: []s3iface.S3API{client}}
+		impl := s3file.NewImplementation(provider, s3file.Options{})
+		testutil.TestAll(ctx, t, impl, "s3://b/dir")
+	}
 }
 
 // WriteFile creates a file with the given contents. Path should be of form
@@ -166,7 +194,25 @@ func TestErrors(t *testing.T) {
 	assert.Regexp(t, l.Err(), "test permission error")
 }
 
-func TestRetryAfterError(t *testing.T) {
+func TestWriteRetryAfterError(t *testing.T) {
+	client := newClient(t)
+	provider := &testProvider{clients: []s3iface.S3API{client}}
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	ctx := context.Background()
+	for i := 0; i < 10; i++ {
+		r := rand.New(rand.NewSource(0))
+		client.Err = func(api string, input interface{}) error {
+			if r.Intn(3) == 0 {
+				fmt.Printf("write: api %s\n", api)
+				return awserr.New(request.ErrCodeSerialization, "test failure", nil)
+			}
+			return nil
+		}
+		writeFile(ctx, t, impl, "s3://b/0.txt", "data")
+	}
+}
+
+func TestReadRetryAfterError(t *testing.T) {
 	client := newClient(t)
 	setContent := func(path string, prob float64, data string) {
 		c := &failingContentAt{
