@@ -15,7 +15,7 @@ import (
 	"github.com/grailbio/base/cmdutil"
 	_ "github.com/grailbio/base/cmdutil/interactive"
 	"golang.org/x/oauth2"
-	"google.golang.org/api/admin/directory/v1"
+	admin "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/groupssettings/v1"
 	"v.io/x/lib/cmdline"
 )
@@ -31,7 +31,8 @@ const (
 )
 
 const domain = "grailbio.com"
-const groupSuffix = "-aws-role@grailbio.com"
+
+var groupSuffix = []string{"-aws-role@grailbio.com", "-ticket@grailbio.com"}
 
 var (
 	browserFlag     bool
@@ -115,6 +116,16 @@ func newCmdUpdate() *cmdline.Command {
 	cmd.Flags.BoolVar(&descriptionFlag, "description", true, "Compose a standard description.")
 	cmd.Flags.BoolVar(&dryRunFlag, "dry-run", true, "Safeguard to avoid accidental updates.")
 	return cmd
+}
+
+// Any return true if any string in list returns true based on the passed comparison method
+func Any(vs []string, f func(string) bool) bool {
+	for _, v := range vs {
+		if f(v) {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {

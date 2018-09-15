@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"v.io/x/lib/vlog"
-
-	"google.golang.org/api/admin/directory/v1"
-
+	admin "google.golang.org/api/admin/directory/v1"
 	"v.io/x/lib/cmdline"
+	"v.io/x/lib/vlog"
 )
 
 func runCreate(_ *cmdline.Env, args []string) error {
@@ -16,7 +14,9 @@ func runCreate(_ *cmdline.Env, args []string) error {
 		return fmt.Errorf("bad number of arguments, expected 1, got %q", args)
 	}
 	groupName := args[0]
-	if !strings.HasSuffix(groupName, groupSuffix) {
+	if !Any(groupSuffix, func(v string) bool {
+		return strings.HasSuffix(groupName, v)
+	}) {
 		return fmt.Errorf("bad suffix: the group name %q doesn't end in %q", groupName, groupSuffix)
 	}
 

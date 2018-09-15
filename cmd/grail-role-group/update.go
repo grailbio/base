@@ -49,7 +49,9 @@ func runUpdate(_ *cmdline.Env, args []string) error {
 		return fmt.Errorf("bad number of arguments, expected 1, got %q", args)
 	}
 	groupName := args[0]
-	if !strings.HasSuffix(groupName, groupSuffix) {
+	if !Any(groupSuffix, func(v string) bool {
+		return strings.HasSuffix(groupName, v)
+	}) {
 		return fmt.Errorf("bad suffix: the group name %q doesn't end in %q", groupName, groupSuffix)
 	}
 

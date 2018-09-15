@@ -11,6 +11,10 @@ func TestDescription(t *testing.T) {
 			"eng-dev-aws-role@grailbio.com",
 			"Please request access to this group if you need access to the eng/dev role account.",
 		},
+		{
+			"vendor-procured-samples-ticket@grailbio.com",
+			"Please request access to this group if you need access to the ticket vendor-procured-samples.",
+		},
 		{"eng", ""},
 		{"", ""},
 	}

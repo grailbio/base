@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/api/admin/directory/v1"
+	admin "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/groupssettings/v1"
 	goauth2 "google.golang.org/api/oauth2/v1"
 	"v.io/x/lib/cmdline"
@@ -27,7 +27,9 @@ func runList(_ *cmdline.Env, args []string) error {
 	ctx := context.Background()
 	return service.Groups.List().Domain(domain).Pages(ctx, func(groups *admin.Groups) error {
 		for _, g := range groups.Groups {
-			if strings.HasSuffix(g.Email, groupSuffix) {
+			if Any(groupSuffix, func(v string) bool {
+				return strings.HasSuffix(g.Email, v)
+			}) {
 				fmt.Printf("%v\n", g.Email)
 			}
 		}
