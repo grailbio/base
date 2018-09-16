@@ -6,6 +6,7 @@ package s3file_test
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"flag"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/base/file/s3file"
@@ -84,6 +86,10 @@ func (c *failingContentAt) Size() int64 {
 	return int64(len(c.content))
 }
 
+func (c *failingContentAt) Checksum() string {
+	return fmt.Sprintf("%x", md5.Sum(c.content))
+}
+
 type pausingContentAt struct {
 	ready   chan bool
 	content []byte
@@ -103,6 +109,10 @@ func (c *pausingContentAt) WriteAt(p []byte, off64 int64) (int, error) {
 // Size returns the size of the fake content.
 func (c *pausingContentAt) Size() int64 {
 	return int64(len(c.content))
+}
+
+func (c *pausingContentAt) Checksum() string {
+	return fmt.Sprintf("%x", md5.Sum(c.content))
 }
 
 type testProvider struct {
@@ -325,7 +335,7 @@ func testOverwriteWhileReading(t *testing.T, impl file.Implementation, pathPrefi
 	assert.NoError(t, err)
 	writeFile(ctx, t, impl, path, "test1")
 	_, err = ioutil.ReadAll(r)
-	assert.Regexp(t, err, "File version changed")
+	assert.True(t, errors.Is(errors.Precondition, err), "err=%v", err)
 }
 
 func TestOverwriteWhileReading(t *testing.T) {
