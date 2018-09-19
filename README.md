@@ -13,3 +13,4 @@ other grailbio Go packages:
 - [unsafe](https://godoc.org/github.com/grailbio/base/unsafe): conversion from []byte to string, etc.
 - [compress/libdeflate](https://godoc.org/github.com/grailbio/base/compress/libdeflate): efficient block compression/decompression
 - [simd](https://godoc.org/github.com/grailbio/base/simd): fast operations on []byte
+- [tsv](https://godoc.org/github.com/grailbio/base/tsv): simple and efficient TSV writer
