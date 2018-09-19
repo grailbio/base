@@ -106,13 +106,6 @@ Benchmark_Reverse8Long4-8               1        3965932146 ns/op
 Benchmark_Reverse8LongMax-8             1        3349559784 ns/op
 */
 
-/*
-type QLetter struct {
-	L byte
-	Q byte
-}
-*/
-
 func memset8Subtask(dst []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
 		// Compiler-recognized range-for loop, for comparison.
