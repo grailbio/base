@@ -14,6 +14,8 @@ import "context"
 // goroutine before proceeding. A limiter is not fair: tokens are not
 // granted in FIFO order; rather, waiters are picked randomly to be
 // granted new tokens.
+//
+// A nil limiter issues an infinite number of tokens.
 type Limiter struct {
 	c      chan int
 	waiter chan struct{}
@@ -29,6 +31,9 @@ func New() *Limiter {
 // Acquire blocks until the goroutine is granted the desired number
 // of tokens, or until the context is done.
 func (l *Limiter) Acquire(ctx context.Context, need int) error {
+	if l == nil {
+		return ctx.Err()
+	}
 	select {
 	case <-l.waiter:
 	case <-ctx.Done():
@@ -56,6 +61,9 @@ func (l *Limiter) Acquire(ctx context.Context, need int) error {
 
 // Release adds a number of tokens back into the limiter.
 func (l *Limiter) Release(n int) {
+	if l == nil {
+		return
+	}
 	if n == 0 {
 		return
 	}
