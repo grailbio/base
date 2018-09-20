@@ -96,6 +96,11 @@ func init() {
 	log2BytesPerVec = 4
 }
 
+// BytesPerVec is an accessor for the bytesPerVec package variable.
+func BytesPerVec() int {
+	return bytesPerVec
+}
+
 // RoundUpPow2 returns val rounded up to a multiple of alignment, assuming
 // alignment is a power of 2.
 func RoundUpPow2(val, alignment int) int {
