@@ -6,12 +6,13 @@ package s3file
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/log"
 )
 
@@ -131,6 +132,9 @@ func (p *defaultProvider) Get(ctx context.Context, op, path string) ([]s3iface.S
 	p.mu.Lock()
 	c, err := p.getRegion(region)
 	p.mu.Unlock()
+	if err != nil {
+		err = errors.E(err, fmt.Sprintf("defaultProvider.Get(%v,%s)", op, path))
+	}
 	return c.clients, err
 }
 

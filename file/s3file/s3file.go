@@ -345,10 +345,10 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 				continue
 			}
 			if err != nil {
-				return response{err: err}
+				return response{err: errors.E(err, fmt.Sprintf("s3file.stat %s", path))}
 			}
 			if *resp.ETag == "" {
-				return response{err: fmt.Errorf("stat %v: file does not exist", path)}
+				return response{err: fmt.Errorf("s3file.stat %v: file does not exist", path)}
 			}
 			return response{info: &s3Info{
 				name:    filepath.Base(path),
@@ -370,13 +370,16 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		}
 		clients, err := impl.provider.Get(ctx, "DeleteObject", path)
 		if err != nil {
-			return response{err: err}
+			return response{err: errors.E(err, fmt.Sprintf("s3file.remove %s", path))}
 		}
 		policy := newRetryPolicy(clients)
 		for {
 			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
 			if policy.shouldRetry(ctx, err) {
 				continue
+			}
+			if err != nil {
+				err = errors.E(err, fmt.Sprintf("s3file.remove %v", path))
 			}
 			return response{err: err}
 		}
@@ -468,7 +471,7 @@ func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
 
 func (f *s3File) handleStat(req request) {
 	if err := f.maybeFillInfo(req.ctx); err != nil {
-		req.ch <- response{err: err}
+		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.stat %v", f.name))}
 		return
 	}
 	if f.info == nil {
@@ -544,7 +547,7 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 // Seek implements io.Seeker
 func (f *s3File) handleSeek(req request) {
 	if err := f.maybeFillInfo(req.ctx); err != nil {
-		req.ch <- response{off: f.position, err: err}
+		req.ch <- response{off: f.position, err: errors.E(err, fmt.Sprintf("s3file.seek(%s,%d,%d)", f.name, req.off, req.whence))}
 		return
 	}
 	var newPosition int64
@@ -556,11 +559,11 @@ func (f *s3File) handleSeek(req request) {
 	case io.SeekEnd:
 		newPosition = f.info.size + req.off
 	default:
-		req.ch <- response{off: f.position, err: fmt.Errorf("illegal whence: %d", req.whence)}
+		req.ch <- response{off: f.position, err: fmt.Errorf("s3file.seek(%s,%d,%d): illegal whence", f.name, req.off, req.whence)}
 		return
 	}
 	if newPosition < 0 {
-		req.ch <- response{off: f.position, err: fmt.Errorf("out-of-bounds seek")}
+		req.ch <- response{off: f.position, err: fmt.Errorf("s3file.seek(%s,%d,%d): out-of-bounds seek", f.name, req.off, req.whence)}
 		return
 	}
 	if newPosition == f.position {
@@ -627,7 +630,7 @@ func (f *s3File) handleRead(req request) {
 	buf := req.buf
 	clients, err := f.provider.Get(req.ctx, "GetObject", f.name)
 	if err != nil {
-		req.ch <- response{err: err}
+		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.read %v", f.name))}
 		return
 	}
 	maxRetries := maxRetries(clients)
@@ -664,6 +667,9 @@ func (f *s3File) handleRead(req request) {
 		}
 	}
 	totalBytesRead := len(req.buf) - len(buf)
+	if err != nil && err != io.EOF {
+		err = errors.E(err, fmt.Sprintf("s3file.read %v", f.name))
+	}
 	req.ch <- response{n: totalBytesRead, err: err}
 }
 
@@ -710,7 +716,7 @@ type s3Uploader struct {
 func newUploader(ctx context.Context, provider ClientProvider, opts Options, path, bucket, key string) (*s3Uploader, error) {
 	clients, err := provider.Get(ctx, "PutObject", path)
 	if err != nil {
-		return nil, err
+		return nil, errors.E(err, fmt.Sprintf("s3file.write %v", path))
 	}
 	params := &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(bucket),
@@ -735,7 +741,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, errors.E(err, fmt.Sprintf("s3file.CreateMultipartUploadWithContext %v", path))
 		}
 		u.client = policy.client()
 		u.uploadID = *resp.UploadId
@@ -771,7 +777,7 @@ func (u *s3Uploader) uploadThread() {
 		}
 		u.bufPool.Put(chunk.buf)
 		if err != nil {
-			u.err.Set(err)
+			u.err.Set(errors.E(err, fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
 			continue
 		}
 		partNum := chunk.partNum
@@ -820,6 +826,9 @@ func (u *s3Uploader) abort() error {
 			UploadId: aws.String(u.uploadID),
 		})
 		if !policy.shouldRetry(u.ctx, err) {
+			if err != nil {
+				err = errors.E(err, fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
+			}
 			return err
 		}
 	}
@@ -846,6 +855,9 @@ func (u *s3Uploader) finish() error {
 					Body:   bytes.NewReader(nil),
 				})
 				if !policy.shouldRetry(u.ctx, err) {
+					if err != nil {
+						err = errors.E(err, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
+					}
 					u.err.Set(err)
 					break
 				}
@@ -864,6 +876,9 @@ func (u *s3Uploader) finish() error {
 			for {
 				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params)
 				if !policy.shouldRetry(u.ctx, err) {
+					if err != nil {
+						err = errors.E(err, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
+					}
 					u.err.Set(err)
 					break
 				}
@@ -896,11 +911,17 @@ func (f *s3File) handleClose(req request) {
 			err = e
 		}
 	}
+	if err != nil {
+		err = errors.E("s3file.close %v", f.name)
+	}
 	req.ch <- response{err: err}
 }
 
 func (f *s3File) handleAbort(req request) {
 	err := f.uploader.abort()
+	if err != nil {
+		err = errors.E("s3file.abort %v", f.name)
+	}
 	req.ch <- response{err: err}
 }
 
@@ -958,7 +979,7 @@ func (l *s3Lister) Scan() bool {
 			continue
 		}
 		if err != nil {
-			l.err = err
+			l.err = errors.E(err, fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
 			return false
 		}
 		l.token = res.NextContinuationToken
