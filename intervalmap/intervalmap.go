@@ -194,7 +194,7 @@ func keyRange(ents []*entry) Interval {
 	return i
 }
 
-const maxSample = 16
+const maxSample = 8
 
 // randomSample picks maxSample random elements from ents[]. It shuffles ents[]
 // in place.
@@ -248,17 +248,17 @@ func split(label string, ents []*entry, bounds Interval, r *rand.Rand) (mid Key,
 	}
 
 	// splitAt splits ents[] into two subsets, assuming bounds is split at mid.
-	splitAt := func(ents []*entry, mid Key) ([]*entry, []*entry) {
-		left, right := []*entry{}, []*entry{}
+	splitAt := func(ents []*entry, mid Key, left, right *[]*entry) {
+		*left = (*left)[:0]
+		*right = (*right)[:0]
 		for _, e := range ents {
 			if e.Interval.Intersects(Interval{bounds.Start, mid}) {
-				left = append(left, e)
+				*left = append(*left, e)
 			}
 			if e.Interval.Intersects(Interval{mid, bounds.Limit}) {
-				right = append(right, e)
+				*right = append(*right, e)
 			}
 		}
-		return left, right
 	}
 
 	// Compute the cost of splitting at each of candidates[].
@@ -286,17 +286,19 @@ func split(label string, ents []*entry, bounds Interval, r *rand.Rand) (mid Key,
 	minCost := math.MaxFloat64
 	var minMid Key
 	var minLeft, minRight []*entry
+	var tmpLeft, tmpRight []*entry
+
 	for _, mid := range candidates[:nCandidate] {
-		left, right := splitAt(ents, mid)
-		if len(left) == 0 || len(right) == 0 {
+		splitAt(ents, mid, &tmpLeft, &tmpRight)
+		if len(tmpLeft) == 0 || len(tmpRight) == 0 {
 			continue
 		}
-		cost := float64(len(left))*float64(mid-sampleRange.Start) +
-			float64(len(right))*float64(sampleRange.Limit-mid)
+		cost := float64(len(tmpLeft))*float64(mid-sampleRange.Start) +
+			float64(len(tmpRight))*float64(sampleRange.Limit-mid)
 		if cost < minCost {
 			minMid = mid
-			minLeft = left
-			minRight = right
+			minLeft, tmpLeft = tmpLeft, minLeft
+			minRight, tmpRight = tmpRight, minRight
 			minCost = cost
 		}
 	}
