@@ -129,8 +129,10 @@ func forEachFile(ctx context.Context, dir string, callback func(path string) err
 	eg, egCtx := errgroup.WithContext(ctx)
 	lister := file.List(egCtx, dir, true /*recursive*/)
 	for lister.Scan() {
-		path := lister.Path()
-		eg.Go(func() error { return callback(path) })
+		if !lister.IsDir() {
+			path := lister.Path()
+			eg.Go(func() error { return callback(path) })
+		}
 	}
 	err := eg.Wait()
 	if e := lister.Err(); e != nil && err == nil {
@@ -145,7 +147,7 @@ func runRm(args []string, opts cprmOpts) error {
 	return traverse.Each(len(args)).Do(func(i int) error {
 		path := args[i]
 		if opts.verbose {
-			log.Printf("%s\n", path)
+			fmt.Fprintf(os.Stderr, "%s\n", path)
 		}
 		if err := file.Remove(ctx, path); err == nil || !opts.recursive {
 			return err
@@ -176,7 +178,7 @@ func runCp(args []string, opts cprmOpts) error {
 	// a regular file.
 	copyRegularFile := func(src, dst string) (bool, error) {
 		if opts.verbose {
-			log.Printf("%s -> %s", src, dst)
+			fmt.Fprintf(os.Stderr, "%s -> %s\n", src, dst)
 		}
 		in, err := file.Open(ctx, src)
 		if err != nil {

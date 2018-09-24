@@ -131,7 +131,7 @@ func Join(elems ...string) string {
 				break
 			}
 		}
-		if e <= s {
+		if e < s {
 			return ""
 		}
 		return p[s : e+1]

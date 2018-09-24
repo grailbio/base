@@ -180,6 +180,8 @@ func ExampleJoin() {
 	fmt.Println(file.Join("s3://foo"))
 	fmt.Println(file.Join("s3://foo", "/bar/"))
 	fmt.Println(file.Join("s3://foo", "", "bar"))
+	fmt.Println(file.Join("s3://foo", "0"))
+	fmt.Println(file.Join("s3://foo", "abc"))
 	fmt.Println(file.Join("s3://foo//bar", "/", "/baz"))
 	// Output:
 	// foo/bar
@@ -189,6 +191,8 @@ func ExampleJoin() {
 	// s3://foo
 	// s3://foo/bar
 	// s3://foo/bar
+	// s3://foo/0
+	// s3://foo/abc
 	// s3://foo//bar/baz
 }
 
