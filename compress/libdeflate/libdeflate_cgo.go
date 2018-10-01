@@ -44,6 +44,15 @@ func (dd *Decompressor) Init() error {
 // decompressed data is returned on success (it may be smaller than
 // len(outData)).
 func (dd *Decompressor) Decompress(outData, inData []byte) (int, error) {
+	// Tolerate zero-length blocks on input, even though we don't on output.
+	// (Can be relevant when a BGZF file was formed by raw byte concatenation of
+	// smaller BGZF files.)
+	// Note that we can't use the usual *reflect.SliceHeader replacement for
+	// unsafe.Pointer(&inData[0]): that produces a "cgo argument has Go pointer
+	// to Go pointer" compile error.
+	if len(inData) == 0 {
+		return 0, nil
+	}
 	var outLen C.size_t
 	errcode := C.libdeflate_deflate_decompress(
 		dd.cobj, unsafe.Pointer(&inData[0]), C.size_t(len(inData)),
@@ -83,8 +92,13 @@ func (cc *Compressor) Init(compressionLevel int) error {
 
 // Compress performs raw DEFLATE compression on a byte slice.  outData[] must
 // be large enough to fit the compressed data.  Byte count of the compressed
-// data is returned on success; zero is currently returned on failure.
+// data is returned on success.
+// Zero is currently returned on failure.  A side effect is that inData cannot
+// be length zero; this function will panic or crash if it is.
 func (cc *Compressor) Compress(outData, inData []byte) int {
+	// We *want* to crash on length-zero (that implies an error in the calling
+	// code, we don't want to be writing zero-length BGZF blocks without knowing
+	// about it), so we intentionally exclude the len(inData) == 0 check.
 	outLen := int(C.libdeflate_deflate_compress(
 		cc.cobj, unsafe.Pointer(&inData[0]), C.size_t(len(inData)),
 		unsafe.Pointer(&outData[0]), C.size_t(len(outData))))

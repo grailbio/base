@@ -275,8 +275,6 @@ func (z *Writer) Write(p []byte) (int, error) {
 	z.size += uint32(len(p))
 	z.digest = crc32.Update(z.digest, crc32.IEEETable, p)
 
-	// ss, _ := fmt.Printf("libdeflate: %d %d %d %d\n", len(p), z.bufPos, z.bufCap-8, cap(z.buf))
-	// panic(ss)
 	n := z.compressor.Compress(z.buf[z.bufPos:z.bufCap-8], p)
 	z.bufPos += n
 	if n == 0 {

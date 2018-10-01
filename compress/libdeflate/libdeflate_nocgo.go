@@ -68,10 +68,15 @@ func (cc *Compressor) Init(compressionLevel int) error {
 
 // Compress performs raw DEFLATE compression on a byte slice.  outData[] must
 // be large enough to fit the compressed data.  Byte count of the compressed
-// data is returned on success; zero is currently returned on failure.
+// data is returned on success.
+// Zero is currently returned on failure.  A side effect is that inData cannot
+// be length zero; this function will panic or crash if it is.
 func (cc *Compressor) Compress(outData, inData []byte) int {
 	// I suspect this currently makes a few unnecessary allocations and copies;
 	// can optimize later.
+	if len(inData) == 0 {
+		panic("libdeflate.Compress: zero-length inData")
+	}
 	var buf bytes.Buffer
 	actualCompressor, err := flate.NewWriter(&buf, cc.clvl)
 	if err != nil {
