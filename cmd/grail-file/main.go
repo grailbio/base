@@ -63,7 +63,7 @@ func expandGlob(ctx context.Context, str string) []string {
 	if strings.HasSuffix(globSuffix, "/") {
 		globSuffix = globSuffix[:len(globSuffix)-1]
 	}
-	recursive := len(strings.Split(globSuffix, "/")) > 1 || strings.Index(globSuffix, "**") >= 0
+	recursive := len(strings.Split(globSuffix, "/")) > 1 || strings.Contains(globSuffix, "**")
 
 	lister := file.List(ctx, nonGlobPrefix, recursive)
 	matches := []string{}
@@ -147,12 +147,17 @@ func runRm(args []string, opts cprmOpts) error {
 	return traverse.Each(len(args)).Do(func(i int) error {
 		path := args[i]
 		if opts.verbose {
-			fmt.Fprintf(os.Stderr, "%s\n", path)
+			fmt.Fprintf(os.Stderr, "%s\n", path) // nolint: errcheck
 		}
-		if err := file.Remove(ctx, path); err == nil || !opts.recursive {
-			return err
+		if opts.recursive {
+			return forEachFile(ctx, path, func(path string) error {
+				if opts.verbose {
+					fmt.Fprintf(os.Stderr, "%s\n", path) // nolint: errcheck
+				}
+				return file.Remove(ctx, path)
+			})
 		}
-		return forEachFile(ctx, path, func(path string) error { return file.Remove(ctx, path) })
+		return file.Remove(ctx, path)
 	})
 }
 
@@ -178,7 +183,7 @@ func runCp(args []string, opts cprmOpts) error {
 	// a regular file.
 	copyRegularFile := func(src, dst string) (bool, error) {
 		if opts.verbose {
-			fmt.Fprintf(os.Stderr, "%s -> %s\n", src, dst)
+			fmt.Fprintf(os.Stderr, "%s -> %s\n", src, dst) // nolint: errcheck
 		}
 		in, err := file.Open(ctx, src)
 		if err != nil {
@@ -325,7 +330,7 @@ func runLs(out io.Writer, args []string, opts lsOpts) error {
 		r := &results[i]
 		<-r.done
 		for _, line := range r.lines {
-			fmt.Fprintln(out, line)
+			fmt.Fprintln(out, line) // nolint: errcheck
 		}
 		if r.err != nil && err == nil {
 			err = r.err
