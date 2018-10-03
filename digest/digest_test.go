@@ -178,6 +178,20 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
+func TestNPrefix(t *testing.T) {
+	d := Digester(crypto.SHA256)
+	id, err := d.Parse("9909853c8cada54314ddc5f89fe5658e139aea88cab8c1479a8c35c902b1cb49")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 32; n >= 0; n-- {
+		id.Truncate(n)
+		if got, want := id.NPrefix(), n; got != want {
+			t.Errorf("got %v, want %v for %v", got, want, id)
+		}
+	}
+}
+
 func TestGob(t *testing.T) {
 	id, err := Parse("sha256:9909853c8cada5431400c5f89fe5658e139aea88cab8c1479a8c35c902b1cb49")
 	if err != nil {

@@ -293,6 +293,17 @@ func (d Digest) IsAbbrev() bool {
 	return bytes.HasSuffix(d.b[:], zeros[d.h.Size()/2:])
 }
 
+// NPrefix returns the number of nonzero leading bytes in the
+// digest, after which the remaining bytes are zero.
+func (d Digest) NPrefix() int {
+	for i := d.h.Size() - 1; i >= 0; i-- {
+		if d.b[i] != 0 {
+			return i + 1
+		}
+	}
+	return 0
+}
+
 // Expands tells whether digest d expands the short digest e.
 func (d Digest) Expands(e Digest) bool {
 	return bytes.HasPrefix(d.b[:], e.b[:4])
@@ -305,6 +316,15 @@ func (d Digest) String() string {
 		return "<zero>"
 	}
 	return fmt.Sprintf("%s:%s", name[d.h], d.Hex())
+}
+
+// ShortString returns a short representation of the digest, comprising
+// the digest name and its first n bytes.
+func (d Digest) ShortString(n int) string {
+	if d.IsZero() {
+		return "<zero>"
+	}
+	return fmt.Sprintf("%s:%s", name[d.h], d.HexN(n))
 }
 
 func (d Digest) valid() bool {
