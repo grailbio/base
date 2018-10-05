@@ -15,12 +15,11 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/oauth2"
-	goauth2 "google.golang.org/api/oauth2/v1"
-	"github.com/grailbio/base/grail/data/v23data"
 	"github.com/grailbio/base/cmdutil"
 	"github.com/grailbio/base/security/identity"
 	"github.com/grailbio/base/web/webutil"
+	"golang.org/x/oauth2"
+	goauth2 "google.golang.org/api/oauth2/v1"
 	"v.io/v23"
 	v23context "v.io/v23/context"
 	"v.io/v23/security"
@@ -61,11 +60,6 @@ func runGoogle(ctx *v23context.T, env *cmdline.Env, args []string) error {
 	principal.BlessingStore().Set(blessings, "...")
 	if err := security.AddToRoots(principal, blessings); err != nil {
 		return fmt.Errorf("failed to add blessings to recognized roots: %v", err)
-	}
-
-	if err := v23data.InjectPipelineBlessings(ctx); err != nil {
-		vlog.Error(err)
-		return fmt.Errorf("failed to add the pipeline roots")
 	}
 
 	dump(ctx, env)

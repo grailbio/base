@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/grailbio/base/grail/data/v23data"
 	"github.com/grailbio/base/security/identity"
 	"v.io/v23"
 	"v.io/v23/context"
@@ -72,11 +71,6 @@ func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
 	if err := security.AddToRoots(principal, blessings); err != nil {
 		vlog.Error(err)
 		return fmt.Errorf("failed to add blessings to recognized roots: %v", err)
-	}
-
-	if err := v23data.InjectPipelineBlessings(ctx); err != nil {
-		vlog.Error(err)
-		return fmt.Errorf("failed to add the pipeline roots")
 	}
 
 	dump(ctx, env)

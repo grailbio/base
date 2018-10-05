@@ -9,7 +9,6 @@ import (
 	"time"
 
 	_ "github.com/grailbio/base/cmdutil/interactive"
-	"github.com/grailbio/base/grail/data/v23data"
 	"github.com/grailbio/base/security/ticket"
 	"v.io/v23"
 	"v.io/v23/context"
@@ -53,17 +52,6 @@ Example:
 	return cmd
 }
 
-func decodeBlessings(s string) (security.Blessings, error) {
-	b, err := base64.URLEncoding.DecodeString(s)
-	if err != nil {
-		return security.Blessings{}, err
-	}
-
-	dec := vom.NewDecoder(bytes.NewBuffer(b))
-	var blessings security.Blessings
-	return blessings, dec.Decode(&blessings)
-}
-
 func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	if len(args) != 2 {
 		return fmt.Errorf("Exactly two arguments are required: <ticket> <directory>")
@@ -98,7 +86,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	client := ticket.TicketServiceClient(ticketPath)
-	ctx, cancel := context.WithTimeout(roleCtx, timeoutFlag)
+	_, cancel := context.WithTimeout(roleCtx, timeoutFlag)
 	defer cancel()
 
 	t, err := client.Get(roleCtx)
@@ -128,11 +116,6 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 	if err := security.AddToRoots(principal, blessings); err != nil {
 		return fmt.Errorf("failed to add blessings to recognized roots: %v", err)
-	}
-
-	if err := v23data.InjectPipelineBlessings(ctx); err != nil {
-		vlog.Error(err)
-		return fmt.Errorf("failed to add the pipeline roots")
 	}
 
 	fmt.Printf("Public key: %s\n", principal.PublicKey())
