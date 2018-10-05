@@ -8,12 +8,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-)
-
-// bucketCache is a singleton cache manager.
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+) // bucketCache is a singleton cache manager.
 type bucketCache struct {
 	mu    sync.Mutex
 	cache map[string]string // maps S3 bucket to region (e.g., "us-east-2").
@@ -32,16 +29,14 @@ func (c *bucketCache) find(ctx context.Context, client s3iface.S3API, bucket str
 	if ok { // Common case
 		return val, nil
 	}
-	resp, err := client.GetBucketLocationWithContext(ctx,
-		&s3.GetBucketLocationInput{Bucket: aws.String(bucket)})
+	region, err := s3manager.GetBucketRegionWithClient(ctx, client, bucket)
 	if err != nil {
 		return "", err
 	}
 	// nil location means us-east-1.
 	// https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketGETlocation.html
-	region := "us-east-1"
-	if s := aws.StringValue(resp.LocationConstraint); s != "" {
-		region = s
+	if region == "" {
+		region = "us-east-1"
 	}
 	c.mu.Lock()
 	c.cache[bucket] = region
