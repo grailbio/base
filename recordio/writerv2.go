@@ -47,11 +47,14 @@ type IndexFunc func(loc ItemLocation, item interface{}) error
 type WriterOpts struct {
 	// Marshal is called for every item added by Append. It serializes the the
 	// record. If Marshal is nil, it defaults to a function that casts the value
-	// to []byte and returns it.
+	// to []byte and returns it. Marshal may be called concurrently.
 	Marshal MarshalFunc
 
 	// Index is called for every item added, just before it is written to
-	// storage. After Index is called, the Writer guarantees that it never touches
+	// storage. Index callback may be called concurrently and out of order of
+	// locations.
+	//
+	// After Index is called, the Writer guarantees that it never touches
 	// the value again. The application may recycle the value in a freepool, if it
 	// desires. Index may be nil.
 	Index IndexFunc
@@ -70,10 +73,17 @@ type WriterOpts struct {
 	// If len(Transformers)==0, then an identity transformer is used. It will
 	// return the block as is.
 	//
-	// The following transformers are supported by default:
+	// Recordio package includes the following standard transformers:
+	//
+	//  "zstd N" (N is -1 or an integer from 0 to 22): zstd compression level N.
+	//  If " N" part is omitted or N=-1, the default compression level is used.
+	//  To use zstd, import the 'recordiozstd' package and call
+	//  'recordiozstd.Init()' in an init() function.
 	//
 	//  "flate N" (N is -1 or an integer from 0 to 9): flate compression level N.
-	//   If " N" part is omitted or N=-1, the default compression level is used.
+	//  If " N" part is omitted or N=-1, the default compression level is used.
+	//  To use flate, import the 'recordioflate' package and call
+	//  'recordioflate.Init()' in an init() function.
 	Transformers []string
 
 	// MaxItems is the maximum number of items to pack into a single record.
