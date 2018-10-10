@@ -2,13 +2,12 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package traverse provides facilities for concurrent and parallel
-// computing over slices or user-defined collections.
+// Package traverse provides primitives for concurrent and parallel
+// traversal of slices or user-defined collections.
 package traverse
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -17,224 +16,137 @@ import (
 	"github.com/grailbio/base/errorreporter"
 )
 
+// A T is a traverser: it provides facilities for concurrently
+// invoking functions that traverse collections of data.
+type T struct {
+	// Limit is the traverser's concurrency limit: there will be no more
+	// than Limit concurrent invocations per traversal. A limit value of
+	// zero (the default value) denotes no limit.
+	Limit int
+	// Reporter receives status reports for each traversal. It is
+	// intended for users who wish to monitor the progress of large
+	// traversal jobs.
+	Reporter Reporter
+}
+
+// Limit returns a traverser with limit n.
+func Limit(n int) T {
+	return T{Limit: n}
+}
+
+// Parallel is the default traverser for parallel traversal, intended
+// CPU-intensive parallel computing. Parallel limits the number of
+// concurrent invocations to a small multiple of the runtime's
+// available processors.
+var Parallel = T{Limit: 2 * runtime.GOMAXPROCS(0)}
+
+// Each performs a traversal on fn. Specifically, Each invokes fn(i)
+// for 0 <= i < n, managing concurrency and error propagation. Each
+// returns when the all invocations have completed, or after the
+// first invocation fails, in which case the first invocation error
+// is returned. Each also propagates panics from underlying
+// invocations to the caller.
+func (t T) Each(n int, fn func(i int) error) error {
+	max := n
+	if t.Limit > 0 && t.Limit < max {
+		max = t.Limit
+	}
+	var (
+		wg     sync.WaitGroup
+		errors errorreporter.T
+		next   int64 = -1
+	)
+	wg.Add(max)
+	if t.Reporter != nil {
+		t.Reporter.Init(n)
+		defer t.Reporter.Complete()
+	}
+	for i := 0; i < max; i++ {
+		go func() {
+			for {
+				which := int(atomic.AddInt64(&next, 1))
+				if which >= n || errors.Err() != nil {
+					break
+				}
+				if t.Reporter != nil {
+					t.Reporter.Begin(which)
+				}
+				if err := apply(fn, which); err != nil {
+					errors.Set(err)
+				}
+				if t.Reporter != nil {
+					t.Reporter.End(which)
+				}
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	err := errors.Err()
+	if err == nil {
+		return nil
+	}
+	// Propagate panics.
+	if err, ok := err.(panicErr); ok {
+		panic(fmt.Sprintf("traverse child: %s\n%s", err.v, string(err.stack)))
+	}
+	return err
+}
+
+// Range performs ranged traversal on fn: n is split is split into
+// contiguous ranges, and fn is invoked for each range. The range
+// sizes are determined by the traverser's concurrency limits. Range
+// allows the caller to amortize function call costs, and is
+// typically used when limit is small and n is large, for example on
+// parallel traversal over large collections, where each item's
+// processing time is comparatively small.
+func (t T) Range(n int, fn func(start, end int) error) error {
+	m := n
+	if t.Limit > 0 && t.Limit < n {
+		m = t.Limit
+	}
+	return t.Each(m, func(i int) error {
+		var (
+			size  = float64(n) / float64(m)
+			start = int(float64(i) * size)
+			end   = int(float64(i+1) * size)
+		)
+		if start >= n {
+			return nil
+		}
+		if i == m-1 {
+			end = n
+		}
+		return fn(start, end)
+	})
+}
+
+var defaultT = T{}
+
+// Each performs concurrent traversal over n elements. It is a
+// shorthand for (T{}).Each.
+func Each(n int, fn func(i int) error) error {
+	return defaultT.Each(n, fn)
+}
+
+// CPU calls the function fn for each available system CPU. CPU
+// returns when all calls have completed or on first error.
+func CPU(fn func() error) error {
+	return Each(runtime.NumCPU(), func(int) error { return fn() })
+}
+
+func apply(fn func(i int) error, i int) (err error) {
+	defer func() {
+		if perr := recover(); perr != nil {
+			err = panicErr{perr, debug.Stack()}
+		}
+	}()
+	return fn(i)
+}
+
 type panicErr struct {
 	v     interface{}
 	stack []byte
 }
 
 func (p panicErr) Error() string { return fmt.Sprint(p.v) }
-
-// Traverse is a traversal of a given length. Traverse instances
-// should be instantiated with Each and Parallel.
-type Traverse struct {
-	n, maxConcurrent, nshards int
-	debugStatus               *status
-}
-
-// Each creates a new traversal of length n appropriate for
-// concurrent traversal.
-func Each(n int) Traverse {
-	return Traverse{n, n, 0, nil}
-}
-
-// Parallel creates a new traversal of length n appropriate for
-// parallel traversal.
-func Parallel(n int) Traverse {
-	return Each(n).Limit(runtime.NumCPU())
-}
-
-// Limit limits the concurrency of the traversal to maxConcurrent.
-func (t Traverse) Limit(maxConcurrent int) Traverse {
-	t.maxConcurrent = maxConcurrent
-	return t
-}
-
-// Sharded sets the number of shards we want to use for the traverse
-// (for traverse of large number of elements where processing each element
-// is very fast, it will be more efficient to shard the processing,
-// rather than use a separate goroutine for each element).
-// If not set, by default the number of shards is equal to the number
-// of elements to traverse (shard size 1).
-// When using a Reporter, each shard will be reported as a single job.
-func (t Traverse) Sharded(nshards int) Traverse {
-	t.nshards = nshards
-	return t
-}
-
-// WithReporter will use the given reporter to report the progress on the jobs.
-// Example:
-//
-//	traverse.Each(9).WithReporter(traverse.DefaultReporter{Name: "Processing"}).Do(func(i int) error { ...
-func (t Traverse) WithReporter(reporter Reporter) Traverse {
-	t.debugStatus = &status{&sync.Mutex{}, reporter, 0, 0, 0}
-	return t
-}
-
-// Do performs a traversal, invoking function op for each index, 0 <=
-// i < t.n. Do returns the first error returned by any invoked op, or
-// nil when all ops succeed. Traversal is terminated early on error.
-// Panics are recovered in ops and propagated to the calling
-// goroutine, printing the original stack trace. Do guarantees that,
-// after it returns, no more ops will be invoked.
-func (t Traverse) Do(op func(i int) error) error {
-	var er errorreporter.T
-	return t.DoRange(func(start, end int) error {
-		for i := start; i < end && er.Err() == nil; i++ {
-			err := op(i)
-			if err != nil {
-				er.Set(err)
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-// DoRange is similar to Do above, except it accepts a function that runs
-// over a range of indices [start, end). DoRange is useful when the
-// computation for each index is very cheap since DoRange
-// amortizes the communication overhead implied by parallelization
-// by chunking the input.
-//
-// For example, the following performs a cheap computation over some
-// inputs, placing the results in output.
-//
-// 	traverse.Parallel(len(output)).DoRange(func(start, end int) error {
-//		for i := start; i < end; i++ {
-//			output[i] = cheapComputation(input[i))
-//		}
-//		return nil
-//	})
-//
-// By default, DoRange splits input indices into as many segments as
-// can be run concurrently. This default sharding strategy can be adjusted
-// by Traverse.Sharded.
-func (t Traverse) DoRange(op func(start, end int) error) error {
-	if t.n == 0 {
-		return nil
-	}
-
-	numShards := t.n
-	shardSize := 1
-	if t.nshards > 0 {
-		numShards = min(t.nshards, t.n)
-		shardSize = (t.n + t.nshards - 1) / t.nshards
-	}
-
-	if numShards < t.maxConcurrent {
-		t.maxConcurrent = numShards
-	}
-
-	var errorReporter errorreporter.T
-	apply := func(i int) (err error) {
-		defer func() {
-			if perr := recover(); perr != nil {
-				err = panicErr{perr, debug.Stack()}
-			}
-		}()
-		start := i * shardSize
-		return op(start, min(start+shardSize, t.n))
-	}
-	var wg sync.WaitGroup
-	wg.Add(t.maxConcurrent)
-	t.debugStatus.queueJobs(int32(numShards))
-
-	var x int64 = -1 // x is treated with atomic operations and accessed from multiple go routines
-	for i := 0; i < t.maxConcurrent; i++ {
-		go func() {
-			defer wg.Done()
-			for {
-				i := int(atomic.AddInt64(&x, 1)) // the first iteration will return 0.
-				if i >= numShards || errorReporter.Err() != nil {
-					return
-				}
-				t.debugStatus.startJob()
-				err := apply(i)
-				t.debugStatus.finishJob()
-				if err != nil {
-					errorReporter.Set(err)
-					return
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-	// read the first errors that may have occurred
-	foundError := errorReporter.Err()
-	if foundError != nil {
-		if err, ok := foundError.(panicErr); ok {
-			panic(fmt.Sprintf("traverse child: %s\n%s", err.v, string(err.stack)))
-		}
-		return foundError
-	}
-	return nil
-}
-
-// Reporter is the interface for reporting the progress on traverse jobs.
-type Reporter interface {
-	// Report is called every time the number of jobs queued, running, or done changes.
-	Report(queued, running, done int32)
-}
-
-// DefaultReporter is a simple Reporter that prints to stderr the number of
-// jobs queued, running, and done
-type DefaultReporter struct {
-	Name string
-}
-
-// Report prints the number of jobs currently queued, running, and done.
-func (reporter DefaultReporter) Report(queued, running, done int32) {
-	fmt.Fprintf(os.Stderr, "%s: (queued: %d -> running: %d -> done: %d) \r", reporter.Name, queued, running, done)
-	if queued == 0 && running == 0 {
-		fmt.Fprintf(os.Stderr, "\n")
-	}
-}
-
-// status keeps track of how many jobs are queued, running, and done.
-type status struct {
-	mu       *sync.Mutex
-	reporter Reporter
-	queued   int32
-	done     int32
-	running  int32
-}
-
-func (s *status) queueJobs(numjobs int32) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.queued += numjobs
-	s.reporter.Report(s.queued, s.running, s.done)
-	s.mu.Unlock()
-}
-
-func (s *status) startJob() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.queued--
-	s.running++
-	s.reporter.Report(s.queued, s.running, s.done)
-	s.mu.Unlock()
-}
-
-func (s *status) finishJob() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.running--
-	s.done++
-	s.reporter.Report(s.queued, s.running, s.done)
-	s.mu.Unlock()
-}
-
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}

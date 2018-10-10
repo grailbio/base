@@ -116,7 +116,7 @@ This command prints contents of the files to the stdout. It supports globs defin
 	}
 }
 
-const parallelism = 16
+var parallel = traverse.Limit(16)
 
 type cprmOpts struct {
 	verbose   bool
@@ -144,7 +144,7 @@ func forEachFile(ctx context.Context, dir string, callback func(path string) err
 func runRm(args []string, opts cprmOpts) error {
 	ctx := vcontext.Background()
 	args = expandGlobs(ctx, args)
-	return traverse.Each(len(args)).Do(func(i int) error {
+	return traverse.Each(len(args), func(i int) error {
 		path := args[i]
 		if opts.verbose {
 			fmt.Fprintf(os.Stderr, "%s\n", path) // nolint: errcheck
@@ -244,7 +244,7 @@ func runCp(args []string, opts cprmOpts) error {
 		}
 		return copyFileInDir(srcs[0], dst)
 	}
-	return traverse.Each(len(srcs)).Limit(parallelism).Do(func(i int) error {
+	return parallel.Each(len(srcs), func(i int) error {
 		return copyFileInDir(srcs[i], dst)
 	})
 }

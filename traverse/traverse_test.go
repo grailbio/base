@@ -2,14 +2,19 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-package traverse
+package traverse_test
 
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+
+	"github.com/grailbio/base/traverse"
 )
 
 func recovered(f func()) (v interface{}) {
@@ -20,7 +25,7 @@ func recovered(f func()) (v interface{}) {
 
 func TestTraverse(t *testing.T) {
 	list := make([]int, 5)
-	err := Each(5).Do(func(i int) error {
+	err := traverse.Each(5, func(i int) error {
 		list[i] += i
 		return nil
 	})
@@ -31,7 +36,7 @@ func TestTraverse(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	expectedErr := errors.New("test error")
-	err = Each(5).Do(func(i int) error {
+	err = traverse.Each(5, func(i int) error {
 		if i == 3 {
 			return expectedErr
 		}
@@ -42,10 +47,50 @@ func TestTraverse(t *testing.T) {
 	}
 }
 
+func TestRange(t *testing.T) {
+	const N = 5000
+	var (
+		counts      = make([]int64, N)
+		invocations int64
+	)
+	var tr traverse.T
+	for i := 0; i < N; i++ {
+		tr.Limit = rand.Intn(N*2) + 1
+		err := tr.Range(N, func(start, end int) error {
+			if start < 0 || end > N || end < start {
+				return fmt.Errorf("invalid range [%d,%d)", start, end)
+			}
+			atomic.AddInt64(&invocations, 1)
+			for i := start; i < end; i++ {
+				atomic.AddInt64(&counts[i], 1)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Errorf("limit %d: %v", tr.Limit, err)
+			continue
+		}
+		expect := int64(tr.Limit)
+		if expect > N {
+			expect = N
+		}
+		if got, want := invocations, expect; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		invocations = 0
+		for i := range counts {
+			if got, want := counts[i], int64(1); got != want {
+				t.Errorf("counts[%d,%d]: got %v, want %v", i, tr.Limit, got, want)
+			}
+			counts[i] = 0
+		}
+	}
+}
+
 func TestPanic(t *testing.T) {
 	expectedPanic := "panic in the disco!!"
 	f := func() {
-		Each(5).Do(func(i int) error {
+		traverse.Each(5, func(i int) error {
 			if i == 3 {
 				panic(expectedPanic)
 			}
@@ -62,106 +107,45 @@ func TestPanic(t *testing.T) {
 	}
 }
 
-func TestSharding(t *testing.T) {
-	tests := []struct {
-		n       int
-		nshards int
-	}{
-		{
-			n:       5,
-			nshards: 5,
-		},
-		{
-			n:       5,
-			nshards: 10,
-		},
-		{
-			n:       5,
-			nshards: 2,
-		},
-		{
-			n:       15,
-			nshards: 3,
-		},
-	}
-
-	for _, test := range tests {
-		expectedList := make([]int, test.n)
-		for i := range expectedList {
-			expectedList[i] = i
-		}
-
-		list := make([]int, test.n)
-		err := Each(test.n).Sharded(test.nshards).Do(func(i int) error {
-			list[i] += i
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(list, expectedList) {
-			t.Errorf("got %v, want %v", list, expectedList)
-		}
-
-		rangeList := make([]int, test.n)
-		err = Each(test.n).Sharded(test.nshards).DoRange(func(start, end int) error {
-			for i := start; i < end; i++ {
-				rangeList[i] += i
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(rangeList, expectedList) {
-			t.Errorf("DoRange failed: got %v, want %v", rangeList, expectedList)
-		}
-
-		// test error propagation
-		expectedErr := errors.New("test error")
-		err = Each(test.n).Sharded(test.nshards).Do(func(i int) error {
-			if i == test.n/2 {
-				return expectedErr
-			}
-			return nil
-		})
-		if got, want := err, expectedErr; got != want {
-			t.Errorf("got %v want %v", got, want)
-		}
-
-		err = Each(test.n).Sharded(test.nshards).DoRange(func(start, end int) error {
-			for i := start; i < end; i++ {
-				if i == test.n/2 {
-					return expectedErr
-				}
-			}
-			return nil
-		})
-		if got, want := err, expectedErr; got != want {
-			t.Errorf("got %v want %v", got, want)
-		}
-	}
-}
-
 type testStatus struct {
 	queued, running, done int32
 }
 
 type testReporter struct {
-	statusHistory []testStatus
+	mu                    sync.Mutex
+	statusHistory         []testStatus
+	queued, running, done int32
 }
 
-func (reporter *testReporter) Report(queued, running, done int32) {
-	reporter.statusHistory =
-		append(reporter.statusHistory, testStatus{queued: queued, running: running, done: done})
+func (r *testReporter) Init(n int) {
+	r.update(int32(n), 0, 0)
+}
+
+func (r *testReporter) Complete() {}
+
+func (r *testReporter) Begin(i int) {
+	r.update(-1, 1, 0)
+}
+
+func (r *testReporter) End(i int) {
+	r.update(0, -1, 1)
+}
+
+func (r *testReporter) update(queued, running, done int32) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.queued += queued
+	r.running += running
+	r.done += done
+	r.statusHistory =
+		append(r.statusHistory, testStatus{queued: r.queued, running: r.running, done: r.done})
 }
 
 func TestReportingSingleJob(t *testing.T) {
-	reporter := testReporter{}
+	reporter := new(testReporter)
 
-	Each(5).Limit(1).WithReporter(&reporter).Do(func(i int) error {
-		return nil
-	})
+	tr := traverse.T{Reporter: reporter}
+	tr.Each(5, func(i int) error { return nil })
 
 	expectedStatuses := []testStatus{
 		testStatus{queued: 5, running: 0, done: 0},
@@ -186,14 +170,13 @@ func TestReportingSingleJob(t *testing.T) {
 }
 
 func TestReportingManyJobs(t *testing.T) {
-	reporter := testReporter{}
+	reporter := new(testReporter)
 
 	numJobs := 50
 	numConcurrent := 5
 
-	Each(numJobs).Limit(numConcurrent).WithReporter(&reporter).Do(func(i int) error {
-		return nil
-	})
+	tr := traverse.T{Limit: numConcurrent, Reporter: reporter}
+	tr.Each(numJobs, func(i int) error { return nil })
 
 	// first status should be all jobs queued
 	if (reporter.statusHistory[0] != testStatus{queued: int32(numJobs), running: 0, done: 0}) {
@@ -243,7 +226,7 @@ func TestReportingManyJobs(t *testing.T) {
 func BenchmarkDo(b *testing.B) {
 	arr := make([]int, b.N)
 	for n := 0; n < b.N; n++ {
-		err := Each(n).Do(func(i int) error {
+		err := traverse.Each(n, func(i int) error {
 			arr[i]++
 			return nil
 		})
@@ -253,10 +236,10 @@ func BenchmarkDo(b *testing.B) {
 	}
 }
 
-func benchmarkDo(n int, nshards int, b *testing.B) {
+func benchmarkDo(n int, b *testing.B) {
 	arr := make([]int, n)
 	for k := 0; k < b.N; k++ {
-		err := Each(n).Sharded(nshards).Do(func(i int) error {
+		err := traverse.Each(n, func(i int) error {
 			arr[i]++
 			return nil
 		})
@@ -266,49 +249,10 @@ func benchmarkDo(n int, nshards int, b *testing.B) {
 	}
 }
 
-func benchmarkDoRange(n int, nshards int, b *testing.B) {
-	arr := make([]int, n)
-	for k := 0; k < b.N; k++ {
-		err := Each(n).Sharded(nshards).DoRange(func(start, end int) error {
-			for i := start; i < end; i++ {
-				arr[i]++
-			}
-			return nil
-		})
-		if err != nil {
-			b.Error(err)
-		}
-	}
+func BenchmarkDo1000(b *testing.B) {
+	benchmarkDo(1000, b)
 }
 
-func BenchmarkDoShardSize1(b *testing.B) {
-	benchmarkDo(1000, 1000, b)
-}
-
-func BenchmarkDoRangeShardSize1(b *testing.B) {
-	benchmarkDoRange(1000, 1000, b)
-}
-
-func BenchmarkDoShardSize10(b *testing.B) {
-	benchmarkDo(1000, 100, b)
-}
-
-func BenchmarkDoRangeShardSize10(b *testing.B) {
-	benchmarkDoRange(1000, 100, b)
-}
-
-func BenchmarkDoShardSize100(b *testing.B) {
-	benchmarkDo(1000, 10, b)
-}
-
-func BenchmarkDoRangeShardSize100(b *testing.B) {
-	benchmarkDoRange(1000, 10, b)
-}
-
-func BenchmarkDoShardSize1000(b *testing.B) {
-	benchmarkDo(1000, 1, b)
-}
-
-func BenchmarkDoRangeShardSize1000(b *testing.B) {
-	benchmarkDoRange(1000, 1, b)
+func BenchmarkDo10000(b *testing.B) {
+	benchmarkDo(10000, b)
 }

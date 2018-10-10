@@ -43,7 +43,7 @@ func TestLimiterConcurrently(t *testing.T) {
 	l.Release(T)
 	var begin sync.WaitGroup
 	begin.Add(N)
-	err := traverse.Each(N).Do(func(i int) error {
+	err := traverse.Each(N, func(i int) error {
 		begin.Done()
 		begin.Wait()
 		n := rand.Intn(T) + 1
