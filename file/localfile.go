@@ -65,6 +65,9 @@ func (impl *localImpl) Open(ctx context.Context, path string) (File, error) {
 // it creates a temporary file with name <path>.tmp, then renames the temp file
 // to <path> on Close.
 func (*localImpl) Create(ctx context.Context, path string) (File, error) {
+	if path == "" { // Detect common errors quickly.
+		return nil, fmt.Errorf("file.Create: empty pathname")
+	}
 	realPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		// This happens when the file doesn't exist, including the case where path

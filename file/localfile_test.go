@@ -25,6 +25,11 @@ func TestAll(t *testing.T) {
 	filetestutil.TestAll(ctx, t, impl, tempDir)
 }
 
+func TestEmptyPath(t *testing.T) {
+	_, err := file.Create(context.Background(), "")
+	require.Regexp(t, "empty pathname", err)
+}
+
 // Test that Create on a symlink will preserve it.
 func TestCreateSymlink(t *testing.T) {
 	dir0, cleanup0 := testutil.TempDir(t, "", "")
