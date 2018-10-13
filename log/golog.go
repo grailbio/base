@@ -9,13 +9,22 @@ import (
 	"fmt"
 	"io"
 	golog "log"
+	"runtime/debug"
+	"sync/atomic"
 )
 
 var golevel = Info
 
+var called int32 = 0
+
 // AddFlags adds a standard log level flags to the flag.CommandLine
 // flag set.
 func AddFlags() {
+	if atomic.AddInt32(&called, 1) != 1 {
+		Error.Printf("log.AddFlags: called twice!")
+		debug.PrintStack()
+		return
+	}
 	flag.Var(new(logFlag), "log", "set log level (off, error, info, debug)")
 }
 
