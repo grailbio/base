@@ -2,11 +2,10 @@ package syncqueue_test
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/grailbio/base/syncqueue"
+	"github.com/stretchr/testify/assert"
 )
 
 func checkNext(t *testing.T, q *syncqueue.OrderedQueue, value interface{}, ok bool) {
@@ -73,28 +72,21 @@ func TestNoBlockWhenInsertNext(t *testing.T) {
 }
 
 func TestInsertBlockWithNextAvailable(t *testing.T) {
-	cond := sync.NewCond(&sync.Mutex{})
+	resultChan := make(chan bool, 1)
 
 	q := syncqueue.NewOrderedQueue(2)
 	q.Insert(1, "one")
 	q.Insert(0, "zero")
 
-	insertedTwo := false
 	go func() {
 		q.Insert(2, "two")
-		insertedTwo = true
-		cond.Signal()
+		resultChan <- true
+		close(resultChan)
 	}()
 
-	assert.False(t, insertedTwo, "Expected insert(2, two) to block until there is space in the queue")
 	checkNext(t, q, "zero", true)
-	cond.L.Lock()
-	for !insertedTwo {
-		cond.Wait()
-	}
-	assert.True(t, insertedTwo, "Expected insert(2, two) to complete after removing an item from the queue")
-	cond.L.Unlock()
-
+	result := <-resultChan
+	assert.True(t, result, "Expected insert(2, two) to complete after removing an item from the queue")
 	q.Close(nil)
 
 	checkNext(t, q, "one", true)
@@ -103,30 +95,23 @@ func TestInsertBlockWithNextAvailable(t *testing.T) {
 }
 
 func TestInsertBlockWithoutNextAvailable(t *testing.T) {
-	cond := sync.NewCond(&sync.Mutex{})
+	resultChan := make(chan bool, 1)
 
 	q := syncqueue.NewOrderedQueue(2)
 	q.Insert(1, "one")
 
-	insertedTwo := false
 	go func() {
 		q.Insert(2, "two")
-		insertedTwo = true
-		cond.Signal()
+		resultChan <- true
+		close(resultChan)
 	}()
 
-	assert.False(t, insertedTwo, "Expected insert(2, two) to block until there is space in the queue")
 	q.Insert(0, "zero")
 	checkNext(t, q, "zero", true)
 
 	// Wait until insert two finishes
-	cond.L.Lock()
-	for !insertedTwo {
-		cond.Wait()
-	}
-	assert.True(t, insertedTwo, "Expected insert(2, two) to complete after removing an item from the queue")
-	cond.L.Unlock()
-
+	result := <-resultChan
+	assert.True(t, result, "Expected insert(2, two) to complete after removing an item from the queue")
 	q.Close(nil)
 
 	checkNext(t, q, "one", true)
@@ -135,71 +120,54 @@ func TestInsertBlockWithoutNextAvailable(t *testing.T) {
 }
 
 func TestNextBlockWhenEmpty(t *testing.T) {
-	cond := sync.NewCond(&sync.Mutex{})
+	resultChan := make(chan bool, 1)
 
 	q := syncqueue.NewOrderedQueue(2)
-	gotZero := false
 	go func() {
 		checkNext(t, q, "zero", true)
-		gotZero = true
-		cond.Signal()
+		resultChan <- true
+		close(resultChan)
 	}()
-
-	assert.False(t, gotZero, "Expected Next block until there is something in the queue")
 
 	// Insert zero and then wait until Next returns
 	q.Insert(0, "zero")
-	cond.L.Lock()
-	for !gotZero {
-		cond.Wait()
-	}
-	assert.True(t, gotZero, "Expected Next() to complete after inserting zero")
-	cond.L.Unlock()
+	result := <-resultChan
+	assert.True(t, result, "Expected Next() to complete after inserting zero")
 
 	q.Close(nil)
 	checkNext(t, q, nil, false)
 }
 
 func TestInsertGetsError(t *testing.T) {
-	cond := sync.NewCond(&sync.Mutex{})
+	errors := make(chan error, 1)
 
 	q := syncqueue.NewOrderedQueue(1)
 	q.Insert(0, "zero")
 
-	var insertError error
 	go func() {
-		insertError = q.Insert(1, "one")
-		cond.Signal()
+		errors <- q.Insert(1, "one")
+		close(errors)
 	}()
 
-	assert.Nil(t, insertError, "Expected insert(1, one) to be nil until there is an error")
+	// Close q with an error.
 	q.Close(fmt.Errorf("Foo error"))
 
-	cond.L.Lock()
-	for insertError == nil {
-		cond.Wait()
-	}
-	assert.Equal(t, "Foo error", insertError.Error())
-	cond.L.Unlock()
+	// Wait for Insert to return with an error, and verify the value of the error.
+	e := <-errors
+	assert.Equal(t, "Foo error", e.Error())
 }
 
 func TestNextGetsError(t *testing.T) {
-	cond := sync.NewCond(&sync.Mutex{})
+	errorChan := make(chan error, 1)
 
 	q := syncqueue.NewOrderedQueue(1)
-	var nextError error
 	go func() {
-		_, _, nextError = q.Next()
-		cond.Signal()
+		_, _, err := q.Next()
+		errorChan <- err
+		close(errorChan)
 	}()
 
-	assert.Nil(t, nextError, "Expected nextError to be nil until there is an error")
 	q.Close(fmt.Errorf("Foo error"))
-
-	cond.L.Lock()
-	for nextError == nil {
-		cond.Wait()
-	}
-	assert.Equal(t, "Foo error", nextError.Error())
-	cond.L.Unlock()
+	err := <-errorChan
+	assert.Equal(t, "Foo error", err.Error())
 }
