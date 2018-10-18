@@ -16,6 +16,8 @@ import (
 	"github.com/grailbio/base/errorreporter"
 )
 
+const cachelineSize = 64
+
 // A T is a traverser: it provides facilities for concurrently
 // invoking functions that traverse collections of data.
 type T struct {
@@ -47,26 +49,75 @@ var Parallel = T{Limit: 2 * runtime.GOMAXPROCS(0)}
 // is returned. Each also propagates panics from underlying
 // invocations to the caller.
 func (t T) Each(n int, fn func(i int) error) error {
-	max := n
-	if t.Limit > 0 && t.Limit < max {
-		max = t.Limit
-	}
-	var (
-		wg     sync.WaitGroup
-		errors errorreporter.T
-		next   int64 = -1
-	)
-	wg.Add(max)
 	if t.Reporter != nil {
 		t.Reporter.Init(n)
 		defer t.Reporter.Complete()
 	}
-	for i := 0; i < max; i++ {
-		go func() {
-			for {
-				which := int(atomic.AddInt64(&next, 1))
-				if which >= n || errors.Err() != nil {
-					break
+	var err error
+	if t.Limit == 0 || t.Limit >= n {
+		err = t.each(n, fn)
+	} else {
+		err = t.eachLimit(n, fn)
+	}
+	if err == nil {
+		return nil
+	}
+	// Propagate panics.
+	if err, ok := err.(panicErr); ok {
+		panic(fmt.Sprintf("traverse child: %s\n%s", err.v, string(err.stack)))
+	}
+	return err
+}
+
+func (t T) each(n int, fn func(i int) error) error {
+	var (
+		errors errorreporter.T
+		wg     sync.WaitGroup
+	)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			if t.Reporter != nil {
+				t.Reporter.Begin(i)
+			}
+			if err := apply(fn, i); err != nil {
+				errors.Set(err)
+			}
+			if t.Reporter != nil {
+				t.Reporter.End(i)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	return errors.Err()
+}
+
+func (t T) eachLimit(n int, fn func(i int) error) error {
+	var (
+		errors errorreporter.T
+		wg     sync.WaitGroup
+		next   = make([]struct {
+			N int64
+			_ [cachelineSize - 8]byte // cache padding
+		}, t.Limit)
+		size = (n + t.Limit - 1) / t.Limit
+	)
+	wg.Add(t.Limit)
+	for i := 0; i < t.Limit; i++ {
+		go func(w int) {
+			orig := w
+			for errors.Err() == nil {
+				// Each worker traverses contiguous segments since there is
+				// often usable data locality associated with index locality.
+				idx := int(atomic.AddInt64(&next[w].N, 1) - 1)
+				which := w*size + idx
+				if idx >= size || which >= n {
+					w = (w + 1) % t.Limit
+					if w == orig {
+						break
+					}
+					continue
 				}
 				if t.Reporter != nil {
 					t.Reporter.Begin(which)
@@ -79,18 +130,10 @@ func (t T) Each(n int, fn func(i int) error) error {
 				}
 			}
 			wg.Done()
-		}()
+		}(i)
 	}
 	wg.Wait()
-	err := errors.Err()
-	if err == nil {
-		return nil
-	}
-	// Propagate panics.
-	if err, ok := err.(panicErr); ok {
-		panic(fmt.Sprintf("traverse child: %s\n%s", err.v, string(err.stack)))
-	}
-	return err
+	return errors.Err()
 }
 
 // Range performs ranged traversal on fn: n is split is split into
@@ -105,6 +148,8 @@ func (t T) Range(n int, fn func(start, end int) error) error {
 	if t.Limit > 0 && t.Limit < n {
 		m = t.Limit
 	}
+	// TODO: consider splitting ranges into smaller chunks so that can
+	// take better advantage of the load balancing underneath.
 	return t.Each(m, func(i int) error {
 		var (
 			size  = float64(n) / float64(m)

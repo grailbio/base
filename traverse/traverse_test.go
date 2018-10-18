@@ -224,35 +224,27 @@ func TestReportingManyJobs(t *testing.T) {
 }
 
 func BenchmarkDo(b *testing.B) {
-	arr := make([]int, b.N)
-	for n := 0; n < b.N; n++ {
-		err := traverse.Each(n, func(i int) error {
-			arr[i]++
-			return nil
+	for _, n := range []int{1, 1e6, 1e8} {
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			for k := 0; k < b.N; k++ {
+				err := traverse.Parallel.Each(n, func(i int) error {
+					return nil
+				})
+				if err != nil {
+					b.Error(err)
+				}
+			}
 		})
-		if err != nil {
-			b.Error(err)
-		}
 	}
 }
 
-func benchmarkDo(n int, b *testing.B) {
-	arr := make([]int, n)
+//go:noinline
+func fn(i int) error {
+	return nil
+}
+
+func BenchmarkInvoke(b *testing.B) {
 	for k := 0; k < b.N; k++ {
-		err := traverse.Each(n, func(i int) error {
-			arr[i]++
-			return nil
-		})
-		if err != nil {
-			b.Error(err)
-		}
+		_ = fn(k)
 	}
-}
-
-func BenchmarkDo1000(b *testing.B) {
-	benchmarkDo(1000, b)
-}
-
-func BenchmarkDo10000(b *testing.B) {
-	benchmarkDo(10000, b)
 }
