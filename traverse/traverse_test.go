@@ -47,6 +47,56 @@ func TestTraverse(t *testing.T) {
 	}
 }
 
+func TestTraverseLarge(t *testing.T) {
+	tests := []struct {
+		N     int
+		Limit int
+	}{
+		{
+			N:     1,
+			Limit: 1,
+		},
+		{
+			N:     10,
+			Limit: 2,
+		},
+		{
+			N:     9999999,
+			Limit: 5,
+		},
+		{
+			N:     10000001,
+			Limit: 5,
+		},
+	}
+	for testId, test := range tests {
+		data := make([]int32, test.N)
+		traverse.Limit(test.Limit).Each(test.N, func(i int) error {
+			atomic.AddInt32(&data[i], 1)
+			return nil
+		})
+		for i, d := range data {
+			if d != 1 {
+				t.Errorf("Test %d - Each. element %d is %d.  Expected 1", testId, i, d)
+				break
+			}
+		}
+		data = make([]int32, test.N)
+		traverse.Limit(test.Limit).Range(test.N, func(i, j int) error {
+			for k := i; k < j; k++ {
+				atomic.AddInt32(&data[k], 1)
+			}
+			return nil
+		})
+		for i, d := range data {
+			if d != 1 {
+				t.Errorf("Test %d - Range. element %d is %d.  Expected 1", testId, i, d)
+				break
+			}
+		}
+	}
+}
+
 func TestRange(t *testing.T) {
 	const N = 5000
 	var (
@@ -144,7 +194,7 @@ func (r *testReporter) update(queued, running, done int32) {
 func TestReportingSingleJob(t *testing.T) {
 	reporter := new(testReporter)
 
-	tr := traverse.T{Reporter: reporter}
+	tr := traverse.T{Reporter: reporter, Limit: 1}
 	tr.Each(5, func(i int) error { return nil })
 
 	expectedStatuses := []testStatus{
