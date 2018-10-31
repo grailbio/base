@@ -51,6 +51,13 @@ func (w *Writer) WriteUint32(ui uint32) {
 	w.line = append(w.line, '\t')
 }
 
+// WriteInt64 converts the given int64 to a string, and appends that and a
+// tab to the current line.
+func (w *Writer) WriteInt64(i int64) {
+	w.line = strconv.AppendInt(w.line, i, 10)
+	w.line = append(w.line, '\t')
+}
+
 // WriteFloat64 converts the given float64 to a string with the given
 // strconv.AppendFloat parameters, and appends that and a tab to the current
 // line.

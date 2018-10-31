@@ -20,10 +20,11 @@ func TestTSVWriter(t *testing.T) {
 	tw.WriteByte('3')
 	tw.WriteBytes([]byte{'f', 'i', 'e', 'l', 'd', '4'})
 	tw.WriteFloat64(1.2345, 'G', 6)
+	tw.WriteInt64(123456)
 	tw.EndLine()
 	tw.Flush()
 	got := buf.String()
-	want := "field1\t2\tfield3\tfield4\t1.2345\n"
+	want := "field1\t2\tfield3\tfield4\t1.2345\t123456\n"
 	if got != want {
 		t.Errorf("tsvwriter test failed: got: %s, want %s", got, want)
 	}
