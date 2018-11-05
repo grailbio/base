@@ -33,6 +33,54 @@ func TestBackoff(t *testing.T) {
 	}
 }
 
+func TestBackoffWithFullJitter(t *testing.T) {
+	policy := Jitter(Backoff(time.Second, 10*time.Second, 2), 1.0)
+	checkWithin := func(t *testing.T, wantMin, wantMax, got time.Duration) {
+		if got < wantMin || got > wantMax {
+			t.Errorf("got %v, want within (%v, %v)", got, wantMin, wantMax)
+		}
+	}
+	expect := []time.Duration{
+		time.Second,
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		10 * time.Second,
+		10 * time.Second,
+	}
+	for retries, wait := range expect {
+		keepgoing, dur := policy.Retry(retries)
+		if !keepgoing {
+			t.Fatal("!keepgoing")
+		}
+		checkWithin(t, 0, wait, dur)
+	}
+}
+
+func TestBackoffWithEqualJitter(t *testing.T) {
+	policy := Jitter(Backoff(time.Second, 10*time.Second, 2), 0.5)
+	checkWithin := func(t *testing.T, wantMin, wantMax, got time.Duration) {
+		if got < wantMin || got > wantMax {
+			t.Errorf("got %v, want within (%v, %v)", got, wantMin, wantMax)
+		}
+	}
+	expect := []time.Duration{
+		time.Second,
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+		10 * time.Second,
+		10 * time.Second,
+	}
+	for retries, wait := range expect {
+		keepgoing, dur := policy.Retry(retries)
+		if !keepgoing {
+			t.Fatal("!keepgoing")
+		}
+		checkWithin(t, wait/2, wait, dur)
+	}
+}
+
 func TestWaitCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	policy := Backoff(time.Hour, time.Hour, 1)

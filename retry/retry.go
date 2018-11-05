@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"time"
 
 	"github.com/grailbio/base/errors"
@@ -49,7 +50,7 @@ type backoff struct {
 	initial, max time.Duration
 }
 
-// Backoff returns a Policy that nitially waits for the amount of
+// Backoff returns a Policy that initially waits for the amount of
 // time specified by parameter initial; on each try this value is
 // multiplied by the provided factor, up to the max duration.
 func Backoff(initial, max time.Duration, factor float64) Policy {
@@ -66,6 +67,30 @@ func (b *backoff) Retry(retries int) (bool, time.Duration) {
 		wait = b.max
 	}
 	return true, wait
+}
+
+type jitter struct {
+	policy Policy
+	// frac is the fraction of the wait time to "jitter".
+	// Eg: if frac is 0.2, the policy will retain 80% of the wait time
+	// and jitter the remaining 20%
+	frac float64
+}
+
+// Jitter returns a policy that jitters 'frac' fraction of the wait times
+// returned  by the provided policy.  For example, setting frac to 1.0 and 0.5
+// will implement "full jitter" and "equal jitter" approaches respectively.
+// These approaches are describer here:
+//
+func Jitter(policy Policy, frac float64) Policy {
+	return &jitter{policy, frac}
+}
+
+func (b *jitter) Retry(retries int) (bool, time.Duration) {
+	ok, wait := b.policy.Retry(retries)
+	prop := time.Duration(b.frac * float64(wait))
+	wait = wait - prop + time.Duration(rand.Int63n(prop.Nanoseconds()))
+	return ok, wait
 }
 
 type maxtries struct {
