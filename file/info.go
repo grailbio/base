@@ -16,5 +16,4 @@ type Info interface {
 	ModTime() time.Time
 
 	// TODO: add attributes, in form map[string]interface{}.
-
 }
