@@ -85,31 +85,40 @@ func adjust(limit int, increase bool) int {
 	return int(float32(limit) * change)
 }
 
-type controller struct {
-	retry.Policy
-	max, used int
-	mu        sync.Mutex
-	cond      *ctxsync.Cond
+func min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }
 
-func newController(limit int, retryPolicy retry.Policy) *controller {
-	c := &controller{Policy: retryPolicy, max: limit, used: 0}
+type controller struct {
+	retry.Policy
+	max, used, limit int
+	mu               sync.Mutex
+	cond             *ctxsync.Cond
+}
+
+func newController(start, limit int, retryPolicy retry.Policy) *controller {
+	c := &controller{Policy: retryPolicy, max: start, used: 0, limit: limit}
 	c.cond = ctxsync.NewCond(&c.mu)
 	return c
 }
 
-// Controller returns a Policy which limits concurrency to given limit.
+// Controller returns a Policy which starts with a concurrency limit of 'start'
+// and can grow upto a maximum of 'limit' as long as errors aren't observed.
 // A controller is not fair: tokens are not granted in FIFO order;
 // rather, waiters are picked randomly to be granted new tokens.
-func Controller(limit int) Policy {
-	return ControllerWithRetry(limit, nil)
+func Controller(start, limit int) Policy {
+	return ControllerWithRetry(start, limit, nil)
 }
 
-// ControllerWithRetry returns a RetryPolicy which limits concurrency to given limit.
+// ControllerWithRetry returns a RetryPolicy which starts with a concurrency
+// limit of 'start' and can grow upto a maximum of 'limit' if no errors are seen.
 // A controller is not fair: tokens are not granted in FIFO order;
 // rather, waiters are picked randomly to be granted new tokens.
-func ControllerWithRetry(limit int, retryPolicy retry.Policy) RetryPolicy {
-	return newController(limit, retryPolicy)
+func ControllerWithRetry(start, limit int, retryPolicy retry.Policy) RetryPolicy {
+	return newController(start, limit, retryPolicy)
 }
 
 // Acquire acquires a number of tokens from the admission controller.
@@ -119,7 +128,7 @@ func (c *controller) Acquire(ctx context.Context, need int) error {
 	defer c.mu.Unlock()
 	for {
 		// TODO(swami): should allow an increase only when the last release was ok
-		lim := adjust(c.max, true)
+		lim := min(adjust(c.max, true), c.limit)
 		have := lim - c.used
 		if need <= have || (need > lim && c.used == 0) {
 			c.used += need
@@ -138,7 +147,7 @@ func (c *controller) Release(tokens int, ok bool) {
 	defer c.mu.Unlock()
 	if ok {
 		if c.used > c.max {
-			c.max = c.used
+			c.max = min(c.used, c.limit)
 		}
 	} else {
 		c.max = adjust(c.max, false)

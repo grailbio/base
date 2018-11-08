@@ -29,7 +29,7 @@ func checkState(t *testing.T, c *controller, max, used int) {
 }
 
 func TestController(t *testing.T) {
-	c := newController(10, nil)
+	c := newController(10, 15, nil)
 	// use up 5.
 	if err := c.Acquire(context.Background(), 5); err != nil {
 		t.Fatal(err)
@@ -50,9 +50,20 @@ func TestController(t *testing.T) {
 	c.Release(6, true)
 	checkState(t, c, 9, 0)
 	// max is still 9, but since none are used, should accommodate larger request.
-	if err := c.Acquire(context.Background(), 12); err != nil {
+	if err := c.Acquire(context.Background(), 18); err != nil {
 		t.Fatal(err)
 	}
+	checkState(t, c, 9, 18)
+	c.Release(17, true)
+	checkState(t, c, 15, 1)
+	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond)
+	// 1 still in use and max is 15, so shouldn't accommodate larger request.
+	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 18); got != want {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	checkState(t, c, 15, 1)
+	c.Release(1, true)
+	checkState(t, c, 15, 0)
 }
 
 func TestControllerConcurrently(t *testing.T) {
@@ -61,7 +72,7 @@ func TestControllerConcurrently(t *testing.T) {
 		T = 100
 	)
 	var pending int32
-	c := Controller(100)
+	c := Controller(100, 1000)
 	var begin sync.WaitGroup
 	begin.Add(N)
 	err := traverse.Each(N, func(i int) error {
@@ -84,7 +95,7 @@ func TestControllerConcurrently(t *testing.T) {
 
 func TestDo(t *testing.T) {
 	someErr := errors.New("some other error")
-	c := newController(100, nil)
+	c := newController(100, 10000, nil)
 	// Must satisfy even 150 tokens since none are used.
 	if err := Do(context.Background(), c, 150, func() error { return nil }); err != nil {
 		t.Fatal(err)
@@ -119,7 +130,7 @@ func TestRetry(t *testing.T) {
 	const (
 		N = 1000
 	)
-	c := ControllerWithRetry(200, retry.MaxTries(retry.Backoff(100*time.Millisecond, time.Minute, 1.5), 5))
+	c := ControllerWithRetry(200, 1000, retry.MaxTries(retry.Backoff(100*time.Millisecond, time.Minute, 1.5), 5))
 	var begin sync.WaitGroup
 	begin.Add(N)
 	err := traverse.Each(N, func(i int) error {
