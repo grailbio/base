@@ -7,6 +7,7 @@ package admit
 import (
 	"context"
 	"errors"
+	"expvar"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -28,6 +29,24 @@ func checkState(t *testing.T, c *controller, max, used int) {
 	}
 }
 
+func checkVars(t *testing.T, max, used string) {
+	t.Helper()
+	if want, got := max, admitMax.Get("test").String(); got != want {
+		t.Errorf("admitMax got %s, want %s", got, want)
+	}
+	if want, got := used, admitUsed.Get("test").String(); got != want {
+		t.Errorf("admitUsed got %s, want %s", got, want)
+	}
+}
+
+func getKeys(m *expvar.Map) map[string]bool {
+	keys := make(map[string]bool)
+	m.Do(func(kv expvar.KeyValue) {
+		keys[kv.Key] = true
+	})
+	return keys
+}
+
 func TestController(t *testing.T) {
 	c := newController(10, 15, nil)
 	// use up 5.
@@ -47,23 +66,35 @@ func TestController(t *testing.T) {
 	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 4); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
+	if want, got := 0, getKeys(admitMax); len(got) != want {
+		t.Fatalf("admitMax got %v, want len %d", got, want)
+	}
+	if want, got := 0, getKeys(admitUsed); len(got) != want {
+		t.Fatalf("admitMax got %v, want len %d", got, want)
+	}
+	EnableVarExport(c, "test")
 	c.Release(6, true)
 	checkState(t, c, 9, 0)
+	checkVars(t, "9", "0")
 	// max is still 9, but since none are used, should accommodate larger request.
 	if err := c.Acquire(context.Background(), 18); err != nil {
 		t.Fatal(err)
 	}
 	checkState(t, c, 9, 18)
+	checkVars(t, "9", "18")
 	c.Release(17, true)
 	checkState(t, c, 15, 1)
+	checkVars(t, "15", "1")
 	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond)
 	// 1 still in use and max is 15, so shouldn't accommodate larger request.
 	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 18); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	checkState(t, c, 15, 1)
+	checkVars(t, "15", "1")
 	c.Release(1, true)
 	checkState(t, c, 15, 0)
+	checkVars(t, "15", "0")
 }
 
 func TestControllerConcurrently(t *testing.T) {

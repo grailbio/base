@@ -8,11 +8,17 @@ package admit
 import (
 	"context"
 	"errors"
+	"expvar"
 	"sync"
 
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/retry"
 	"github.com/grailbio/base/sync/ctxsync"
+)
+
+var (
+	admitMax  = expvar.NewMap("admit.max")
+	admitUsed = expvar.NewMap("admit.used")
 )
 
 // Policy implements the low level details of an admission control
@@ -97,6 +103,7 @@ type controller struct {
 	max, used, limit int
 	mu               sync.Mutex
 	cond             *ctxsync.Cond
+	maxVar, usedVar  expvar.Int
 }
 
 func newController(start, limit int, retryPolicy retry.Policy) *controller {
@@ -121,6 +128,15 @@ func ControllerWithRetry(start, limit int, retryPolicy retry.Policy) RetryPolicy
 	return newController(start, limit, retryPolicy)
 }
 
+// EnableVarExport enables the export of relevant vars useful for debugging/monitoring.
+func EnableVarExport(policy Policy, name string) {
+	switch c := policy.(type) {
+	case *controller:
+		admitMax.Set(name, &c.maxVar)
+		admitUsed.Set(name, &c.usedVar)
+	}
+}
+
 // Acquire acquires a number of tokens from the admission controller.
 // Returns on success, or if the context was canceled.
 func (c *controller) Acquire(ctx context.Context, need int) error {
@@ -132,6 +148,7 @@ func (c *controller) Acquire(ctx context.Context, need int) error {
 		have := lim - c.used
 		if need <= have || (need > lim && c.used == 0) {
 			c.used += need
+			c.usedVar.Set(int64(c.used))
 			return nil
 		}
 		if err := c.cond.Wait(ctx); err != nil {
@@ -153,5 +170,8 @@ func (c *controller) Release(tokens int, ok bool) {
 		c.max = adjust(c.max, false)
 	}
 	c.used -= tokens
+
+	c.maxVar.Set(int64(c.max))
+	c.usedVar.Set(int64(c.used))
 	c.cond.Broadcast()
 }
