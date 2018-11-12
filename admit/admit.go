@@ -49,7 +49,11 @@ var ErrOverCapacity = errors.New("over capacity")
 // Do calls the provided function after being admitted by the admission controller.
 // If the function returns ErrOverCapacity, it is then reported as a capacity request
 // to the underlying policy.
+// If policy is nil, then this will simply call the do() func.
 func Do(ctx context.Context, policy Policy, tokens int, do func() error) error {
+	if policy == nil {
+		return do()
+	}
 	if err := policy.Acquire(ctx, tokens); err != nil {
 		return err
 	}
@@ -62,7 +66,11 @@ func Do(ctx context.Context, policy Policy, tokens int, do func() error) error {
 }
 
 // Retry calls the provided function with the combined retry and admission policies.
+// If policy is nil, then this will simply call the do() func.
 func Retry(ctx context.Context, policy RetryPolicy, tokens int, do func() error) error {
+	if policy == nil {
+		return do()
+	}
 	var err error
 	for retries := 0; ; retries++ {
 		err = Do(ctx, policy, tokens, do)
