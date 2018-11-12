@@ -7,6 +7,8 @@ package file
 import (
 	"context"
 	"io"
+
+	"github.com/grailbio/base/errors"
 )
 
 // File defines operations on a file. Implementations must be thread safe.
@@ -57,6 +59,30 @@ type Closer interface {
 	// Close tries to clean up the resource. Implementations can define whether
 	// Close can be called more than once and whether callers should retry on error.
 	Close(context.Context) error
+}
+
+// CloseAndReport returns a defer-able helper that calls f.Close and reports errors, if any,
+// to *err. Pass your function's named return error. Example usage:
+//
+//   func processFile(filename string) (_ int, err error) {
+//     ctx := context.Background()
+//     f, err := file.Open(ctx, filename)
+//     if err != nil { ... }
+//     defer file.CloseAndReport(ctx, f, &err)
+//     ...
+//   }
+//
+// If your function returns with an error, any f.Close error will be chained appropriately.
+func CloseAndReport(ctx context.Context, f Closer, err *error) {
+	err2 := f.Close(ctx)
+	if err2 == nil {
+		return
+	}
+	if *err != nil {
+		*err = errors.E(*err, "second error in Close: %v", err2)
+		return
+	}
+	*err = err2
 }
 
 // NewErrorReader returns a new io.ReadSeeker object that returns "err" on any

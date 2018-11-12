@@ -6,6 +6,7 @@ package file_test
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,31 +21,38 @@ import (
 	"github.com/grailbio/testutil/assert"
 )
 
-type testImpl struct{}
-
-func (impl *testImpl) String() string { return "test" }
-func (impl *testImpl) Open(ctx context.Context, path string) (file.File, error) {
-	return nil, fmt.Errorf("%v: open", path)
+type errFile struct {
+	err error
 }
 
-func (impl *testImpl) Create(ctx context.Context, path string) (file.File, error) {
-	return nil, fmt.Errorf("%v: create", path)
+func (f *errFile) String() string { return f.err.Error() }
+
+func (f *errFile) Open(ctx context.Context, path string) (file.File, error) {
+	return nil, f.err
 }
 
-func (impl *testImpl) List(ctx context.Context, dir string, recursive bool) file.Lister {
+func (f *errFile) Create(ctx context.Context, path string) (file.File, error) {
+	return nil, f.err
+}
+
+func (f *errFile) List(ctx context.Context, dir string, recursive bool) file.Lister {
 	return nil
 }
 
-func (impl *testImpl) Stat(ctx context.Context, path string) (file.Info, error) {
-	return nil, fmt.Errorf("%v: stat", path)
+func (f *errFile) Stat(ctx context.Context, path string) (file.Info, error) {
+	return nil, f.err
 }
 
-func (impl *testImpl) Remove(ctx context.Context, path string) error {
-	return fmt.Errorf("%v: remove", path)
+func (f *errFile) Remove(ctx context.Context, path string) error {
+	return f.err
+}
+
+func (f *errFile) Close(ctx context.Context) error {
+	return f.err
 }
 
 func TestRegistration(t *testing.T) {
-	testImpl := &testImpl{}
+	testImpl := &errFile{errors.New("test")}
 	file.RegisterImplementation("foo", func() file.Implementation { return testImpl })
 	assert.True(t, file.FindImplementation("") != nil)
 	assert.True(t, file.FindImplementation("foo") == testImpl)
@@ -102,6 +110,44 @@ func TestRemoveAllRecursive(t *testing.T) {
 	assert.NoError(t, file.RemoveAll(ctx, dir))
 	assert.Regexp(t, doReadFile(ctx, file.Join(dir, "file.txt")), "no such file")
 	assert.Regexp(t, doReadFile(ctx, file.Join(dir, "e/file.txt")), "no such file")
+}
+
+func TestCloseAndReport(t *testing.T) {
+	closeMsg := "close [seuozr]"
+	returnMsg := "return [mntbnb]"
+
+	// No return error, no close error.
+	gotErr := func() (err error) {
+		f := errFile{}
+		defer file.CloseAndReport(context.Background(), &f, &err)
+		return nil
+	}()
+	assert.NoError(t, gotErr)
+
+	// No return error, close error.
+	gotErr = func() (err error) {
+		f := errFile{errors.New(closeMsg)}
+		defer file.CloseAndReport(context.Background(), &f, &err)
+		return nil
+	}()
+	assert.EQ(t, gotErr.Error(), closeMsg)
+
+	// Return error, no close error.
+	gotErr = func() (err error) {
+		f := errFile{}
+		defer file.CloseAndReport(context.Background(), &f, &err)
+		return errors.New(returnMsg)
+	}()
+	assert.EQ(t, gotErr.Error(), returnMsg)
+
+	// Return error, close error.
+	gotErr = func() (err error) {
+		f := errFile{errors.New(closeMsg)}
+		defer file.CloseAndReport(context.Background(), &f, &err)
+		return errors.New(returnMsg)
+	}()
+	assert.NEQ(t, gotErr.Error(), returnMsg)
+	assert.NEQ(t, gotErr.Error(), closeMsg)
 }
 
 func ExampleParsePath() {
