@@ -35,14 +35,6 @@ func NewFlateTransform(level int) *FlateTransform {
 	return &FlateTransform{level: level}
 }
 
-// SetPassthrough sets the compressor/decommpressor into passthrough
-// mode whereby they are essentially disabled and do not transform the
-// data passed to them. SetPassThrough is generally used when
-// reading/writing metadata.
-func (f *FlateTransform) SetPassthrough(v bool) {
-	f.passthrough = v
-}
-
 // CompressTransform is intended for use Recordio.PackedWriterOpts.Transform.
 func (f *FlateTransform) CompressTransform(bufs [][]byte) ([]byte, error) {
 	if f.passthrough {

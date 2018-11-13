@@ -48,23 +48,6 @@ const (
 //  Note: padding is not included in the CRC.
 type chunkHeader [chunkHeaderSize]byte
 
-func (h *chunkHeader) Magic() (magic MagicBytes) {
-	copy(magic[:], h[:])
-	return
-}
-
-func (h *chunkHeader) Checksum() uint32 {
-	return binary.LittleEndian.Uint32(h[8:])
-}
-
-func (h *chunkHeader) Flag() chunkFlag {
-	return chunkFlag(binary.LittleEndian.Uint32(h[12:]))
-}
-
-func (h *chunkHeader) Size() uint32 {
-	return binary.LittleEndian.Uint32(h[16:])
-}
-
 func (h *chunkHeader) TotalChunks() int {
 	return int(binary.LittleEndian.Uint32(h[20:]))
 }

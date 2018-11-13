@@ -16,8 +16,6 @@ type TransformFunc func(scratch []byte, in [][]byte) (out []byte, err error)
 type FormatVersion int
 
 const (
-	// InvalidFormat is never used.
-	InvalidFormat FormatVersion = 0
 	// V1 is pre 2018-02 format
 	V1 FormatVersion = 1
 	// V2 is post 2018-02 format
@@ -33,9 +31,6 @@ var MaxReadRecordSize = internal.MaxReadRecordSize
 // function should store the result in scratch and return it as the first return
 // value. Else, it should allocate a new []byte and return it.
 type MarshalFunc func(scratch []byte, v interface{}) ([]byte, error)
-
-// UnmarshalFunc is called to deserialize data.
-type UnmarshalFunc func(data []byte, v interface{}) error
 
 // MagicPacked is the chunk header for legacy and v2 data chunks. Not for
 // general use.

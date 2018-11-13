@@ -7,9 +7,9 @@ package recordioutil
 import (
 	"io"
 
-	"github.com/klauspost/compress/flate"
 	"github.com/grailbio/base/recordio"
 	"github.com/grailbio/base/recordio/deprecated"
+	"github.com/klauspost/compress/flate"
 )
 
 // WriterOpts represents the options accepted by NewWriter.
@@ -40,7 +40,6 @@ type writer struct {
 	deprecated.LegacyPackedWriter
 	compressor *FlateTransform
 	opts       WriterOpts
-	flushed    func() error
 }
 
 // NewWriter returns a recordio.LegacyPackedWriter that can optionally compress

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"sync"
 
 	"github.com/grailbio/base/errorreporter"
 	"github.com/grailbio/base/recordio/internal"
@@ -87,7 +86,6 @@ const (
 )
 
 type byteWriter struct {
-	sync.Mutex
 	wr     io.Writer
 	magic  internal.MagicBytes
 	hdr    [headerSize]byte
