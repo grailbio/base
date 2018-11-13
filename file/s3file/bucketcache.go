@@ -51,23 +51,11 @@ func (c *bucketCache) set(bucket, region string) {
 	c.mu.Unlock()
 }
 
-// Invalidate removes the cached bucket-to-region mapping.
-func (c *bucketCache) invalidate(bucket string) {
-	c.mu.Lock()
-	delete(c.cache, bucket)
-	c.mu.Unlock()
-}
-
 // GetBucketRegion finds the AWS region for the S3 bucket and inserts it in the
 // cache. "client" is used to issue the GetBucketRegion S3 call. It doesn't need
 // to be in the region for the "bucket".
 func GetBucketRegion(ctx context.Context, client s3iface.S3API, bucket string) (string, error) {
 	return bCache.find(ctx, client, bucket)
-}
-
-// InvalidateBucketRegion  removes the cache entry for bucket, if it exists.
-func InvalidateBucketRegion(bucket string) {
-	bCache.invalidate(bucket)
 }
 
 // SetBucketRegion sets a bucket's region, overriding region discovery and

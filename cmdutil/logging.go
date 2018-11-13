@@ -21,11 +21,3 @@ func Fatalf(format string, args ...interface{}) {
 	vlog.FlushLog()
 	os.Exit(1)
 }
-
-// Fatal mirrors log.Fatal with no prefix and no timestamp.
-func Fatal(args ...interface{}) {
-	m := fmt.Sprint(args...)
-	fmt.Fprint(os.Stderr, strings.TrimSuffix(m, "\n")+"\n")
-	vlog.FlushLog()
-	os.Exit(1)
-}

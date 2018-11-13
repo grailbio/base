@@ -53,8 +53,6 @@ const (
 	LocalAPI StorageAPI = iota
 	// S3API represents an Amazon S3 API.
 	S3API
-
-	s3Separator = '/'
 )
 
 // DetermineAPI determines the Storage API that stores the file
@@ -81,7 +79,7 @@ func DetermineType(filename string) FileType {
 func FileSuffix(typ FileType) string {
 	for k, v := range lookup {
 		if v == typ {
-			return string(k)
+			return k
 		}
 	}
 	return ""

@@ -1032,17 +1032,11 @@ func (l *s3Lister) Err() error {
 	return l.err
 }
 
-// Object returns the last object that was scanned.
-func (l *s3Lister) Object() s3Obj {
-	return l.object
-}
-
 // showDirs controls whether CommonPrefixes are returned during a scan
 func (l *s3Lister) showDirs() bool {
 	return !l.recurse
 }
 
-func (i *s3Info) Name() string       { return i.name }
 func (i *s3Info) Size() int64        { return i.size }
 func (i *s3Info) ModTime() time.Time { return i.modTime }
 
