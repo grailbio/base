@@ -24,9 +24,8 @@ type AESKey [16]byte
 
 // AES represents a passwd based key registry that uses AES encryption.
 type AES struct {
-	mu     sync.Mutex
-	keys   map[string]AESKey
-	passwd []byte
+	mu   sync.Mutex
+	keys map[string]AESKey
 }
 
 // NewKeyRegistry creates a new key registry.
@@ -37,7 +36,9 @@ func NewKeyRegistry() *AES {
 }
 
 func init() {
-	encryption.Register("passwd-aes", NewKeyRegistry())
+	if err := encryption.Register("passwd-aes", NewKeyRegistry()); err != nil {
+		panic(err)
+	}
 }
 
 // SetIDAndKey stores the specified ID and Key in the key registry.

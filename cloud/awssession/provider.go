@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/security/ticket"
 	"v.io/v23/context"
-	"v.io/x/lib/vlog"
 )
 
 // Provider implements the aws/credentials.Provider interface using a GRAIL
@@ -64,7 +64,6 @@ func (p *Provider) Retrieve() (credentials.Value, error) {
 func (p *Provider) retrieve() (credentials.Value, error) {
 	awsTicket, ok := p.Ticket.(ticket.TicketAwsTicket)
 	if !ok {
-		vlog.Info("%q: bad ticket type %T, want %T", p.TicketPath, p.Ticket, awsTicket)
 		return credentials.Value{}, fmt.Errorf("bad ticket type %T for %q, want %T", p.Ticket, p.TicketPath, awsTicket)
 	}
 
@@ -72,9 +71,8 @@ func (p *Provider) retrieve() (credentials.Value, error) {
 		var err error
 		p.Expiration, err = time.Parse(time.RFC3339, awsTicket.Value.AwsCredentials.Expiration)
 		if err != nil {
-			vlog.Infof("%q: error parsing %q: %s", p.TicketPath, awsTicket.Value.AwsCredentials.Expiration, err)
 			p.Ticket = nil
-			return credentials.Value{}, err
+			return credentials.Value{}, errors.E(err, fmt.Sprintf("%q: error parsing %q", p.TicketPath, awsTicket.Value.AwsCredentials.Expiration))
 		}
 	}
 	return credentials.Value{
@@ -88,16 +86,13 @@ func (p *Provider) retrieve() (credentials.Value, error) {
 // IsExpired implements the github.com/aws/aws-sdk-go/aws/credentials.Provider
 // interface.
 func (p *Provider) IsExpired() bool {
-	r := false
+	var r bool
 	if p.Ticket == nil {
 		r = true
 	} else if p.Expiration.IsZero() {
 		r = false
 	} else {
 		r = time.Now().Add(p.ExpiryWindow).After(p.Expiration)
-	}
-	if r {
-		vlog.VI(1).Infof("%q is expired", p.TicketPath)
 	}
 	return r
 }

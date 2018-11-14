@@ -56,14 +56,6 @@ func (i Interval) Intersect(j Interval) Interval {
 	return Interval{minKey, maxKey}
 }
 
-// Width computes i.Limit-i.Start, or zero if i.Empty().
-func (i Interval) Width() Key {
-	if i.Empty() {
-		return 0
-	}
-	return i.Limit - i.Start
-}
-
 // Empty checks if the interval is empty.
 func (i Interval) Empty() bool { return i.Start >= i.Limit }
 

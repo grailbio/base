@@ -24,7 +24,6 @@ import (
 )
 
 const maxSize = 64 // To support SHA-512
-const defaultSize = 32
 
 // Define digestHash constants to be used during (de)serialization of Digests.
 // crypto.Hash values are not guaranteed to be stable over releases.
@@ -54,6 +53,8 @@ const (
 	BLAKE2b_256                       // crypto.BLAKE2b_256
 	BLAKE2b_384                       // crypto.BLAKE2b_384
 	BLAKE2b_512                       // crypto.BLAKE2b_512
+
+	zeroString = "<zero>"
 )
 
 var (
@@ -166,7 +167,7 @@ func (d *Digest) GobDecode(p []byte) error {
 // Parse parses a string representation of Digest, as defined by
 // Digest.String().
 func Parse(s string) (Digest, error) {
-	if s == "" || s == "<zero>" {
+	if s == "" || s == zeroString {
 		return Digest{}, nil
 	}
 	parts := strings.Split(s, ":")
@@ -313,7 +314,7 @@ func (d Digest) Expands(e Digest) bool {
 // name, followed by ":", followed by its hexadecimal value.
 func (d Digest) String() string {
 	if d.IsZero() {
-		return "<zero>"
+		return zeroString
 	}
 	return fmt.Sprintf("%s:%s", name[d.h], d.Hex())
 }
@@ -322,7 +323,7 @@ func (d Digest) String() string {
 // the digest name and its first n bytes.
 func (d Digest) ShortString(n int) string {
 	if d.IsZero() {
-		return "<zero>"
+		return zeroString
 	}
 	return fmt.Sprintf("%s:%s", name[d.h], d.HexN(n))
 }
@@ -364,7 +365,7 @@ func (d Digester) New(b []byte) Digest {
 // that the hash name may be omitted--it is then instead assumed to
 // be the hash function associated with the Digester.
 func (d Digester) Parse(s string) (Digest, error) {
-	if s == "" || s == "<zero>" {
+	if s == "" || s == zeroString {
 		return Digest{h: crypto.Hash(d)}, nil
 	}
 	parts := strings.Split(s, ":")
@@ -403,6 +404,11 @@ func (d Digester) FromString(s string) Digest {
 func (d Digester) FromDigests(digests ...Digest) Digest {
 	w := crypto.Hash(d).New()
 	for _, d := range digests {
+		// TODO(saito,pknudsgaaard,schandra)
+		//
+		// grail.com/pipeline/release/internal/reference passes an empty Digest and
+		// fails here. We need to be more principled about the values passed here,
+		// so we intentionally drop errors here.
 		WriteDigest(w, d)
 	}
 	return New(crypto.Hash(d), w.Sum(nil))
@@ -518,10 +524,3 @@ func (d *Digester) UnmarshalJSON(b []byte) error {
 	*d = Digester(val)
 	return nil
 }
-
-// Slice defines sort.Interface on a slice of digests.
-type Slice []Digest
-
-func (s Slice) Len() int           { return len(s) }
-func (s Slice) Less(i, j int) bool { return s[i].Less(s[j]) }
-func (s Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }

@@ -41,19 +41,7 @@ var (
 
 	blesserEc2Flag       string
 	identityDocumentFlag string
-
-	pipelineBlessings        security.Blessings
-	pipelineStagingBlessings security.Blessings
 )
-
-func init() {
-	// We disable this flag because it's initialized with the value of the
-	// V23_CREDENTIALS environmental variable and that directory might be empty.
-	flag.Set("v23.credentials", "")
-
-	// Prevent the v23agentd from running.
-	os.Setenv(ref.EnvCredentialsNoAgent, "1")
-}
 
 func newCmdRoot() *cmdline.Command {
 	cmd := &cmdline.Command{
@@ -143,6 +131,15 @@ func dump(ctx *v23context.T, env *cmdline.Env) {
 }
 
 func main() {
+	// We disable this flag because it's initialized with the value of the
+	// V23_CREDENTIALS environmental variable and that directory might be empty.
+	if err := flag.Set("v23.credentials", ""); err != nil {
+		panic(err)
+	}
+	// Prevent the v23agentd from running.
+	if err := os.Setenv(ref.EnvCredentialsNoAgent, "1"); err != nil {
+		panic(err)
+	}
 	cmdline.HideGlobalFlagsExcept()
 	cmdline.Main(newCmdRoot())
 }
