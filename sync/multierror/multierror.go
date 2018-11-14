@@ -39,9 +39,9 @@ func (me *MultiError) add(err error) {
 }
 
 // Add captures an error from a go-routine and adds it to the MultiError.
-func (me *MultiError) Add(err error) *MultiError {
+func (me *MultiError) Add(err error) {
 	if err == nil || me == nil {
-		return me
+		return
 	}
 
 	me.mu.Lock()
@@ -54,12 +54,10 @@ func (me *MultiError) Add(err error) *MultiError {
 			me.add(e)
 		}
 		me.count += multi.count
-		return me
+		return
 	}
 
 	me.add(err)
-
-	return me
 }
 
 // Error returns a string version of the MultiError. This implements the error

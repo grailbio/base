@@ -6,6 +6,12 @@ import (
 )
 
 func TestMultiError(t *testing.T) {
+	me2a := NewMultiError(2)
+	me2a.Add(errors.New("a"))
+	me1ab := NewMultiError(1)
+	me1ab.Add(errors.New("a"))
+	me1ab.Add(errors.New("b"))
+
 	for _, test := range []struct {
 		errs     []error
 		expected error
@@ -24,12 +30,12 @@ func TestMultiError(t *testing.T) {
 2] [plus 1 other error(s)]`),
 		},
 		{
-			[]error{errors.New("1"), NewMultiError(2).Add(errors.New("a"))},
+			[]error{errors.New("1"), me2a},
 			errors.New(`[1
 a]`),
 		},
 		{
-			[]error{errors.New("1"), NewMultiError(1).Add(errors.New("a")).Add(errors.New("b"))},
+			[]error{errors.New("1"), me1ab},
 			errors.New(`[1
 a] [plus 1 other error(s)]`),
 		},
