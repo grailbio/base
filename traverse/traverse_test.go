@@ -261,7 +261,7 @@ func TestReportingManyJobs(t *testing.T) {
 			}
 
 			if status.queued > previousStatus.queued {
-				t.Errorf("Can't have queued jobs count increase - status: %v, prevoius status: %v",
+				t.Errorf("Can't have queued jobs count increase - status: %v, previous status: %v",
 					status, previousStatus)
 			}
 

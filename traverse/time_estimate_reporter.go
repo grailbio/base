@@ -97,7 +97,7 @@ func (r *timeEstimateReporter) printStatus() {
 		time.Since(r.startTime).Round(time.Second), timeLeftStr)
 }
 
-func (r timeEstimateReporter) buildTimeLeftStr(currentTime time.Time) string {
+func (r *timeEstimateReporter) buildTimeLeftStr(currentTime time.Time) string {
 	// If some jobs have finished, use their running time for the estimate.  Otherwise, use the duration
 	// that the first job has been running.
 	var modifier string
@@ -127,7 +127,7 @@ func (r timeEstimateReporter) buildTimeLeftStr(currentTime time.Time) string {
 		avgRunTime.Round(time.Second))
 }
 
-func (r timeEstimateReporter) sumCurrentRunningTimes(currentTime time.Time) time.Duration {
+func (r *timeEstimateReporter) sumCurrentRunningTimes(currentTime time.Time) time.Duration {
 	var totalRunningTime time.Duration
 	for _, startTime := range r.startTimes {
 		totalRunningTime += currentTime.Sub(startTime)
