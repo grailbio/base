@@ -90,14 +90,14 @@ func expandGlobs(ctx context.Context, patterns []string) []string {
 	return matches
 }
 
-func runCat(_ *cmdline.Env, args []string) error {
+func runCat(_ *cmdline.Env, args []string) (err error) {
 	ctx := vcontext.Background()
 	for _, arg := range expandGlobs(ctx, args) {
 		f, err := file.Open(ctx, arg)
 		if err != nil {
 			return errors.Wrapf(err, "cat %v", arg)
 		}
-		defer f.Close(ctx) // nolint: errcheck
+		defer file.CloseAndReport(ctx, f, &err)
 		if _, err = io.Copy(os.Stdout, f.Reader(ctx)); err != nil {
 			return errors.Wrapf(err, "cat %v (io.Copy)", arg)
 		}
