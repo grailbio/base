@@ -99,6 +99,9 @@ func (me *MultiError) ErrorOrNil() error {
 		return nil
 	}
 
+	me.mu.Lock()
+	defer me.mu.Unlock()
+
 	if len(me.errs) == 0 {
 		return nil
 	}
