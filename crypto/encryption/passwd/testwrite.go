@@ -37,6 +37,9 @@ func main() {
 		panic(err)
 	}
 	id, err := reg.GenerateKey()
+	if err != nil {
+		panic(err)
+	}
 	kd := encryption.KeyDescriptor{Registry: "passwd-aes",
 		ID: id,
 	}

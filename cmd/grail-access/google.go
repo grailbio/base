@@ -16,6 +16,8 @@ import (
 	"sync"
 
 	"github.com/grailbio/base/cmdutil"
+	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/security/identity"
 	"github.com/grailbio/base/web/webutil"
 	"golang.org/x/oauth2"
@@ -32,7 +34,10 @@ func runGoogle(ctx *v23context.T, env *cmdline.Env, args []string) error {
 	// TODO(razvanm): do we need to kill the v23agentd?
 
 	// Best-effort cleanup.
-	os.RemoveAll(credentialsDirFlag)
+	err := os.RemoveAll(credentialsDirFlag)
+	if !os.IsNotExist(err) {
+		vlog.Infof("remove %s: %v", credentialsDirFlag, err)
+	}
 
 	principal, err := libsecurity.CreatePersistentPrincipal(credentialsDirFlag, nil)
 	if err != nil {
@@ -56,10 +61,17 @@ func runGoogle(ctx *v23context.T, env *cmdline.Env, args []string) error {
 	}
 
 	principal = v23.GetPrincipal(ctx)
-	principal.BlessingStore().SetDefault(blessings)
-	principal.BlessingStore().Set(blessings, "...")
+	if err := principal.BlessingStore().SetDefault(blessings); err != nil {
+		vlog.Error(err)
+		return errors.E(err, "set default blessings")
+	}
+	_, err = principal.BlessingStore().Set(blessings, "...")
+	if err != nil {
+		vlog.Error(err)
+		return errors.E(err, "set blessings")
+	}
 	if err := security.AddToRoots(principal, blessings); err != nil {
-		return fmt.Errorf("failed to add blessings to recognized roots: %v", err)
+		return errors.E(err, "failed to add blessings to recognized roots: %v")
 	}
 
 	dump(ctx, env)
@@ -101,7 +113,11 @@ func fetchIDToken() (string, error) {
 	vlog.Infof("listening: %v\n", ln.Addr().String())
 	port := strings.Split(ln.Addr().String(), ":")[1]
 	server := http.Server{Addr: "localhost:"}
-	go server.Serve(ln.(*net.TCPListener))
+	go func() {
+		if err := server.Serve(ln.(*net.TCPListener)); err != nil {
+			log.Fatalf("cannot serve %v: %v", ln, err)
+		}
+	}()
 
 	config := &oauth2.Config{
 		ClientID:     clientID,
@@ -120,7 +136,9 @@ func fetchIDToken() (string, error) {
 		fmt.Printf("Opening %q...\n", url)
 		if webutil.StartBrowser(url) {
 			wg.Wait()
-			server.Shutdown(context.Background())
+			if err = server.Shutdown(context.Background()); err != nil {
+				vlog.Errorf("shutting down: %v", err)
+			}
 		} else {
 			browserFlag = false
 		}
@@ -131,12 +149,14 @@ func fetchIDToken() (string, error) {
 		url := config.AuthCodeURL(state, oauth2.AccessTypeOnline)
 		fmt.Printf("The attempt to automatically open a browser failed. Please open the following link in your browse:\n\n\t%s\n\n", url)
 		fmt.Printf("Paste the received code and then press enter: ")
-		fmt.Scanf("%s", &code)
+		if _, err := fmt.Scanf("%s", &code); err != nil {
+			return "", err
+		}
 		fmt.Println("")
 	}
 
 	vlog.VI(1).Infof("code: %+v", code)
-	token, err := config.Exchange(oauth2.NoContext, code)
+	token, err := config.Exchange(context.Background(), code)
 	if err != nil {
 		return "", err
 	}

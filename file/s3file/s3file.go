@@ -731,7 +731,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		ctx:         ctx,
 		bucket:      bucket,
 		key:         key,
-		bufPool:     sync.Pool{New: func() interface{} { return make([]byte, uploadPartSize) }},
+		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, uploadPartSize); return &slice }},
 		nextPartNum: 1,
 	}
 	policy := newRetryPolicy(clients)
@@ -775,7 +775,7 @@ func (u *s3Uploader) uploadThread() {
 		if policy.shouldRetry(u.ctx, err) {
 			goto retry
 		}
-		u.bufPool.Put(chunk.buf)
+		u.bufPool.Put(&chunk.buf)
 		if err != nil {
 			u.err.Set(errors.E(err, fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
 			continue
@@ -795,7 +795,7 @@ func (u *s3Uploader) write(buf []byte) {
 	}
 	for len(buf) > 0 {
 		if len(u.curBuf) == 0 {
-			u.curBuf = u.bufPool.Get().([]byte)
+			u.curBuf = *u.bufPool.Get().(*[]byte)
 			u.curBuf = u.curBuf[:0]
 		}
 		if cap(u.curBuf) != uploadPartSize {

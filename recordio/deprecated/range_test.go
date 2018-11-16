@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grailbio/testutil"
 	"github.com/grailbio/base/recordio/deprecated"
+	"github.com/grailbio/testutil"
 )
 
 func TestBounded(t *testing.T) {
-	fail := func(err error) {
+	failIf := func(err error) {
 		if err != nil {
 			t.Fatalf("%v: %v", testutil.Caller(1), err)
 		}
@@ -39,7 +39,7 @@ func TestBounded(t *testing.T) {
 		}
 	}
 
-	raw := make([]byte, 255, 255)
+	raw := make([]byte, 255)
 	for i := 0; i < 255; i++ {
 		raw[i] = byte(i)
 	}
@@ -47,12 +47,12 @@ func TestBounded(t *testing.T) {
 	rs := bytes.NewReader(raw)
 
 	// Negative offset will fail.
-	br, err := deprecated.NewRangeReader(rs, -1, 5)
+	_, err := deprecated.NewRangeReader(rs, -1, 5)
 	expectError(err, "negative position")
 
 	// Seeking past the end of the file is the same as seeking to the end.
-	br, err = deprecated.NewRangeReader(rs, 512, 5)
-	fail(err)
+	br, err := deprecated.NewRangeReader(rs, 512, 5)
+	failIf(err)
 
 	buf := make([]byte, 3)
 	n, err := br.Read(buf)
@@ -60,10 +60,10 @@ func TestBounded(t *testing.T) {
 	expectLen(n, 0)
 
 	br, err = deprecated.NewRangeReader(rs, 48, 5)
-	fail(err)
+	failIf(err)
 
 	n, err = br.Read(buf)
-	fail(err)
+	failIf(err)
 	expectLen(n, 3)
 	expectBuf(buf, '0', '1', '2')
 
@@ -74,7 +74,7 @@ func TestBounded(t *testing.T) {
 	expectBuf(buf[:n], '3', '4')
 
 	p, err := br.Seek(0, io.SeekStart)
-	fail(err)
+	failIf(err)
 	if got, want := p, int64(0); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -84,6 +84,7 @@ func TestBounded(t *testing.T) {
 	expectBuf(buf[:n], '0', '1', '2', '3', '4')
 
 	_, err = br.Seek(2, io.SeekStart)
+	failIf(err)
 	n, err = br.Read(buf)
 	expectError(err, "EOF")
 	if got, want := buf[:n], []byte{'2', '3', '4'}; !bytes.Equal(got, want) {
@@ -91,33 +92,34 @@ func TestBounded(t *testing.T) {
 	}
 
 	_, err = br.Seek(-2, io.SeekEnd)
+	failIf(err)
 	n, err = br.Read(buf)
 	expectError(err, "EOF")
 	expectBuf(buf[:n], '3', '4')
 	_, err = br.Seek(1, io.SeekStart)
-	fail(err)
+	failIf(err)
 	_, err = br.Seek(1, io.SeekCurrent)
-	fail(err)
+	failIf(err)
 	n, err = br.Read(buf[:2])
-	fail(err)
+	failIf(err)
 	expectBuf(buf[:n], '2', '3')
 
 	_, err = br.Seek(100, io.SeekCurrent)
-	fail(err)
+	failIf(err)
 	n, err = br.Read(buf[:2])
 	expectError(err, "EOF")
 	if got, want := n, 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	_, err = br.Seek(-1, io.SeekEnd)
-	fail(err)
+	failIf(err)
 	n, err = br.Read(buf[:1])
 	expectError(err, "EOF")
 	expectBuf(buf[:n], '4')
 
 	// Seeking past the end of the stream is the same as seeking to the end.
 	_, err = br.Seek(100, io.SeekEnd)
-	fail(err)
+	failIf(err)
 	n, err = br.Read(buf[:1])
 	expectError(err, "EOF")
 	expectLen(n, 0)

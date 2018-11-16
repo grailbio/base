@@ -120,9 +120,9 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 
 	fmt.Printf("Public key: %s\n", principal.PublicKey())
 	fmt.Println("---------------- BlessingStore ----------------")
-	fmt.Printf(principal.BlessingStore().DebugString())
+	fmt.Print(principal.BlessingStore().DebugString())
 	fmt.Println("---------------- BlessingRoots ----------------")
-	fmt.Printf(principal.Roots().DebugString())
+	fmt.Print(principal.Roots().DebugString())
 
 	return nil
 }

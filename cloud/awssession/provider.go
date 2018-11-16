@@ -89,9 +89,7 @@ func (p *Provider) IsExpired() bool {
 	var r bool
 	if p.Ticket == nil {
 		r = true
-	} else if p.Expiration.IsZero() {
-		r = false
-	} else {
+	} else if !p.Expiration.IsZero() {
 		r = time.Now().Add(p.ExpiryWindow).After(p.Expiration)
 	}
 	return r

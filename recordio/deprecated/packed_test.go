@@ -25,7 +25,7 @@ import (
 
 func TestPackedWriteRead(t *testing.T) {
 	sl := func(s ...string) [][]byte {
-		bs := [][]byte{}
+		var bs [][]byte
 		for _, t := range s {
 			bs = append(bs, []byte(t))
 		}
@@ -265,6 +265,7 @@ func TestPackedErrors(t *testing.T) {
 		wropts := deprecated.LegacyPackedWriterOpts{MaxItems: 1, MaxBytes: 10}
 		wr := deprecated.NewLegacyPackedWriter(ew, wropts)
 		_, err := wr.Write([]byte("hello"))
+		expect.NoError(t, err, "first write succeeds")
 		_, err = wr.Write([]byte("hello"))
 		expect.HasSubstr(t, err, msg)
 	}
@@ -318,7 +319,7 @@ func TestPackedErrors(t *testing.T) {
 
 func readAll(t *testing.T, buf *bytes.Buffer, opts deprecated.LegacyPackedScannerOpts) []string {
 	sc := deprecated.NewLegacyPackedScanner(buf, opts)
-	read := []string{}
+	var read []string
 	for sc.Scan() {
 		read = append(read, string(sc.Bytes()))
 	}

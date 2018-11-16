@@ -32,7 +32,7 @@ const (
 var extensionRE = regexp.MustCompile(strings.Join([]string{extensionPrefix, fmt.Sprintf("([a-z0-9]+%s)", emailSuffix)}, security.ChainSeparator))
 
 func (c *claims) checkClaims() error {
-	if c.EmailVerified != true {
+	if !c.EmailVerified {
 		return fmt.Errorf("ID token doesn't have a verified email")
 	}
 

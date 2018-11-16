@@ -19,7 +19,7 @@ import (
 	"github.com/grailbio/base/recordio/recordioiov"
 )
 
-var tmpBufPool = sync.Pool{New: func() interface{} { return []byte{} }}
+var tmpBufPool = sync.Pool{New: func() interface{} { return &[]byte{} }}
 
 // As of 2018-03, zstd.{Compress,Decompress} is much faster than
 // io.{Reader,Writer}-based implementations, even though the former incurs extra
@@ -34,7 +34,10 @@ var tmpBufPool = sync.Pool{New: func() interface{} { return []byte{} }}
 // BenchmarkRead-56    	      50	  23871334 ns/op
 func flattenIov(in [][]byte) []byte {
 	totalBytes := recordioiov.TotalBytes(in)
-	tmp := recordioiov.Slice(tmpBufPool.Get().([]byte), totalBytes)
+
+	// storing only pointers in sync.Pool per https://github.com/golang/go/issues/16323
+	slicePtr := tmpBufPool.Get().(*[]byte)
+	tmp := recordioiov.Slice(*slicePtr, totalBytes)
 	n := 0
 	for _, inbuf := range in {
 		copy(tmp[n:], inbuf)
@@ -52,7 +55,7 @@ func zstdCompress(level int, scratch []byte, in [][]byte) ([]byte, error) {
 	}
 	tmp := flattenIov(in)
 	d, err := zstd.CompressLevel(scratch, tmp, level)
-	tmpBufPool.Put(tmp)
+	tmpBufPool.Put(&tmp)
 	return d, err
 }
 
@@ -65,7 +68,7 @@ func zstdUncompress(scratch []byte, in [][]byte) ([]byte, error) {
 	}
 	tmp := flattenIov(in)
 	d, err := zstd.Decompress(scratch, tmp)
-	tmpBufPool.Put(tmp)
+	tmpBufPool.Put(&tmp)
 	return d, err
 }
 

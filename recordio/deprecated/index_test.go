@@ -269,6 +269,7 @@ func TestIndexErrors(t *testing.T) {
 	}
 	pwr := deprecated.NewLegacyPackedWriter(buf, pwropts)
 	_, err = pwr.Marshal(&TestPB{"x"})
+	expect.NoError(t, err, "Marshall packed writer")
 	err = pwr.Flush()
 	expect.HasSubstr(t, err, "packed record index oops")
 
@@ -279,6 +280,7 @@ func TestIndexErrors(t *testing.T) {
 	}
 	pwr = deprecated.NewLegacyPackedWriter(buf, pwropts)
 	_, err = pwr.Marshal(&TestPB{"x"})
+	expect.NoError(t, err, "Marshall packed writer first try")
 	_, err = pwr.Marshal(&TestPB{"y"})
 	expect.HasSubstr(t, err, "packed item index oops")
 
@@ -288,6 +290,7 @@ func TestIndexErrors(t *testing.T) {
 	}
 	pwr = deprecated.NewLegacyPackedWriter(buf, pwropts)
 	_, err = pwr.Marshal(&TestPB{"z"})
+	expect.NoError(t, err, "Marshall packed writer")
 	err = pwr.Flush()
 	expect.HasSubstr(t, err, "packed flush oops")
 }

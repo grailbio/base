@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-
 	"sync/atomic"
 )
 
@@ -61,6 +60,7 @@ func (r *readerWrap) Read(p []byte) (int, error) {
 	}
 
 	q := p[:n]
+	// todo(ysiato, schandra, pknudsgaard) this looks like another intentional no-error-check like digest.go:407
 	r.digestWriter.Write(q)
 
 	return n, r.err

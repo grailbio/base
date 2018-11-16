@@ -38,12 +38,15 @@ func TestDigest(t *testing.T) {
 		}
 		dd, err := dig.Parse(tc.out)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("parse failed: %v", err)
 		}
 		if got, want := dd, d; got != want {
 			t.Fatalf("got %v want %v", got, want)
 		}
 		dd, err = dig.Parse(tc.out[len(tc.name)-1:])
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
 		if got, want := dd, d; got != want {
 			t.Fatalf("got %v want %v", got, want)
 		}

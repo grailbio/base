@@ -91,6 +91,9 @@ func TestPacker(t *testing.T) {
 	expectStats(t, 1, wr, 0, 0)
 	// Pack is not idempotent.
 	hdr, _, _, err := wr.Pack()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got, want := len(hdr), 0; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

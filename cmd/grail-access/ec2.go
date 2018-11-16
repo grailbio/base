@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/security/identity"
 	"v.io/v23"
 	"v.io/v23/context"
@@ -26,7 +27,11 @@ func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
 	// TODO(razvanm): do we need to kill the v23agentd?
 
 	// Best-effort cleanup.
-	os.RemoveAll(credentialsDirFlag)
+	err := os.RemoveAll(credentialsDirFlag)
+	if !os.IsNotExist(err) {
+		vlog.Error(err)
+		// continue as best effort...
+	}
 
 	principal, err := libsecurity.CreatePersistentPrincipal(credentialsDirFlag, nil)
 	if err != nil {
@@ -44,7 +49,7 @@ func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
 	doc := identityDocumentFlag
 	if doc == "" {
 		client := http.Client{
-			Timeout: time.Duration(5 * time.Second),
+			Timeout: 5 * time.Second,
 		}
 		resp, err := client.Get(instanceIdentityURL)
 		if err != nil {
@@ -52,7 +57,9 @@ func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
 			return fmt.Errorf("unable to talk to the EC2 metadata server (not an EC2 instance?)")
 		}
 		b, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
+		if err2 := resp.Body.Close(); err2 != nil {
+			vlog.Info("warning: ", err2)
+		}
 		vlog.VI(1).Infof("pkcs7: %d bytes", len(b))
 		if err != nil {
 			return err
@@ -66,11 +73,18 @@ func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	principal = v23.GetPrincipal(ctx)
-	principal.BlessingStore().SetDefault(blessings)
-	principal.BlessingStore().Set(blessings, security.AllPrincipals)
+	if err := principal.BlessingStore().SetDefault(blessings); err != nil {
+		vlog.Error(err)
+		return errors.E(err, "set default blessings")
+	}
+	_, err = principal.BlessingStore().Set(blessings, security.AllPrincipals)
+	if err != nil {
+		vlog.Error(err)
+		return errors.E(err, "set blessings")
+	}
 	if err := security.AddToRoots(principal, blessings); err != nil {
 		vlog.Error(err)
-		return fmt.Errorf("failed to add blessings to recognized roots: %v", err)
+		return errors.E(err, "add blessings to recognized root")
 	}
 
 	dump(ctx, env)

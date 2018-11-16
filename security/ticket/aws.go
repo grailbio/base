@@ -74,7 +74,7 @@ func (b *AwsAssumeRoleBuilder) genAwsCredentials(ctx *TicketContext) (AwsCredent
 
 	sessionName := strings.Replace(ctx.remoteBlessings.String(), ":", ",", -1)
 	// AWS session names must be 64 characters or less
-	if runes := []rune(sessionName); len(runes) > 64 { 
+	if runes := []rune(sessionName); len(runes) > 64 {
 		// Some risk with simple truncation - two large IAM role's would overlap
 		// for example. This is mitigated by the format which includes instance id
 		// as the last component. Ability to determine exactly which instance made
@@ -166,7 +166,7 @@ func (b *AwsSessionBuilder) genAwsSession(ctx *TicketContext) (AwsCredentials, e
 
 	sessionName := strings.Replace(ctx.remoteBlessings.String(), ":", ",", -1)
 	// AWS session names must be 64 characters or less
-	if runes := []rune(sessionName); len(runes) > 64 { 
+	if runes := []rune(sessionName); len(runes) > 64 {
 		// Some risk with simple truncation - two large IAM role's would overlap
 		// for example. This is mitigated by the format which includes instance id
 		// as the last component. Ability to determine exactly which instance made
@@ -224,6 +224,10 @@ func newEcrTicket(awsCredentials AwsCredentials) EcrTicket {
 			awsCredentials.SecretAccessKey,
 			awsCredentials.SessionToken),
 	})
+	if err != nil {
+		vlog.Error(err)
+		return empty
+	}
 	r, err := ecr.New(s).GetAuthorizationToken(&ecr.GetAuthorizationTokenInput{})
 	if err != nil {
 		vlog.Error(err)
