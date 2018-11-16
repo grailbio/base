@@ -22,6 +22,11 @@ const (
 	EiB
 )
 
+// Bytes returns the size as an integer byte count.
+func (s Size) Bytes() int64 {
+	return int64(s)
+}
+
 // Count returns the number of us in s.
 func (s Size) Count(u Size) float64 {
 	return float64(s) / float64(u)

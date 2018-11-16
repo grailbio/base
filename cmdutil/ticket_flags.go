@@ -24,6 +24,7 @@ import (
 type TicketFlags struct {
 	set          bool
 	dedup        map[string]bool
+	fs           *flag.FlagSet
 	rcFlag       string
 	Tickets      []string
 	TicketRCFile string

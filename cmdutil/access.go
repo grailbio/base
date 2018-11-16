@@ -6,6 +6,7 @@ package cmdutil
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -14,6 +15,18 @@ import (
 	"v.io/v23/context"
 	"v.io/x/lib/cmdline"
 )
+
+// WriteBlessings will write the current principal and blessings to the
+// supplied io.Writer.
+func WriteBlessings(ctx *context.T, out io.Writer) {
+	// Mimic the principal dump output.
+	principal := v23.GetPrincipal(ctx)
+	fmt.Fprintf(out, "Public key: %s\n", principal.PublicKey())
+	fmt.Fprintf(out, "---------------- BlessingStore ----------------")
+	fmt.Fprintf(out, principal.BlessingStore().DebugString())
+	fmt.Fprintf(out, "---------------- BlessingRoots ----------------")
+	fmt.Fprintf(out, principal.Roots().DebugString())
+}
 
 // CheckAccess checkes that the current process has credentials that
 // will be valid for at least another 30 minutes. It is intended to

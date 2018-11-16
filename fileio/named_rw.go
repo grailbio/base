@@ -41,3 +41,10 @@ type ReadWriteCloser interface {
 	io.ReadWriteCloser
 	Name() string
 }
+
+// Closer is io.Closer with an additional Name method that returns
+// the name of the original source of the closer.
+type Closer interface {
+	io.Closer
+	Name() string
+}
