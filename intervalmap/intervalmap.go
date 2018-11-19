@@ -6,7 +6,7 @@
 // (http://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf).
 package intervalmap
 
-//go:generate ../gtl/generate.py --prefix=searcher -DELEM=*searcher --package=intervalmap --output=search_freepool.go ../gtl/randomized_freepool.go.tpl
+//go:generate ../gtl/generate_randomized_freepool.py --output=search_freepool --prefix=searcher -DELEM=*searcher --package=intervalmap
 
 import (
 	"math"
@@ -365,14 +365,3 @@ func (n *node) get(interval Interval, ents *[]*Entry, s *searcher) {
 	n.left.get(interval, ents, s)
 	n.right.get(interval, ents, s)
 }
-
-//go:linkname runtime_procPin sync.runtime_procPin
-//go:nosplit
-func runtime_procPin() int // nolint: golint
-
-//go:linkname runtime_procUnpin sync.runtime_procUnpin
-//go:nosplit
-func runtime_procUnpin() // nolint: golint
-
-//go:linkname fastrand sync.fastrand
-func fastrand() uint32

@@ -1,5 +1,5 @@
-//go:generate ../generate.py --prefix=Ints -DELEM=[]int --package=tests --output=int_freepool.go ../randomized_freepool.go.tpl
-//go:generate ../generate.py --prefix=Strings -DELEM=[]string --package=tests --output=string_freepool.go ../randomized_freepool.go.tpl
+//go:generate ../generate_randomized_freepool.py --prefix=Ints -DELEM=[]int --package=tests --output=int_freepool
+//go:generate ../generate_randomized_freepool.py --prefix=Strings -DELEM=[]string --package=tests --output=string_freepool
 
 package tests
 

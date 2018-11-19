@@ -1,3 +1,5 @@
+// +build !race
+
 // ZZFreePool is thread-safe pool that uses power-of-two loadbalancing across
 // CPUs.
 
