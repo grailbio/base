@@ -9,15 +9,20 @@ import (
 	"sync"
 
 	"github.com/grailbio/base/grail"
+	_ "github.com/grailbio/v23/factories/grail" // Needed to initialize v23
 	"v.io/v23"
 	"v.io/v23/context"
-	_ "v.io/x/ref/runtime/factories/grail" // Needed to initialize v23
+	"v.io/x/ref/runtime/factories/library"
 )
 
 var (
 	once = sync.Once{}
 	ctx  *context.T
 )
+
+func init() {
+	library.AllowMultipleInitializations = true
+}
 
 // Background returns the singleton Vanadium context for v23. It initializes v23
 // on the first call.  GRAIL applications should always use this function to

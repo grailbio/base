@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // The following enables go generate to generate the doc.go file.
-//go:generate go run $GRAIL/go/src/vendor/v.io/x/lib/cmdline/testdata/gendoc.go "--build-cmd=go install" --copyright-notice= . -help
+//go:generate go run $GRAIL/go/src/vendor/v.io/x/lib/cmdline/gendoc/gendoc.go "--build-cmd=go install" --copyright-notice= . -help
 package main
 
 import (
@@ -20,6 +20,7 @@ import (
 	_ "github.com/grailbio/base/security/keycrypt/keychain"
 	_ "github.com/grailbio/base/security/keycrypt/kms"
 	"github.com/grailbio/base/security/ticket"
+	_ "github.com/grailbio/v23/factories/grail"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
 	admin "google.golang.org/api/admin/directory/v1"
@@ -34,7 +35,6 @@ import (
 	"v.io/x/ref/lib/security/securityflag"
 	"v.io/x/ref/lib/signals"
 	"v.io/x/ref/lib/v23cmd"
-	_ "v.io/x/ref/runtime/factories/grail"
 )
 
 var (
@@ -201,12 +201,12 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	// permissions are governed by the -v23.permissions.{file,literal} flags.
 	d.registry["blesser/google"] = entry{
 		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag)),
-		auth:    securityflag.NewAuthorizerOrDie(),
+		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}
 	if ec2BlesserRoleFlag != "" {
 		d.registry["blesser/ec2"] = entry{
 			service: identity.Ec2BlesserServer(newEc2Blesser(ctx, awsSession, ec2ExpirationIntervalFlag, ec2BlesserRoleFlag, ec2DynamoDBTableFlag)),
-			auth:    securityflag.NewAuthorizerOrDie(),
+			auth:    securityflag.NewAuthorizerOrDie(ctx),
 		}
 	}
 

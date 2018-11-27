@@ -3,20 +3,20 @@
 // license that can be found in the LICENSE file.
 
 // The following enables go generate to generate the doc.go file.
-//go:generate go run $GRAIL/go/src/vendor/v.io/x/lib/cmdline/testdata/gendoc.go "--build-cmd=go install" --copyright-notice= . -help
+//go:generate go run $GRAIL/go/src/vendor/v.io/x/lib/cmdline/gendoc/gendoc.go "--build-cmd=go install" --copyright-notice= . -help
 package main
 
 import (
 	"net/http"
 	"os"
 
-	"google.golang.org/api/groupssettings/v1"
-
 	"github.com/grailbio/base/cmd/grail-role-group/googleclient"
+
 	"github.com/grailbio/base/cmdutil"
 	_ "github.com/grailbio/base/cmdutil/interactive"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/admin/directory/v1"
+	"google.golang.org/api/groupssettings/v1"
 	"v.io/x/lib/cmdline"
 )
 

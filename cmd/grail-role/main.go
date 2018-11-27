@@ -1,5 +1,5 @@
 // The following enables go generate to generate the doc.go file.
-//go:generate go run $GRAIL/go/src/vendor/v.io/x/lib/cmdline/testdata/gendoc.go "--build-cmd=go install" --copyright-notice= . -help
+//go:generate go run $GRAIL/go/src/vendor/v.io/x/lib/cmdline/gendoc/gendoc.go "--build-cmd=go install" --copyright-notice= . -help
 package main
 
 import (
@@ -18,7 +18,6 @@ import (
 	"v.io/x/lib/vlog"
 	libsecurity "v.io/x/ref/lib/security"
 	"v.io/x/ref/lib/v23cmd"
-	_ "v.io/x/ref/runtime/factories/grail"
 )
 
 const blessingSuffix = "_role"
