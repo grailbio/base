@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/grailbio/base/cmdutil/interactive"
 	"github.com/grailbio/base/security/ticket"
+	_ "github.com/grailbio/v23/factories/grail" // Needed to initialize v23
 	"v.io/v23"
 	"v.io/v23/context"
 	"v.io/v23/security"
