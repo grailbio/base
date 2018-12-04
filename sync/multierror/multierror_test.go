@@ -46,7 +46,7 @@ a] [plus 1 other error(s)]`),
 			errs.Add(e)
 		}
 
-		got := errs.ErrorOrNil()
+		got := errs.Err()
 
 		if test.expected == nil && got == nil {
 			continue
@@ -57,7 +57,7 @@ a] [plus 1 other error(s)]`),
 		}
 
 		if test.expected.Error() != got.Error() {
-			t.Fatalf("error mismatch: %v vs %v", test.expected, got)
+			t.Fatalf("error mismatch: %q vs %q", test.expected, got)
 		}
 	}
 }

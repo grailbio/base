@@ -6,6 +6,34 @@ import (
 	"sync"
 )
 
+type multiError struct {
+	errs  []error
+	count int64
+}
+
+// Err returns an non-nil error representing all reported errors. Err
+// returns nil when no errors where reported.
+func (e *multiError) Error() string {
+	switch len(e.errs) {
+	case 0, 1:
+		panic("invalid multiError")
+	default:
+		var b strings.Builder
+		b.WriteString("[")
+		for i, err := range e.errs {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(err.Error())
+		}
+		b.WriteString("]")
+		if e.count > 0 {
+			fmt.Fprintf(&b, " [plus %d other error(s)]", e.count)
+		}
+		return b.String()
+	}
+}
+
 // MultiError is a mechanism for capturing errors from parallel
 // go-routines. Usage:
 //
@@ -19,9 +47,10 @@ import (
 // Will gather all errors returned in a MultiError, which in turn will
 // behave as a normal error.
 type MultiError struct {
+	mu sync.Mutex
+
 	errs  []error
 	count int64
-	mu    sync.Mutex
 }
 
 // NewMultiError creates a new MultiError struct.
@@ -91,18 +120,27 @@ func (me *MultiError) Error() string {
 	return fmt.Sprintf("[%s] [plus %d other error(s)]", errs, me.count)
 }
 
-// ErrorOrNil returns nil if no errors were captured, itself otherwise.
-func (me *MultiError) ErrorOrNil() error {
+// Err returns an non-nil error representing all reported errors. Err
+// returns nil when no errors where reported.
+func (me *MultiError) Err() error {
 	if me == nil {
 		return nil
 	}
-
 	me.mu.Lock()
 	defer me.mu.Unlock()
-
-	if len(me.errs) == 0 {
+	switch len(me.errs) {
+	case 0:
 		return nil
+	case 1:
+		return me.errs[0]
+	default:
+		err := &multiError{
+			errs:  make([]error, len(me.errs)),
+			count: me.count,
+		}
+		for i := range err.errs {
+			err.errs[i] = me.errs[i]
+		}
+		return err
 	}
-
-	return me
 }
