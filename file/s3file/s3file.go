@@ -286,7 +286,12 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 		reqCh:    make(chan request, 16),
 	}
 	go f.handleRequests()
-	return f, nil
+	// If we're opening the file for reading, make sure we return an
+	// early error if the file does not exist.
+	if mode != writeonly {
+		_, err = f.Stat(ctx)
+	}
+	return f, err
 }
 
 // Open opens a file for reading. The provided path should be of form
@@ -345,10 +350,10 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 				continue
 			}
 			if err != nil {
-				return response{err: errors.E(err, fmt.Sprintf("s3file.stat %s", path))}
+				return response{err: errors.E(annotate(err), fmt.Sprintf("s3file.stat %s", path))}
 			}
 			if *resp.ETag == "" {
-				return response{err: fmt.Errorf("s3file.stat %v: file does not exist", path)}
+				return response{err: errors.E(errors.NotExist, "s3file.stat", path)}
 			}
 			return response{info: &s3Info{
 				name:    filepath.Base(path),
@@ -370,7 +375,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		}
 		clients, err := impl.provider.Get(ctx, "DeleteObject", path)
 		if err != nil {
-			return response{err: errors.E(err, fmt.Sprintf("s3file.remove %s", path))}
+			return response{err: errors.E(err, "s3file.remove", path)}
 		}
 		policy := newRetryPolicy(clients)
 		for {
@@ -379,7 +384,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 				continue
 			}
 			if err != nil {
-				err = errors.E(err, fmt.Sprintf("s3file.remove %v", path))
+				err = errors.E(annotate(err), "s3file.remove", path)
 			}
 			return response{err: err}
 		}
@@ -471,7 +476,7 @@ func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
 
 func (f *s3File) handleStat(req request) {
 	if err := f.maybeFillInfo(req.ctx); err != nil {
-		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.stat %v", f.name))}
+		req.ch <- response{err: errors.E(annotate(err), "s3file.stat", f.name)}
 		return
 	}
 	if f.info == nil {
@@ -506,14 +511,14 @@ func (f *s3File) maybeFillInfo(ctx context.Context) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return annotate(err)
 		}
 		if output.Body == nil {
 			panic("GetObject with nil Body")
 		}
 		output.Body.Close() // nolint: errcheck
 		if *output.ETag == "" {
-			return fmt.Errorf("read %v: File does not exist", f.name)
+			return errors.E("read", f.name, errors.NotExist)
 		}
 		f.info = newInfo(f.name, output)
 		return nil
@@ -716,7 +721,7 @@ type s3Uploader struct {
 func newUploader(ctx context.Context, provider ClientProvider, opts Options, path, bucket, key string) (*s3Uploader, error) {
 	clients, err := provider.Get(ctx, "PutObject", path)
 	if err != nil {
-		return nil, errors.E(err, fmt.Sprintf("s3file.write %v", path))
+		return nil, errors.E(err, "s3file.write", path)
 	}
 	params := &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(bucket),
@@ -741,7 +746,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 			continue
 		}
 		if err != nil {
-			return nil, errors.E(err, fmt.Sprintf("s3file.CreateMultipartUploadWithContext %v", path))
+			return nil, errors.E(err, "s3file.CreateMultipartUploadWithContext", path)
 		}
 		u.client = policy.client()
 		u.uploadID = *resp.UploadId
@@ -777,7 +782,7 @@ func (u *s3Uploader) uploadThread() {
 		}
 		u.bufPool.Put(&chunk.buf)
 		if err != nil {
-			u.err.Set(errors.E(err, fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
+			u.err.Set(errors.E(annotate(err), fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
 			continue
 		}
 		partNum := chunk.partNum
@@ -827,7 +832,8 @@ func (u *s3Uploader) abort() error {
 		})
 		if !policy.shouldRetry(u.ctx, err) {
 			if err != nil {
-				err = errors.E(err, fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
+				err = errors.E(annotate(err),
+					fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
 			}
 			return err
 		}
@@ -856,7 +862,8 @@ func (u *s3Uploader) finish() error {
 				})
 				if !policy.shouldRetry(u.ctx, err) {
 					if err != nil {
-						err = errors.E(err, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
+						err = errors.E(annotate(err),
+							fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
 					}
 					u.err.Set(err)
 					break
@@ -877,7 +884,8 @@ func (u *s3Uploader) finish() error {
 				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params)
 				if !policy.shouldRetry(u.ctx, err) {
 					if err != nil {
-						err = errors.E(err, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
+						err = errors.E(annotate(err),
+							fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
 					}
 					u.err.Set(err)
 					break
@@ -979,7 +987,7 @@ func (l *s3Lister) Scan() bool {
 			continue
 		}
 		if err != nil {
-			l.err = errors.E(err, fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
+			l.err = errors.E(annotate(err), fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
 			return false
 		}
 		l.token = res.NextContinuationToken
@@ -1059,4 +1067,38 @@ func ParseURL(url string) (scheme, bucket, key string, err error) {
 		return scheme, parts[0], "", nil
 	}
 	return scheme, parts[0], parts[1], nil
+}
+
+// Annotate interprets err as an AWS request error and returns a
+// version of it annotated with severity and kind from the errors
+// package.
+func annotate(err error) error {
+	aerr, ok := err.(awserr.Error)
+	if !ok {
+		return err
+	}
+	if awsrequest.IsErrorThrottle(err) {
+		return errors.E(err, errors.Temporary, errors.Unavailable)
+	}
+	if awsrequest.IsErrorRetryable(err) {
+		return errors.E(err, errors.Temporary)
+	}
+	// The underlying error was an S3 error. Try to classify it.
+	// Best guess based on Amazon's descriptions:
+	switch aerr.Code() {
+	// Code NotFound is not documented, but it's what the API actually returns.
+	case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NoSuchVersion", "NotFound":
+		return errors.E(err, errors.NotExist)
+	case "AccessDenied":
+		return errors.E(err, errors.NotAllowed)
+	case "InvalidRequest", "InvalidArgument", "EntityTooSmall", "EntityTooLarge", "KeyTooLong", "MethodNotAllowed":
+		return errors.E(err, errors.Fatal)
+	case "ExpiredToken", "AccountProblem", "ServiceUnavailable", "TokenRefreshRequired", "OperationAborted":
+		return errors.E(err, errors.Unavailable)
+	case "PreconditionFailed":
+		return errors.E(err, errors.Precondition)
+	case "SlowDown":
+		return errors.E(errors.Temporary, errors.Unavailable)
+	}
+	return err
 }

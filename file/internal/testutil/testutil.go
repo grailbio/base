@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/testutil/assert"
 )
@@ -60,10 +61,11 @@ func doWriteFile(ctx context.Context, t *testing.T, impl file.Implementation, pa
 }
 
 func fileExists(ctx context.Context, impl file.Implementation, path string) bool {
-	if _, err := impl.Stat(ctx, path); err != nil {
-		return false
+	_, err := impl.Stat(ctx, path)
+	if err != nil && !errors.Is(errors.NotExist, err) {
+		panic(err)
 	}
-	return true
+	return err == nil
 }
 
 // TestEmpty creates an empty file and tests its operations.
@@ -91,6 +93,19 @@ func TestEmpty(
 	assert.EQ(t, int64(10), off)
 	assert.EQ(t, "", doReadAll(t, f.Reader(ctx)))
 	assert.NoError(t, f.Close(ctx))
+}
+
+// TestNotExist tests that the implementation behaves correctly
+// for paths that do not exist.
+func TestNotExist(
+	ctx context.Context,
+	t *testing.T,
+	impl file.Implementation,
+	path string) {
+	_, err := impl.Open(ctx, path)
+	assert.True(t, errors.Is(errors.NotExist, err))
+	_, err = impl.Stat(ctx, path)
+	assert.True(t, errors.Is(errors.NotExist, err))
 }
 
 // TestErrors tests handling of errors. "path" shouldn't exist.
@@ -347,7 +362,7 @@ func TestAll(ctx context.Context, t *testing.T, impl file.Implementation, dir st
 	iName := impl.String()
 
 	t.Run(iName+"_Empty", func(t *testing.T) { TestEmpty(ctx, t, impl, dir+"/empty.txt") })
-
+	t.Run(iName+"_NotExist", func(t *testing.T) { TestNotExist(ctx, t, impl, dir+"/notexist.txt") })
 	t.Run(iName+"_Errors", func(t *testing.T) { TestErrors(ctx, t, impl, dir+"/errors.txt") })
 	t.Run(iName+"_Reads", func(t *testing.T) { TestReads(ctx, t, impl, dir+"/reads.txt") })
 	t.Run(iName+"_Writes", func(t *testing.T) { TestWrites(ctx, t, impl, dir+"/writes") })

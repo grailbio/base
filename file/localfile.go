@@ -14,6 +14,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/log"
 )
 
@@ -56,6 +57,9 @@ func (impl *localImpl) String() string {
 func (impl *localImpl) Open(ctx context.Context, path string) (File, error) {
 	f, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = errors.E(err, errors.NotExist)
+		}
 		return nil, err
 	}
 	return &localFile{f: f, mode: readonly, path: path}, nil
@@ -188,6 +192,9 @@ func (*localImpl) Remove(ctx context.Context, path string) error {
 func (impl *localImpl) Stat(ctx context.Context, path string) (Info, error) {
 	info, err := os.Stat(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = errors.E(err, errors.NotExist)
+		}
 		return nil, err
 	}
 	if info.IsDir() {

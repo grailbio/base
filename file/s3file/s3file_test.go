@@ -344,6 +344,17 @@ func TestOverwriteWhileReading(t *testing.T) {
 	testOverwriteWhileReading(t, impl, "s3://b/test")
 }
 
+func TestNotExist(t *testing.T) {
+	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	ctx := context.Background()
+	// The s3test client fails tests for requests that attempt to
+	// access buckets other than the one specified, so we can
+	// test only missing keys here.
+	_, err := impl.Open(ctx, "b/notexist")
+	assert.True(t, errors.Is(errors.NotExist, err))
+}
+
 func TestOverwriteWhileReadingAWS(t *testing.T) {
 	if *s3BucketFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket to run the test.")

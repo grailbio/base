@@ -18,6 +18,9 @@ type Implementation interface {
 
 	// Open opens a file for reading. The pathname given to file.Open() is passed
 	// here unchanged. Thus, it contains the URL prefix such as "s3://".
+	//
+	// Open returns an error of kind errors.NotExist if there is
+	// no file at the provided path.
 	Open(ctx context.Context, path string) (File, error)
 
 	// Create opens a file for writing. If "path" already exists, the old contents
@@ -50,6 +53,9 @@ type Implementation interface {
 	// Stat returns the file metadata.  It returns nil if path is
 	// a directory. (There is no direct test for existence of a
 	// directory.)
+	//
+	// Stat returns an error of kind errors.NotExist if there is
+	// no file at the provided path.
 	Stat(ctx context.Context, path string) (Info, error)
 
 	// Remove removes the file. The path passed to file.Remove() is passed here
@@ -169,6 +175,9 @@ func findImpl(path string) (Implementation, error) {
 
 // Open opens the given file readonly.  It is a shortcut for calling
 // ParsePath(), then FindImplementation, then Implementation.Open.
+//
+// Open returns an error of kind errors.NotExist if the file at the
+// provided path does not exist.
 func Open(ctx context.Context, path string) (File, error) {
 	impl, err := findImpl(path)
 	if err != nil {
@@ -189,6 +198,9 @@ func Create(ctx context.Context, path string) (File, error) {
 
 // Stat returns the give file's metadata. Is a shortcut for calling ParsePath(),
 // then FindImplementation, then Implementation.Stat.
+//
+// Stat returns an error of kind errors.NotExist if the file at the
+// provided path does not exist.
 func Stat(ctx context.Context, path string) (Info, error) {
 	impl, err := findImpl(path)
 	if err != nil {
