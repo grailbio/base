@@ -21,7 +21,6 @@ import (
 	awsrequest "github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/grailbio/base/errorreporter"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/log"
@@ -712,7 +711,7 @@ type s3Uploader struct {
 
 	bufPool sync.Pool
 	reqCh   chan uploadChunk
-	err     errorreporter.T
+	err     errors.Once
 	sg      sync.WaitGroup
 	mu      sync.Mutex
 	parts   []*s3.CompletedPart

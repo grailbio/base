@@ -12,8 +12,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/grailbio/base/errorreporter"
-	"github.com/pkg/errors"
+	"github.com/grailbio/base/errors"
 )
 
 type chunkFlag uint32
@@ -65,7 +64,7 @@ func Seek(r io.ReadSeeker, off int64) error {
 		return err
 	}
 	if n != off {
-		return errors.Errorf("seek: got %v, expect %v", n, off)
+		return fmt.Errorf("seek: got %v, expect %v", n, off)
 	}
 	return nil
 }
@@ -82,7 +81,7 @@ func init() {
 type ChunkWriter struct {
 	nWritten int64
 	w        io.Writer
-	err      *errorreporter.T
+	err      *errors.Once
 	crc      hash.Hash32
 }
 
@@ -144,13 +143,13 @@ func (w *ChunkWriter) doWrite(data []byte) {
 	}
 	w.nWritten += int64(len(data))
 	if n != len(data) {
-		w.err.Set(errors.Errorf("Failed to write %d bytes (got %d)", len(data), n))
+		w.err.Set(fmt.Errorf("Failed to write %d bytes (got %d)", len(data), n))
 	}
 }
 
 // NewChunkWriter creates a new chunk writer. Any error is reported through
 // "err".
-func NewChunkWriter(w io.Writer, err *errorreporter.T) *ChunkWriter {
+func NewChunkWriter(w io.Writer, err *errors.Once) *ChunkWriter {
 	return &ChunkWriter{w: w, err: err, crc: crc32.New(IEEECRC)}
 }
 
@@ -158,7 +157,7 @@ func NewChunkWriter(w io.Writer, err *errorreporter.T) *ChunkWriter {
 // block. Thread compatible.
 type ChunkScanner struct {
 	r   io.ReadSeeker
-	err *errorreporter.T
+	err *errors.Once
 
 	fileSize int64
 	off      int64
@@ -173,7 +172,7 @@ type ChunkScanner struct {
 }
 
 // NewChunkScanner creates a new chunk scanner. Any error is reported through "err".
-func NewChunkScanner(r io.ReadSeeker, err *errorreporter.T) *ChunkScanner {
+func NewChunkScanner(r io.ReadSeeker, err *errors.Once) *ChunkScanner {
 	rx := &ChunkScanner{r: r, err: err}
 	// Compute the file size.
 	var e error
@@ -267,17 +266,17 @@ func (r *ChunkScanner) Scan() bool {
 			totalChunks = nchunks
 		}
 		if chunkMagic != r.magic {
-			r.err.Set(errors.Errorf("Magic number changed in the middle of a chunk sequence, got %v, expect %v",
+			r.err.Set(fmt.Errorf("Magic number changed in the middle of a chunk sequence, got %v, expect %v",
 				r.magic, chunkMagic))
 			return false
 		}
 		if len(r.chunks) != index {
-			r.err.Set(errors.Errorf("Chunk index mismatch, got %v, expect %v for magic %x",
+			r.err.Set(fmt.Errorf("Chunk index mismatch, got %v, expect %v for magic %x",
 				index, len(r.chunks), r.magic))
 			return false
 		}
 		if nchunks != totalChunks {
-			r.err.Set(errors.Errorf("Chunk nchunk mismatch, got %v, expect %v for magic %x",
+			r.err.Set(fmt.Errorf("Chunk nchunk mismatch, got %v, expect %v for magic %x",
 				nchunks, totalChunks, r.magic))
 			return false
 		}
@@ -327,14 +326,14 @@ func (r *ChunkScanner) readChunk() (MagicBytes, chunkFlag, int, int, []byte) {
 	totalChunks := int(binary.LittleEndian.Uint32(header[20:]))
 	index := int(binary.LittleEndian.Uint32(header[24:]))
 	if size > maxChunkPayloadSize {
-		r.err.Set(errors.Errorf("Invalid chunk size %d", size))
+		r.err.Set(fmt.Errorf("Invalid chunk size %d", size))
 		return MagicInvalid, chunkFlag(0), 0, 0, nil
 	}
 
 	chunkPayload := chunkBuf[chunkHeaderSize : chunkHeaderSize+size]
 	actualCsum := crc32.Checksum(chunkBuf[12:chunkHeaderSize+size], IEEECRC)
 	if expectedCsum != actualCsum {
-		r.err.Set(errors.Errorf("Chunk checksum mismatch, expect %d, got %d",
+		r.err.Set(fmt.Errorf("Chunk checksum mismatch, expect %d, got %d",
 			actualCsum, expectedCsum))
 	}
 	return magic, flag, totalChunks, index, chunkPayload
@@ -382,7 +381,7 @@ func (r *ChunkScanner) ReadLastBlock() (MagicBytes, [][]byte) {
 	}
 	magic, _, totalChunks, index, payload := r.readChunk()
 	if magic != MagicTrailer {
-		r.err.Set(errors.Errorf("Missing magic trailer; found %v", magic))
+		r.err.Set(fmt.Errorf("Missing magic trailer; found %v", magic))
 		return MagicInvalid, nil
 	}
 	if index == 0 && totalChunks == 1 {
@@ -396,7 +395,7 @@ func (r *ChunkScanner) ReadLastBlock() (MagicBytes, [][]byte) {
 		return MagicInvalid, nil
 	}
 	if !r.Scan() {
-		r.err.Set(errors.Errorf("Failed to read trailer"))
+		r.err.Set(fmt.Errorf("Failed to read trailer"))
 		return MagicInvalid, nil
 	}
 	return r.magic, r.chunks

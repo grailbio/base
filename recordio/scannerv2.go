@@ -10,9 +10,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/grailbio/base/errorreporter"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/recordio/internal"
-	"github.com/pkg/errors"
 )
 
 var scannerFreePool = sync.Pool{
@@ -70,7 +69,7 @@ func parseChunksToItems(rawItems *rawItemList, chunks [][]byte, transform Transf
 	block := rawItems.bytes
 	unItems, n := binary.Uvarint(block)
 	if n <= 0 {
-		return errors.Errorf("recordio: failed to read number of packed items: %v", n)
+		return fmt.Errorf("recordio: failed to read number of packed items: %v", n)
 	}
 	nItems := int(unItems)
 	pos := n
@@ -84,7 +83,7 @@ func parseChunksToItems(rawItems *rawItemList, chunks [][]byte, transform Transf
 	for i := 0; i < nItems; i++ {
 		size, n := binary.Uvarint(block[pos:])
 		if n <= 0 {
-			return errors.Errorf("recordio: likely corrupt data, failed to read size of packed item %v: %v", i, n)
+			return fmt.Errorf("recordio: likely corrupt data, failed to read size of packed item %v: %v", i, n)
 		}
 		total += int(size)
 		rawItems.cumSize[i] = total
@@ -92,7 +91,7 @@ func parseChunksToItems(rawItems *rawItemList, chunks [][]byte, transform Transf
 	}
 	rawItems.firstOff = pos
 	if total+pos != len(block) {
-		return errors.Errorf("recordio: corrupt block header, got block size %d, expected %d", len(block), total+pos)
+		return fmt.Errorf("recordio: corrupt block header, got block size %d, expected %d", len(block), total+pos)
 	}
 	return nil
 }
@@ -162,7 +161,7 @@ type Scanner interface {
 }
 
 type scannerv2 struct {
-	err         errorreporter.T
+	err         errors.Once
 	sc          *internal.ChunkScanner
 	opts        ScannerOpts
 	untransform TransformFunc
@@ -240,7 +239,7 @@ func newScanner(in io.ReadSeeker, start, limit, nshard int, opts ScannerOpts) Sc
 	if s == nil {
 		panic("newScannerV2")
 	}
-	s.err = errorreporter.T{Ignored: []error{io.EOF}}
+	s.err = errors.Once{Ignored: []error{io.EOF}}
 	s.opts = opts
 	s.untransform = nil
 	s.header = nil
@@ -260,12 +259,12 @@ func newScanner(in io.ReadSeeker, start, limit, nshard int, opts ScannerOpts) Sc
 
 func (s *scannerv2) readSpecialBlock(expectedMagic internal.MagicBytes, tr TransformFunc) []byte {
 	if !s.sc.Scan() {
-		s.err.Set(errors.Errorf("Failed to read block %v", expectedMagic))
+		s.err.Set(fmt.Errorf("Failed to read block %v", expectedMagic))
 		return nil
 	}
 	magic, chunks := s.sc.Block()
 	if magic != expectedMagic {
-		s.err.Set(errors.Errorf("Failed to read block, expect %v, got %v", expectedMagic, magic))
+		s.err.Set(fmt.Errorf("Failed to read block, expect %v, got %v", expectedMagic, magic))
 		return nil
 	}
 	rawItems := rawItemList{}
@@ -275,7 +274,7 @@ func (s *scannerv2) readSpecialBlock(expectedMagic internal.MagicBytes, tr Trans
 		return nil
 	}
 	if rawItems.len() != 1 {
-		s.err.Set(errors.Errorf("Wrong # of items in header block, %d", rawItems.len()))
+		s.err.Set(fmt.Errorf("Wrong # of items in header block, %d", rawItems.len()))
 		return nil
 	}
 	return rawItems.item(0)
@@ -295,7 +294,7 @@ func (s *scannerv2) readHeader() {
 		if h.Key == KeyTransformer {
 			str, ok := h.Value.(string)
 			if !ok {
-				s.err.Set(errors.Errorf("Expect string value for key %v, but found %v", h.Key, h.Value))
+				s.err.Set(fmt.Errorf("Expect string value for key %v, but found %v", h.Key, h.Value))
 				return
 			}
 			transformers = append(transformers, str)
@@ -326,7 +325,7 @@ func (s *scannerv2) Trailer() []byte {
 		return nil
 	}
 	if magic != internal.MagicTrailer {
-		s.err.Set(errors.Errorf("Did not found the trailer, instead found magic %v", magic))
+		s.err.Set(fmt.Errorf("Did not found the trailer, instead found magic %v", magic))
 		return nil
 	}
 	rawItems := rawItemList{}
@@ -336,7 +335,7 @@ func (s *scannerv2) Trailer() []byte {
 		return nil
 	}
 	if rawItems.len() != 1 {
-		s.err.Set(errors.Errorf("Expect exactly one trailer item, but found %d", rawItems.len()))
+		s.err.Set(fmt.Errorf("Expect exactly one trailer item, but found %d", rawItems.len()))
 		return nil
 	}
 	return rawItems.item(0)
@@ -349,14 +348,14 @@ func (s *scannerv2) Get() interface{} {
 func (s *scannerv2) Seek(loc ItemLocation) {
 	// TODO(saito) Avoid seeking the file if loc.Block points to the current block.
 	if s.err.Err() == io.EOF {
-		s.err = errorreporter.T{}
+		s.err = errors.Once{}
 	}
 	s.sc.Seek(int64(loc.Block))
 	if !s.scanNextBlock() {
 		return
 	}
 	if loc.Item >= s.rawItems.len() {
-		s.err.Set(errors.Errorf("Invalid location %+v, block has only %d items", loc, s.rawItems.len()))
+		s.err.Set(fmt.Errorf("Invalid location %+v, block has only %d items", loc, s.rawItems.len()))
 	}
 	s.nextItem = loc.Item
 }
@@ -384,7 +383,7 @@ func (s *scannerv2) scanNextBlock() bool {
 		// EOF
 		return false
 	}
-	s.err.Set(errors.Errorf("recordio: invalid magic number: %v", magic))
+	s.err.Set(fmt.Errorf("recordio: invalid magic number: %v", magic))
 	return false
 }
 
@@ -414,7 +413,7 @@ func (s *scannerv2) Err() error {
 
 func (s *scannerv2) Finish() error {
 	err := s.Err()
-	s.err = errorreporter.T{}
+	s.err = errors.Once{}
 	s.opts = ScannerOpts{}
 	s.sc = nil
 	s.untransform = nil

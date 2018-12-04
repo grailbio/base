@@ -5,18 +5,18 @@
 package recordio
 
 import (
+	"fmt"
 	"io"
 
-	"github.com/grailbio/base/errorreporter"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/recordio/deprecated"
 	"github.com/grailbio/base/recordio/internal"
-	"github.com/pkg/errors"
 )
 
 // legacyScanner is a ScannerV2 implementation that reads legacy recordio files,
 // either packed or unpacked.
 type legacyScannerAdapter struct {
-	err  errorreporter.T
+	err  errors.Once
 	in   io.ReadSeeker
 	sc   *deprecated.LegacyScannerImpl
 	opts ScannerOpts
@@ -67,7 +67,7 @@ func (s *legacyScannerAdapter) seekRaw(off int64) bool {
 func (s *legacyScannerAdapter) Seek(loc ItemLocation) {
 	// TODO(saito) Avoid seeking the file if loc.Block points to the current block.
 	if s.err.Err() == io.EOF {
-		s.err = errorreporter.T{}
+		s.err = errors.Once{}
 	}
 	if !s.seekRaw(int64(loc.Block)) {
 		return
@@ -76,7 +76,7 @@ func (s *legacyScannerAdapter) Seek(loc ItemLocation) {
 		return
 	}
 	if loc.Item >= len(s.buffered) {
-		s.err.Set(errors.Errorf("Invalid location %+v, block has only %d items", loc, len(s.buffered)))
+		s.err.Set(fmt.Errorf("Invalid location %+v, block has only %d items", loc, len(s.buffered)))
 	}
 	s.nextItem = loc.Item
 }
@@ -112,7 +112,7 @@ func (s *legacyScannerAdapter) scanNextBlock() bool {
 		s.nextItem = 0
 		return true
 	}
-	s.err.Set(errors.Errorf("recordio: invalid magic number: %v", magic))
+	s.err.Set(fmt.Errorf("recordio: invalid magic number: %v", magic))
 	return false
 }
 

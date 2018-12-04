@@ -10,7 +10,7 @@ import (
 	"hash/crc32"
 	"io"
 
-	"github.com/grailbio/base/errorreporter"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/recordio/internal"
 )
 
@@ -78,9 +78,9 @@ type LegacyWriter interface {
 }
 
 const (
-	sizeOffset    = internal.NumMagicBytes
-	crcOffset     = internal.NumMagicBytes + 8
-	dataOffset    = internal.NumMagicBytes + 8 + crc32.Size
+	sizeOffset = internal.NumMagicBytes
+	crcOffset  = internal.NumMagicBytes + 8
+	dataOffset = internal.NumMagicBytes + 8 + crc32.Size
 	// teaderSize is the size in bytes of the recordio header.
 	headerSize = dataOffset
 )
@@ -212,7 +212,7 @@ func isErr(err error) bool {
 type LegacyScannerImpl struct {
 	rd     io.Reader
 	record []byte
-	err    errorreporter.T
+	err    errors.Once
 	opts   LegacyScannerOpts
 	hdr    [headerSize]byte
 }
@@ -228,7 +228,7 @@ func NewLegacyScanner(rd io.Reader, opts LegacyScannerOpts) LegacyScanner {
 // Reset implements Scanner.Reset.
 func (s *LegacyScannerImpl) Reset(rd io.Reader) {
 	s.rd = rd
-	s.err = errorreporter.T{}
+	s.err = errors.Once{}
 }
 
 // Unmarshal implements Scanner.Unmarshal.

@@ -2,9 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// Package errorreporter is used to accumulate errors from
-// multiple threads.
-package errorreporter
+package errors
 
 import (
 	"sync"
@@ -12,12 +10,15 @@ import (
 	"unsafe"
 )
 
-// T accumulates errors across multiple threads.  Thread safe.
+// Once captures at most one error. Errors are safely set across
+// multiple goroutines.
+//
+// A zero Once is ready to use.
 //
 // Example:
-//  e := errorreporter.T{}
-//  e.Set(errors.New("test error 0"))
-type T struct {
+// 	var e errors.Once
+// 	e.Set(errors.New("test error 0"))
+type Once struct {
 	// Ignored is a list of errors that will be dropped in Set(). Ignored
 	// typically includes io.EOF.
 	Ignored []error
@@ -25,9 +26,9 @@ type T struct {
 	err     unsafe.Pointer // stores *error
 }
 
-// Err returns the first non-nil error passed to Set.  Calling Err is cheap
-// (~1ns).
-func (e *T) Err() error {
+// Err returns the first non-nil error passed to Set.  Calling Err is
+// cheap (~1ns).
+func (e *Once) Err() error {
 	p := atomic.LoadPointer(&e.err) // Acquire load
 	if p == nil {
 		return nil
@@ -35,9 +36,9 @@ func (e *T) Err() error {
 	return *(*error)(p)
 }
 
-// Set sets an error. If called multiple times, only the first error is
-// remembered.
-func (e *T) Set(err error) {
+// Set sets this instance's error to err. Only the first error
+// is set; subsequent calls are ignored.
+func (e *Once) Set(err error) {
 	if err != nil {
 		for _, ignored := range e.Ignored {
 			if err == ignored {

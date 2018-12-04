@@ -13,7 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/grailbio/base/errorreporter"
+	"github.com/grailbio/base/errors"
 )
 
 const cachelineSize = 64
@@ -71,7 +71,7 @@ func (t T) Each(n int, fn func(i int) error) error {
 
 func (t T) each(n int, fn func(i int) error) error {
 	var (
-		errors errorreporter.T
+		errors errors.Once
 		wg     sync.WaitGroup
 	)
 	wg.Add(n)
@@ -95,7 +95,7 @@ func (t T) each(n int, fn func(i int) error) error {
 
 func (t T) eachLimit(n int, fn func(i int) error) error {
 	var (
-		errors errorreporter.T
+		errors errors.Once
 		wg     sync.WaitGroup
 		next   = make([]struct {
 			N int64

@@ -10,7 +10,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/grailbio/base/errorreporter"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/recordio/internal"
 )
 
@@ -215,7 +215,7 @@ type writerv2 struct {
 	// opts.MaxFlushParallelism.
 	freeBlocks chan *writerv2Block
 	opts       WriterOpts
-	err        errorreporter.T
+	err        errors.Once
 	fq         flushQueue
 
 	mu           sync.Mutex
@@ -228,7 +228,7 @@ type writerv2 struct {
 type flushQueue struct {
 	freeBlocks chan *writerv2Block   // Copy of writerv2.freeBlocks.
 	opts       WriterOpts            // Copy of writerv2.opts.
-	err        *errorreporter.T      // Copy of writerv2.err.
+	err        *errors.Once          // Copy of writerv2.err.
 	wr         *internal.ChunkWriter // Raw chunk writer.
 
 	transform TransformFunc

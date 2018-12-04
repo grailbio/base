@@ -10,7 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/grailbio/base/errorreporter"
+	"github.com/grailbio/base/errors"
 )
 
 const (
@@ -138,7 +138,7 @@ func (e *headerEncoder) putKeyValue(key string, v interface{}) error {
 // Helper for decoding header data produced by headerEncoder.  Thread
 // compatible.
 type headerDecoder struct {
-	err  errorreporter.T
+	err  errors.Once
 	data []byte
 }
 
