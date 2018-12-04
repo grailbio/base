@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/grailbio/base/log"
 )
@@ -153,7 +154,8 @@ type Error struct {
 //
 //	- Kind: sets the Error's kind
 //	- Severity: set the Error's severity
-//	- string: sets the Error's message
+//	- string: sets the Error's message; multiple strings are
+//	  separated by a single space
 //	- *Error: copies the error and sets the error's cause
 //	- error: sets the Error's cause
 //
@@ -179,6 +181,7 @@ func E(args ...interface{}) error {
 		panic("no args")
 	}
 	e := new(Error)
+	var msg strings.Builder
 	for _, arg := range args {
 		switch arg := arg.(type) {
 		case Kind:
@@ -186,7 +189,10 @@ func E(args ...interface{}) error {
 		case Severity:
 			e.Severity = arg
 		case string:
-			e.Message = arg
+			if msg.Len() > 0 {
+				msg.WriteString(" ")
+			}
+			msg.WriteString(arg)
 		case *Error:
 			copy := *arg
 			if len(args) == 1 {
@@ -206,6 +212,7 @@ func E(args ...interface{}) error {
 			}
 		}
 	}
+	e.Message = msg.String()
 	if e.Err == nil {
 		return e
 	}

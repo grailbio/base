@@ -127,3 +127,17 @@ func TestGobEncodingFuzz(t *testing.T) {
 		}
 	}
 }
+
+func TestMessage(t *testing.T) {
+	for _, c := range []struct {
+		err     error
+		message string
+	}{
+		{errors.E("hello"), "hello"},
+		{errors.E("hello", "world"), "hello world"},
+	} {
+		if got, want := c.err.Error(), c.message; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+}
