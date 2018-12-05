@@ -17,7 +17,6 @@ import (
 
 	"github.com/grailbio/base/cmdutil"
 	"github.com/grailbio/base/errors"
-	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/security/identity"
 	"github.com/grailbio/base/web/webutil"
 	"golang.org/x/oauth2"
@@ -113,11 +112,7 @@ func fetchIDToken() (string, error) {
 	vlog.Infof("listening: %v\n", ln.Addr().String())
 	port := strings.Split(ln.Addr().String(), ":")[1]
 	server := http.Server{Addr: "localhost:"}
-	go func() {
-		if err := server.Serve(ln.(*net.TCPListener)); err != nil {
-			log.Fatalf("cannot serve %v: %v", ln, err)
-		}
-	}()
+	go server.Serve(ln.(*net.TCPListener)) // nolint: errcheck
 
 	config := &oauth2.Config{
 		ClientID:     clientID,
