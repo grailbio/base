@@ -461,7 +461,13 @@ func (d Writer) Digest() Digest {
 // WriteDigest is a convenience function to write a (binary)
 // Digest to an io.Writer. Its format is two bytes representing
 // the hash function, followed by the hash value itself.
+//
+// Writing a zero digest is disallowed; WriteDigest panics in
+// this case.
 func WriteDigest(w io.Writer, d Digest) (n int, err error) {
+	if d.IsZero() {
+		panic("digest.WriteDigest: attempted to write a zero digest")
+	}
 	digestHash, ok := cryptoToDigestHashes[d.h]
 	if !ok {
 		return n, fmt.Errorf("cannot convert %v to a digestHash", d.h)

@@ -86,6 +86,7 @@ func TestReadWrite(t *testing.T) {
 	}
 	// Test unknown digestHash
 	d := Digest{}
+	d.h = ^crypto.Hash(0) // make it nonzero but invalid so we don't hit the zero hash panic
 	var b bytes.Buffer
 	_, err := WriteDigest(&b, d)
 	if err == nil {
