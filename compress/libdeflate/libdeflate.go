@@ -5,6 +5,7 @@
 package libdeflate
 
 import (
+	"compress/gzip"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"io"
 
 	"github.com/grailbio/base/unsafe"
-	"github.com/klauspost/compress/gzip"
 )
 
 // This is a slightly modified version of klauspost/compress/gzip/gzip.go , and

@@ -6,14 +6,13 @@
 
 package libdeflate
 
-// Fall back on the pure-go klauspost/compress/flate package if cgo support is
+// Fall back on the pure-go compress/flate package if cgo support is
 // unavailable, to make it safe to include this package unconditionally.
 
 import (
 	"bytes"
+	"compress/flate"
 	"io"
-
-	"github.com/klauspost/compress/flate"
 )
 
 type Decompressor struct{}
