@@ -919,7 +919,7 @@ func (f *s3File) handleClose(req request) {
 		}
 	}
 	if err != nil {
-		err = errors.E("s3file.close", f.name)
+		err = errors.E(err, "s3file.close", f.name)
 	}
 	req.ch <- response{err: err}
 }
@@ -927,7 +927,7 @@ func (f *s3File) handleClose(req request) {
 func (f *s3File) handleAbort(req request) {
 	err := f.uploader.abort()
 	if err != nil {
-		err = errors.E("s3file.abort", f.name)
+		err = errors.E(err, "s3file.abort", f.name)
 	}
 	req.ch <- response{err: err}
 }
