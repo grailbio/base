@@ -693,7 +693,7 @@ type uploadChunk struct {
 	client   s3iface.S3API
 	uploadID string
 	partNum  int64
-	buf      []byte
+	buf      *[]byte
 }
 
 // A helper class for driving s3manager.Uploader through an io.Writer-like
@@ -706,7 +706,7 @@ type s3Uploader struct {
 	uploadID    string
 
 	// curBuf is only accessed by the handleRequests thread.
-	curBuf      []byte
+	curBuf      *[]byte
 	nextPartNum int64
 
 	bufPool sync.Pool
@@ -771,7 +771,7 @@ func (u *s3Uploader) uploadThread() {
 		params := &s3.UploadPartInput{
 			Bucket:     aws.String(u.bucket),
 			Key:        aws.String(u.key),
-			Body:       bytes.NewReader(chunk.buf),
+			Body:       bytes.NewReader(*chunk.buf),
 			UploadId:   aws.String(chunk.uploadID),
 			PartNumber: &chunk.partNum,
 		}
@@ -779,7 +779,7 @@ func (u *s3Uploader) uploadThread() {
 		if policy.shouldRetry(u.ctx, err) {
 			goto retry
 		}
-		u.bufPool.Put(&chunk.buf)
+		u.bufPool.Put(chunk.buf)
 		if err != nil {
 			u.err.Set(errors.E(annotate(err), fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
 			continue
@@ -798,23 +798,24 @@ func (u *s3Uploader) write(buf []byte) {
 		panic("empty buf in write")
 	}
 	for len(buf) > 0 {
-		if len(u.curBuf) == 0 {
-			u.curBuf = *u.bufPool.Get().(*[]byte)
-			u.curBuf = u.curBuf[:0]
+		if u.curBuf == nil {
+			u.curBuf = u.bufPool.Get().(*[]byte)
+			*u.curBuf = (*u.curBuf)[:0]
 		}
-		if cap(u.curBuf) != uploadPartSize {
+		if cap(*u.curBuf) != uploadPartSize {
 			panic("empty buf")
 		}
-		space := u.curBuf[len(u.curBuf):cap(u.curBuf)]
+		uploadBuf := *u.curBuf
+		space := uploadBuf[len(uploadBuf):cap(uploadBuf)]
 		n := len(buf)
 		if n < len(space) {
 			copy(space, buf)
-			u.curBuf = u.curBuf[0 : len(u.curBuf)+n]
+			*u.curBuf = uploadBuf[0 : len(uploadBuf)+n]
 			return
 		}
 		copy(space, buf)
 		buf = buf[len(space):]
-		u.curBuf = u.curBuf[0:cap(u.curBuf)]
+		*u.curBuf = uploadBuf[0:cap(uploadBuf)]
 		u.reqCh <- uploadChunk{client: u.client, uploadID: u.uploadID, partNum: u.nextPartNum, buf: u.curBuf}
 		u.nextPartNum++
 		u.curBuf = nil
@@ -841,7 +842,7 @@ func (u *s3Uploader) abort() error {
 
 // finish finishes writing. It can be called only by the request thread.
 func (u *s3Uploader) finish() error {
-	if len(u.curBuf) > 0 {
+	if u.curBuf != nil && len(*u.curBuf) > 0 {
 		u.reqCh <- uploadChunk{client: u.client, uploadID: u.uploadID, partNum: u.nextPartNum, buf: u.curBuf}
 		u.curBuf = nil
 	}
