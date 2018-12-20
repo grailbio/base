@@ -19,6 +19,7 @@ import (
 	"github.com/grailbio/base/file/s3file"
 	"github.com/grailbio/testutil"
 	"github.com/grailbio/testutil/assert"
+	assert2 "github.com/stretchr/testify/assert"
 )
 
 type errFile struct {
@@ -146,8 +147,8 @@ func TestCloseAndReport(t *testing.T) {
 		defer file.CloseAndReport(context.Background(), &f, &err)
 		return errors.New(returnMsg)
 	}()
-	assert.NEQ(t, gotErr.Error(), returnMsg)
-	assert.NEQ(t, gotErr.Error(), closeMsg)
+	assert2.Contains(t, gotErr.Error(), returnMsg)
+	assert2.Contains(t, gotErr.Error(), closeMsg)
 }
 
 func ExampleParsePath() {

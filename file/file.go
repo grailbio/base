@@ -6,6 +6,7 @@ package file
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/grailbio/base/errors"
@@ -79,7 +80,7 @@ func CloseAndReport(ctx context.Context, f Closer, err *error) {
 		return
 	}
 	if *err != nil {
-		*err = errors.E(*err, "second error in Close", err2)
+		*err = errors.E(*err, fmt.Sprintf("second error in Close: %v", err2))
 		return
 	}
 	*err = err2
