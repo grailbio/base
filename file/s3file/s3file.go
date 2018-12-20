@@ -61,13 +61,14 @@ type s3Obj struct {
 
 type accessMode int
 
+// UploadPartSize is the size of a chunk during multi-part uploads.  It is
+// exposed only for unittests.
+var UploadPartSize = 16 << 20
+
 const (
 	readonly  accessMode = iota // file is opened by Open.
 	writeonly                   // file is opened by Create.
 
-	// TODO(saito) Stop using s3 upload manager. Implement cross-file throttling
-	// instead.
-	uploadPartSize    = 16 << 20
 	uploadParallelism = 16
 )
 
@@ -735,7 +736,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		ctx:         ctx,
 		bucket:      bucket,
 		key:         key,
-		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, uploadPartSize); return &slice }},
+		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
 		nextPartNum: 1,
 	}
 	policy := newRetryPolicy(clients)
@@ -802,7 +803,7 @@ func (u *s3Uploader) write(buf []byte) {
 			u.curBuf = u.bufPool.Get().(*[]byte)
 			*u.curBuf = (*u.curBuf)[:0]
 		}
-		if cap(*u.curBuf) != uploadPartSize {
+		if cap(*u.curBuf) != UploadPartSize {
 			panic("empty buf")
 		}
 		uploadBuf := *u.curBuf

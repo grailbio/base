@@ -174,7 +174,6 @@ func writeFile(ctx context.Context, t *testing.T, impl file.Implementation, path
 	assert.NoError(t, err)
 	assert.NoError(t, f.Close(ctx))
 }
-
 func TestListBucketRoot(t *testing.T) {
 	provider := &testProvider{clients: []s3iface.S3API{newClient(t)}}
 	ctx := context.Background()
@@ -336,6 +335,46 @@ func testOverwriteWhileReading(t *testing.T, impl file.Implementation, pathPrefi
 	writeFile(ctx, t, impl, path, "test1")
 	_, err = ioutil.ReadAll(r)
 	assert.True(t, errors.Is(errors.Precondition, err), "err=%v", err)
+}
+
+func TestWriteLargeFile(t *testing.T) {
+	// Reduce the upload chunk size to issue concurrent upload requests to S3.
+	oldUploadPartSize := s3file.UploadPartSize
+	s3file.UploadPartSize = 128
+	defer func() {
+		s3file.UploadPartSize = oldUploadPartSize
+	}()
+
+	ctx := context.Background()
+	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	path := "s3://b/test.txt"
+	f, err := impl.Create(ctx, path)
+	assert.NoError(t, err)
+	r := rand.New(rand.NewSource(0))
+	var want []byte
+	const iters = 400
+	for i := 0; i < iters; i++ {
+		n := r.Intn(1024) + 100
+		data := make([]byte, n)
+		n, err := r.Read(data)
+		assert.EQ(t, n, len(data))
+		assert.NoError(t, err)
+		n, err = f.Writer(ctx).Write(data)
+		assert.EQ(t, n, len(data))
+		assert.NoError(t, err)
+		want = append(want, data...)
+	}
+	assert.NoError(t, f.Close(ctx))
+
+	// Read the file back and verify contents.
+	f, err = impl.Open(ctx, path)
+	assert.NoError(t, err)
+	got := make([]byte, len(want))
+	n, _ := f.Reader(ctx).Read(got)
+	assert.EQ(t, n, len(want))
+	assert.EQ(t, got, want)
+	assert.NoError(t, f.Close(ctx))
 }
 
 func TestOverwriteWhileReading(t *testing.T) {
