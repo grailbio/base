@@ -62,8 +62,8 @@ func newProfiling() *profiling {
 		{&pr.threadName, "thread-create-profile", "", "filename prefix for thread create profiles"},
 		{&pr.blockName, "block-profile", "", "filename prefix for block profiles"},
 		{&pr.mutexName, "mutex-profile", "", "filename prefix for mutex profiles"},
-		{&pr.mutexRate, "mutex-profile-rate", 1, "rate for runtime.SetMutexProfileFraction"},
-		{&pr.blockRate, "block-profile-rate", 1, "rate for runtime. SetBlockProfileRate"},
+		{&pr.mutexRate, "mutex-profile-rate", 200, "rate for runtime.SetMutexProfileFraction"},
+		{&pr.blockRate, "block-profile-rate", 200, "rate for runtime.SetBlockProfileRate"},
 		{&pr.profileInterval, "profile-interval-s", 0.0, "If >0, output new profiles at this interval (seconds). If <=0, profiles are written only when Write() is called"},
 	} {
 		fn := p.n
@@ -135,10 +135,10 @@ func (p *profiling) Start() {
 	if atomic.AddInt32(&p.started, 1) > 1 {
 		return
 	}
-	if len(p.blockName) > 0 {
+	if len(p.blockName) > 0 || len(p.httpAddr) > 0 {
 		runtime.SetBlockProfileRate(p.blockRate)
 	}
-	if len(p.mutexName) > 0 {
+	if len(p.mutexName) > 0 || len(p.httpAddr) > 0 {
 		runtime.SetMutexProfileFraction(p.mutexRate)
 	}
 	if len(p.cpuName) > 0 {
@@ -152,7 +152,7 @@ func (p *profiling) Start() {
 			}
 		}()
 	}
-	if p.httpAddr != "" {
+	if len(p.httpAddr) > 0 {
 		mux := http.NewServeMux()
 		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
