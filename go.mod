@@ -19,7 +19,7 @@ require (
 	github.com/klauspost/compress v1.4.0
 	github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
-	github.com/pkg/errors v0.0.0-20161029093637-248dadf4e906
+	github.com/pkg/errors v0.8.1
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/stretchr/testify v1.2.2
 	github.com/willf/bitset v1.1.9
