@@ -11,7 +11,7 @@ import (
 	"unsafe"
 )
 
-// ZZUnsafeInplace sets main[pos] := arg[pos] OPCHAR main[pos] for every position
+// ZZUnsafeInplace sets main[pos] := main[pos] OPCHAR arg[pos] for every position
 // in main[].
 //
 // WARNING: This is a function designed to be used in inner loops, which makes

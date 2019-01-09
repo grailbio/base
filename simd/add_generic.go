@@ -2,42 +2,9 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// +build amd64,!appengine
+// +build !amd64 appengine
 
 package simd
-
-import (
-	"reflect"
-	"unsafe"
-)
-
-// *** the following functions are defined in add_amd64.s
-
-//go:noescape
-func addConst8TinyInplaceSSSE3Asm(main unsafe.Pointer, val int)
-
-//go:noescape
-func addConst8OddInplaceSSSE3Asm(main unsafe.Pointer, val, nByte int)
-
-//go:noescape
-func addConst8SSSE3Asm(dst, src unsafe.Pointer, val, nByte int)
-
-//go:noescape
-func addConst8OddSSSE3Asm(dst, src unsafe.Pointer, val, nByte int)
-
-//go:noescape
-func subtractFromConst8TinyInplaceSSSE3Asm(main unsafe.Pointer, val int)
-
-//go:noescape
-func subtractFromConst8OddInplaceSSSE3Asm(main unsafe.Pointer, val, nByte int)
-
-//go:noescape
-func subtractFromConst8SSSE3Asm(dst, src unsafe.Pointer, val, nByte int)
-
-//go:noescape
-func subtractFromConst8OddSSSE3Asm(dst, src unsafe.Pointer, val, nByte int)
-
-// *** end assembly function signature(s)
 
 // AddConst8UnsafeInplace adds the given constant to every byte of main[], with
 // unsigned overflow.
@@ -51,30 +18,17 @@ func subtractFromConst8OddSSSE3Asm(dst, src unsafe.Pointer, val, nByte int)
 // potentially-size-increasing operation on main[] is {Re}makeUnsafe(),
 // ResizeUnsafe(), or XcapUnsafe().
 func AddConst8UnsafeInplace(main []byte, val byte) {
-	// Note that the word-based algorithm doesn't work so well here, since we'd
-	// need to guard against bytes in the middle overflowing and polluting
-	// adjacent bytes.
-	mainLen := len(main)
-	mainHeader := (*reflect.SliceHeader)(unsafe.Pointer(&main))
-	if mainLen <= 16 {
-		addConst8TinyInplaceSSSE3Asm(unsafe.Pointer(mainHeader.Data), int(val))
-		return
+	for i, x := range main {
+		main[i] = x + val
 	}
-	addConst8OddInplaceSSSE3Asm(unsafe.Pointer(mainHeader.Data), int(val), mainLen)
 }
 
 // AddConst8Inplace adds the given constant to every byte of main[], with
 // unsigned overflow.
 func AddConst8Inplace(main []byte, val byte) {
-	mainLen := len(main)
-	if mainLen < 16 {
-		for pos, mainByte := range main {
-			main[pos] = val + mainByte
-		}
-		return
+	for i, x := range main {
+		main[i] = x + val
 	}
-	mainHeader := (*reflect.SliceHeader)(unsafe.Pointer(&main))
-	addConst8OddInplaceSSSE3Asm(unsafe.Pointer(mainHeader.Data), int(val), mainLen)
 }
 
 // AddConst8Unsafe sets dst[pos] := src[pos] + val for every byte in src (with
@@ -94,27 +48,20 @@ func AddConst8Inplace(main []byte, val byte) {
 // 3. The caller does not care if a few bytes past the end of dst[] are
 // changed.
 func AddConst8Unsafe(dst, src []byte, val byte) {
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
-	addConst8SSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), int(val), srcHeader.Len)
+	for i, x := range src {
+		dst[i] = x + val
+	}
 }
 
 // AddConst8 sets dst[pos] := src[pos] + val for every byte in src (with the
 // usual unsigned overflow).  It panics if len(src) != len(dst).
 func AddConst8(dst, src []byte, val byte) {
-	srcLen := len(src)
-	if len(dst) != srcLen {
+	if len(dst) != len(src) {
 		panic("AddConst8() requires len(src) == len(dst).")
 	}
-	if srcLen < 16 {
-		for pos, curByte := range src {
-			dst[pos] = curByte + val
-		}
-		return
+	for i, x := range src {
+		dst[i] = x + val
 	}
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
-	addConst8OddSSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), int(val), srcLen)
 }
 
 // SubtractFromConst8UnsafeInplace subtracts every byte of main[] from the
@@ -129,27 +76,17 @@ func AddConst8(dst, src []byte, val byte) {
 // potentially-size-increasing operation on main[] is {Re}makeUnsafe(),
 // ResizeUnsafe(), or XcapUnsafe().
 func SubtractFromConst8UnsafeInplace(main []byte, val byte) {
-	mainLen := len(main)
-	mainHeader := (*reflect.SliceHeader)(unsafe.Pointer(&main))
-	if mainLen <= 16 {
-		subtractFromConst8TinyInplaceSSSE3Asm(unsafe.Pointer(mainHeader.Data), int(val))
-		return
+	for i, x := range main {
+		main[i] = val - x
 	}
-	subtractFromConst8OddInplaceSSSE3Asm(unsafe.Pointer(mainHeader.Data), int(val), mainLen)
 }
 
 // SubtractFromConst8Inplace subtracts every byte of main[] from the given
 // constant, with unsigned underflow.
 func SubtractFromConst8Inplace(main []byte, val byte) {
-	mainLen := len(main)
-	if mainLen < 16 {
-		for pos, mainByte := range main {
-			main[pos] = val - mainByte
-		}
-		return
+	for i, x := range main {
+		main[i] = val - x
 	}
-	mainHeader := (*reflect.SliceHeader)(unsafe.Pointer(&main))
-	subtractFromConst8OddInplaceSSSE3Asm(unsafe.Pointer(mainHeader.Data), int(val), mainLen)
 }
 
 // SubtractFromConst8Unsafe sets dst[pos] := val - src[pos] for every byte in
@@ -169,25 +106,18 @@ func SubtractFromConst8Inplace(main []byte, val byte) {
 // 3. The caller does not care if a few bytes past the end of dst[] are
 // changed.
 func SubtractFromConst8Unsafe(dst, src []byte, val byte) {
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
-	subtractFromConst8SSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), int(val), srcHeader.Len)
+	for i, x := range src {
+		dst[i] = val - x
+	}
 }
 
 // SubtractFromConst8 sets dst[pos] := val - src[pos] for every byte in src
 // (with the usual unsigned overflow).  It panics if len(src) != len(dst).
 func SubtractFromConst8(dst, src []byte, val byte) {
-	srcLen := len(src)
-	if len(dst) != srcLen {
+	if len(dst) != len(src) {
 		panic("SubtractFromConst8() requires len(src) == len(dst).")
 	}
-	if srcLen < 16 {
-		for pos, curByte := range src {
-			dst[pos] = val - curByte
-		}
-		return
+	for i, x := range src {
+		dst[i] = val - x
 	}
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
-	subtractFromConst8OddSSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), int(val), srcLen)
 }
