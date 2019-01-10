@@ -3,20 +3,19 @@ module github.com/grailbio/base
 require (
 	github.com/DataDog/zstd v1.3.4
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5
-	github.com/StackExchange/wmi v0.0.0-20160811214555-e54cbda6595d // indirect
 	github.com/aws/aws-sdk-go v1.14.25
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/coreos/go-oidc v0.0.0-20170302224109-cf9c3b4fab28
 	github.com/fullsailor/pkcs7 v0.0.0-20180613152042-8306686428a5
 	github.com/go-ini/ini v1.21.1 // indirect
-	github.com/go-ole/go-ole v0.0.0-20161116064658-5e9c030faf78 // indirect
 	github.com/go-test/deep v1.0.1
 	github.com/gobwas/glob v0.0.0-20170212200151-51eb1ee00b6d
 	github.com/golang/protobuf v1.2.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/google/gops v0.0.0-20171222022621-e09130d89827
 	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect
-	github.com/grailbio/testutil v0.0.0-20181208014140-a221d898ec96
+	github.com/grailbio/testutil v0.0.0
+	github.com/grailbio/v23/factories/grail v0.0.0
 	github.com/jmespath/go-jmespath v0.0.0-20160803190731-bd40a432e4c7 // indirect
 	github.com/jtolds/gls v4.2.1+incompatible // indirect
 	github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1 // indirect
@@ -42,3 +41,39 @@ require (
 	v.io v0.1.1
 	v.io/x/lib v0.1.1
 )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
