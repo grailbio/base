@@ -20,7 +20,7 @@ require (
 	github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/pkg/errors v0.0.0-20161029093637-248dadf4e906
-	github.com/pquerna/cachecontrol v0.0.0-20160421231612-c97913dcbd76 // indirect
+	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/stretchr/testify v1.2.2
 	github.com/willf/bitset v1.1.9
 	golang.org/x/crypto v0.0.0-20190103213133-ff983b9c42bc
@@ -31,7 +31,7 @@ require (
 	google.golang.org/api v0.0.0-20181129220737-af4fc4062c26
 	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
-	gopkg.in/square/go-jose.v2 v2.1.0 // indirect
+	gopkg.in/square/go-jose.v2 v2.2.2 // indirect
 	v.io v0.1.1
 	v.io/x/lib v0.1.1
 )
