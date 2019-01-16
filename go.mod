@@ -17,12 +17,14 @@ require (
 	github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1 // indirect
 	github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc
 	github.com/klauspost/compress v1.4.0
-	github.com/klauspost/cpuid v0.0.0-20170728055534-ae7887de9fa5 // indirect
+	github.com/klauspost/cpuid v1.2.0 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/stretchr/testify v1.2.2
+	github.com/vitessio/vitess v2.1.1+incompatible // indirect
 	github.com/willf/bitset v1.1.9
+	github.com/yasushi-saito/zlibng v0.0.0-20190115171811-c03a07c2e582
 	golang.org/x/crypto v0.0.0-20190103213133-ff983b9c42bc
 	golang.org/x/net v0.0.0-20181201002055-351d144fa1fc
 	golang.org/x/oauth2 v0.0.0-20181128211412-28207608b838

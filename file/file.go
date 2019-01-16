@@ -88,21 +88,25 @@ func CloseAndReport(ctx context.Context, f Closer, err *error) {
 
 // NewErrorReader returns a new io.ReadSeeker object that returns "err" on any
 // operation.
-func NewErrorReader(err error) io.ReadSeeker { return &errorReaderWriter{err: err} }
+func NewErrorReader(err error) io.ReadSeeker { return &errorReadWriteCloser{err: err} }
 
 // NewErrorWriter returns a new io.Writer object that returns "err" on any operation.
-func NewErrorWriter(err error) io.Writer { return &errorReaderWriter{err: err} }
+func NewErrorWriter(err error) io.WriteCloser { return &errorReadWriteCloser{err: err} }
 
-type errorReaderWriter struct{ err error }
+type errorReadWriteCloser struct{ err error }
 
-func (r *errorReaderWriter) Read([]byte) (int, error) {
+func (r *errorReadWriteCloser) Read([]byte) (int, error) {
 	return -1, r.err
 }
 
-func (r *errorReaderWriter) Seek(int64, int) (int64, error) {
+func (r *errorReadWriteCloser) Seek(int64, int) (int64, error) {
 	return -1, r.err
 }
 
-func (r *errorReaderWriter) Write([]byte) (int, error) {
+func (r *errorReadWriteCloser) Write([]byte) (int, error) {
 	return -1, r.err
+}
+
+func (r *errorReadWriteCloser) Close() error {
+	return r.err
 }
