@@ -12,7 +12,7 @@ require (
 	github.com/golang/protobuf v1.2.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/google/gops v0.0.0-20171222022621-e09130d89827
-	github.com/grailbio/testutil v0.0.0
+	github.com/grailbio/testutil v0.0.0-20190109212408-dbe52faee1b0
 	github.com/grailbio/v23/factories/grail v0.0.0-20190119012339-40e7f427c0fd
 	github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1 // indirect
 	github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc
