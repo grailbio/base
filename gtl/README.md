@@ -4,6 +4,9 @@ This directory contains algorithms written using a pidgin templates.
 
 # Directory contents
 
+- rcu_map: concurrent hash map. Readers can access the map without memory
+  barriers.
+
 - unsafe: unsafe, but efficient slice operations, including casting between
   string and []byte and uninitialized slice resizing.
 

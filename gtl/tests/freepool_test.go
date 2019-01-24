@@ -1,6 +1,6 @@
 package tests
 
-//go:generate ../generate.py --prefix=byte -DMAXSIZE=128 -DELEM=[]byte --package=tests --output=freepool.go ../freepool.go.tpl
+//go:generate ../generate.py --prefix=byte --PREFIX=byte -DMAXSIZE=128 -DELEM=[]byte --package=tests --output=freepool.go ../freepool.go.tpl
 
 import (
 	"testing"

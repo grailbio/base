@@ -56,17 +56,17 @@ import (
 //   if needed.
 type ZZFreePool struct {
 	new          func() ELEM
-	local        []ZZpoolLocal
+	local        []zzPoolLocal
 	maxLocalSize int64
 }
 
 const (
-	ZZmaxPrivateElems = 4
-	ZZcacheLineSize   = 64
+	zzMaxPrivateElems = 4
+	zzCacheLineSize   = 64
 )
 
-type ZZpoolLocalInner struct {
-	private     [ZZmaxPrivateElems]ELEM // Can be used only by the respective P.
+type zzPoolLocalInner struct {
+	private     [zzMaxPrivateElems]ELEM // Can be used only by the respective P.
 	privateSize int
 
 	shared     []ELEM     // Can be used by any P.
@@ -74,10 +74,10 @@ type ZZpoolLocalInner struct {
 	mu         sync.Mutex // Protects shared.
 }
 
-type ZZpoolLocal struct {
-	ZZpoolLocalInner
+type zzPoolLocal struct {
+	zzPoolLocalInner
 	// Pad prevents false sharing.
-	pad [ZZcacheLineSize - unsafe.Sizeof(ZZpoolLocalInner{})%ZZcacheLineSize]byte
+	pad [zzCacheLineSize - unsafe.Sizeof(zzPoolLocalInner{})%zzCacheLineSize]byte
 }
 
 // NewZZFreePool creates a new free object pool. new should create a new
@@ -95,13 +95,13 @@ func NewZZFreePool(new func() ELEM, maxSize int) *ZZFreePool {
 	}
 	p := &ZZFreePool{
 		new:          new,
-		local:        make([]ZZpoolLocal, maxProcs),
+		local:        make([]zzPoolLocal, maxProcs),
 		maxLocalSize: int64(maxLocalSize),
 	}
 	return p
 }
 
-func (p *ZZFreePool) pin() *ZZpoolLocal {
+func (p *ZZFreePool) pin() *zzPoolLocal {
 	pid := runtime_procPin()
 	if int(pid) >= len(p.local) {
 		panic(pid)
@@ -114,7 +114,7 @@ func (p *ZZFreePool) pin() *ZZpoolLocal {
 func (p *ZZFreePool) Put(x ELEM) {
 	done := false
 	l := p.pin()
-	if l.privateSize < ZZmaxPrivateElems {
+	if l.privateSize < zzMaxPrivateElems {
 		l.private[l.privateSize] = x
 		l.privateSize++
 		done = true
