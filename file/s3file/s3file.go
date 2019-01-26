@@ -206,7 +206,7 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 			// GetObject seems to return this error rather ErrCodeNoSuchKey
 			r.clients = nil
 			return false
-		case awsrequest.ErrCodeSerialization, awsrequest.ErrCodeRead, "SlowDown":
+		case awsrequest.ErrCodeSerialization, awsrequest.ErrCodeRead, "SlowDown", "InternalError":
 			// Transient errors. Retry with the same client.
 			if retry.Wait(ctx, r.policy, r.retries) != nil {
 				// Context timeout or cancellation
