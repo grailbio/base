@@ -12,19 +12,18 @@ require (
 	github.com/golang/protobuf v1.2.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/google/gops v0.0.0-20171222022621-e09130d89827
-	github.com/grailbio/testutil v0.0.0-20190109212408-dbe52faee1b0
+	github.com/grailbio/testutil v0.0.0-20190127023142-d3ae812e9a0e
 	github.com/grailbio/v23/factories/grail v0.0.0-20190119012339-40e7f427c0fd
 	github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1 // indirect
 	github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc
-	github.com/klauspost/compress v1.4.0
+	github.com/klauspost/compress v1.4.1
 	github.com/klauspost/cpuid v1.2.0 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/stretchr/testify v1.2.2
-	github.com/vitessio/vitess v2.1.1+incompatible // indirect
 	github.com/willf/bitset v1.1.9
-	github.com/yasushi-saito/zlibng v0.0.0-20190115171811-c03a07c2e582
+	github.com/yasushi-saito/zlibng v0.0.0-20190128191412-2ee128fff508
 	golang.org/x/crypto v0.0.0-20190103213133-ff983b9c42bc
 	golang.org/x/net v0.0.0-20181201002055-351d144fa1fc
 	golang.org/x/oauth2 v0.0.0-20181128211412-28207608b838
