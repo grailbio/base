@@ -10,8 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/grailbio/base/vcontext"
-	"v.io/v23"
+	v23 "v.io/v23"
 	"v.io/v23/context"
 	"v.io/x/lib/cmdline"
 )
@@ -54,12 +53,13 @@ func CheckAccess(ctx *context.T) (time.Duration, error) {
 
 type runner struct {
 	access bool
+	ctxfn  func() *context.T
 	run    func(*context.T, *cmdline.Env, []string) error
 }
 
 // Run implements cmdline.Runner.
 func (r runner) Run(env *cmdline.Env, args []string) error {
-	ctx := vcontext.Background()
+	ctx := r.ctxfn()
 	if os.Getenv("GRAIL_CMDUTIL_NO_ACCESS_CHECK") != "1" && r.access {
 		if _, err := CheckAccess(ctx); err != nil {
 			return err
@@ -68,15 +68,14 @@ func (r runner) Run(env *cmdline.Env, args []string) error {
 	return r.run(ctx, env, args)
 }
 
-// RunnerFuncWithAccessCheck is like cmdutil.RunnerFunc, but allows for
-// a context.T parameter and calls CheckAccess to test for credential
-// existence/expiry.
-func RunnerFuncWithAccessCheck(run func(*context.T, *cmdline.Env, []string) error) cmdline.Runner {
-	return RunnerFunc(runner{true, run}.Run)
+// V23RunnerFunc is like cmdutil.RunnerFunc, but allows for a context.T
+// parameter that is given the context as obtained from ctxfn.
+func V23RunnerFunc(ctxfn func() *context.T, run func(*context.T, *cmdline.Env, []string) error) cmdline.Runner {
+	return RunnerFunc(runner{false, ctxfn, run}.Run)
 }
 
-// V23RunnerFunc is like cmdutil.RunnerFunc, but allows for a context.T
-// parameter.
-func V23RunnerFunc(run func(*context.T, *cmdline.Env, []string) error) cmdline.Runner {
-	return RunnerFunc(runner{false, run}.Run)
+// RunnerFuncWithAccessCheck is like V23RunnerFunc, but also calls CheckAccess
+// to test for credential existence/expiry.
+func RunnerFuncWithAccessCheck(ctxfn func() *context.T, run func(*context.T, *cmdline.Env, []string) error) cmdline.Runner {
+	return RunnerFunc(runner{true, ctxfn, run}.Run)
 }

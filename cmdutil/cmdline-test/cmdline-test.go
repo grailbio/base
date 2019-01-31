@@ -9,6 +9,7 @@ import (
 
 	"github.com/grailbio/base/cmdutil"
 	_ "github.com/grailbio/base/cmdutil/interactive"
+	"github.com/grailbio/base/vcontext"
 	"v.io/v23/context"
 	"v.io/x/lib/cmdline"
 	"v.io/x/lib/vlog"
@@ -31,7 +32,7 @@ var logging = &cmdline.Command{
 var access = &cmdline.Command{
 	Name:     "access",
 	ArgsName: "args",
-	Runner:   cmdutil.RunnerFuncWithAccessCheck(runnerWithRPC),
+	Runner:   cmdutil.RunnerFuncWithAccessCheck(vcontext.Background, runnerWithRPC),
 }
 
 func main() {

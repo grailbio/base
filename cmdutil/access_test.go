@@ -13,6 +13,7 @@ import (
 	"github.com/grailbio/base/cmdutil"
 	"github.com/grailbio/testutil"
 	"v.io/x/ref/lib/security"
+	_ "v.io/x/ref/runtime/factories/library"
 	"v.io/x/ref/test"
 )
 
