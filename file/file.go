@@ -86,27 +86,30 @@ func CloseAndReport(ctx context.Context, f Closer, err *error) {
 	*err = err2
 }
 
-// NewErrorReader returns a new io.ReadSeeker object that returns "err" on any
-// operation.
-func NewErrorReader(err error) io.ReadSeeker { return &errorReadWriteCloser{err: err} }
+// Error implements io.{Reader,Writer,Seeker,Closer}. It returns the given error
+// to any call.
+type Error struct{ err error }
 
-// NewErrorWriter returns a new io.Writer object that returns "err" on any operation.
-func NewErrorWriter(err error) io.WriteCloser { return &errorReadWriteCloser{err: err} }
+// NewError returns a new Error object that returns the given error to any
+// Read/Write/Seek/Close call.
+func NewError(err error) *Error { return &Error{err: err} }
 
-type errorReadWriteCloser struct{ err error }
-
-func (r *errorReadWriteCloser) Read([]byte) (int, error) {
+// Read implements io.Reader
+func (r *Error) Read([]byte) (int, error) {
 	return -1, r.err
 }
 
-func (r *errorReadWriteCloser) Seek(int64, int) (int64, error) {
+// Seek implements io.Seeker.
+func (r *Error) Seek(int64, int) (int64, error) {
 	return -1, r.err
 }
 
-func (r *errorReadWriteCloser) Write([]byte) (int, error) {
+// Write implements io.Writer.
+func (r *Error) Write([]byte) (int, error) {
 	return -1, r.err
 }
 
-func (r *errorReadWriteCloser) Close() error {
+// Close implements io.Closer.
+func (r *Error) Close() error {
 	return r.err
 }

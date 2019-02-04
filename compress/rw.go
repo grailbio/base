@@ -6,6 +6,7 @@ import (
 	"compress/bzip2"
 	"fmt"
 	"io"
+	"io/ioutil"
 
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/fileio"
@@ -21,16 +22,20 @@ import (
 //  .bz2 => bz2 format
 //
 // For other extensions, this function returns nil.
-func NewReaderPath(r io.Reader, path string) io.Reader {
+//
+// If the caller receives a non-nil reader from this function, it must close the
+// reader after use. For some file formats, Close() is the only place that
+// reports file corruption.
+func NewReaderPath(r io.Reader, path string) io.ReadCloser {
 	switch fileio.DetermineType(path) {
 	case fileio.Gzip:
 		gz, err := zlibng.NewReader(r)
 		if err != nil {
-			return file.NewErrorReader(err)
+			return file.NewError(err)
 		}
 		return gz
 	case fileio.Bzip2:
-		return bzip2.NewReader(r)
+		return ioutil.NopCloser(bzip2.NewReader(r))
 	}
 	return nil
 }
@@ -49,7 +54,7 @@ func NewWriterPath(w io.Writer, path string) io.WriteCloser {
 	case fileio.Gzip:
 		return gzip.NewWriter(w)
 	case fileio.Bzip2:
-		return file.NewErrorWriter(fmt.Errorf("%s: bzip2 writer not supported", path))
+		return file.NewError(fmt.Errorf("%s: bzip2 writer not supported", path))
 	}
 	return nil
 }

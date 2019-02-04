@@ -256,7 +256,7 @@ func runRequest(ctx context.Context, handler func() response) response {
 	case res := <-ch:
 		return res
 	case <-ctx.Done():
-		return response{err: fmt.Errorf("Request cancelled")}
+		return response{err: fmt.Errorf("request cancelled")}
 	}
 }
 
@@ -462,7 +462,7 @@ func (f *s3File) runRequest(ctx context.Context, req request) response {
 	case res := <-resCh:
 		return res
 	case <-ctx.Done():
-		return response{err: fmt.Errorf("Request cancelled")}
+		return response{err: fmt.Errorf("request cancelled")}
 	}
 }
 
@@ -527,14 +527,14 @@ func (f *s3File) maybeFillInfo(ctx context.Context) error {
 
 func (f *s3File) Reader(ctx context.Context) io.ReadSeeker {
 	if f.mode != readonly {
-		return file.NewErrorReader(fmt.Errorf("reader %v: file is not opened in read mode", f.name))
+		return file.NewError(fmt.Errorf("reader %v: file is not opened in read mode", f.name))
 	}
 	return &s3Reader{ctx: ctx, f: f}
 }
 
 func (f *s3File) Writer(ctx context.Context) io.Writer {
 	if f.mode != writeonly {
-		return file.NewErrorWriter(fmt.Errorf("writer %v: file is not opened in write mode", f.name))
+		return file.NewError(fmt.Errorf("writer %v: file is not opened in write mode", f.name))
 	}
 	return &s3Writer{ctx: ctx, f: f}
 }

@@ -165,7 +165,7 @@ func (f *localFile) Name() string {
 // Reader implements file.File
 func (f *localFile) Reader(context.Context) io.ReadSeeker {
 	if f.mode != readonly {
-		return NewErrorReader(fmt.Errorf("reader %v: file is not opened in read mode", f.Name()))
+		return NewError(fmt.Errorf("reader %v: file is not opened in read mode", f.Name()))
 	}
 	return f.f
 }
@@ -173,7 +173,7 @@ func (f *localFile) Reader(context.Context) io.ReadSeeker {
 // Writer implements file.Writer
 func (f *localFile) Writer(context.Context) io.Writer {
 	if f.mode == readonly {
-		return NewErrorWriter(fmt.Errorf("writer %v: file is not opened in write mode", f.Name()))
+		return NewError(fmt.Errorf("writer %v: file is not opened in write mode", f.Name()))
 	}
 	return f.f
 }

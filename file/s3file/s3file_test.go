@@ -304,8 +304,8 @@ func TestCancellation(t *testing.T) {
 		defer cancel()
 		r := f.Reader(ctx)
 		_, err = ioutil.ReadAll(r)
-		assert.Regexp(t, err, "Request cancelled")
-		assert.Regexp(t, f.Close(ctx), "Request cancelled")
+		assert.Regexp(t, err, "request cancelled")
+		assert.Regexp(t, f.Close(ctx), "request cancelled")
 	}
 }
 
