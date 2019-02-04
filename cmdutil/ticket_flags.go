@@ -22,14 +22,14 @@ import (
 // and/or
 //   --flag=t1,t2 --flag=t3
 type TicketFlags struct {
-	set          bool
-	dedup        map[string]bool
-	fs           *flag.FlagSet
-	rcFlag       string
-	Tickets      []string
-	TicketRCFile string
-	ticketRCFlag stringFlag
-	Timeout      time.Duration
+	set                bool
+	dedup              map[string]bool
+	fs                 *flag.FlagSet
+	ticketFlag, rcFlag string
+	Tickets            []string
+	TicketRCFile       string
+	ticketRCFlag       stringFlag
+	Timeout            time.Duration
 }
 
 // wrapper to catch explicit setting of a flag.
@@ -57,10 +57,15 @@ func (sf *stringFlag) String() string {
 
 // Set implements flag.Value.
 func (tf *TicketFlags) Set(v string) error {
-	if tf.dedup == nil {
+	if !tf.set {
+		// Clear any defaults if setting for the first time.
+		tf.Tickets = nil
 		tf.dedup = map[string]bool{}
 	}
 	for _, ps := range strings.Split(v, ",") {
+		if ps == "" {
+			continue
+		}
 		if !tf.dedup[ps] {
 			tf.Tickets = append(tf.Tickets, ps)
 		}
@@ -68,6 +73,17 @@ func (tf *TicketFlags) Set(v string) error {
 	}
 	tf.set = true
 	return nil
+}
+
+// setDefaults sets default ticket paths for the flag. These values are cleared
+// the first time the flag is explicitly parsed in the flag set.
+func (tf *TicketFlags) setDefaults(tickets []string) {
+	tf.Tickets = tickets
+	tf.dedup = map[string]bool{}
+	for _, t := range tickets {
+		tf.dedup[t] = true
+	}
+	tf.fs.Lookup(tf.ticketFlag).DefValue = strings.Join(tickets, ",")
 }
 
 // String implements flag.Value.
@@ -110,7 +126,8 @@ func (tf *TicketFlags) ReadEnvOrFile() error {
 // --<prefix>ticket
 // --<prefix>ticket-timeout
 // --<prefix>tickerc
-func RegisterTicketFlags(fs *flag.FlagSet, prefix string, flags *TicketFlags) {
+func RegisterTicketFlags(fs *flag.FlagSet, prefix string, defaultTickets []string, flags *TicketFlags) {
+	flags.fs = fs
 	desc := "Comma separated list of GRAIL security tickets, and/or the flag may be repeated"
 	fs.Var(flags, prefix+"ticket", desc)
 	fs.DurationVar(&flags.Timeout, prefix+"ticket-timeout", time.Minute, "specifies the timeout duration for obtaining any single GRAIL security ticket")
@@ -119,5 +136,7 @@ func RegisterTicketFlags(fs *flag.FlagSet, prefix string, flags *TicketFlags) {
 	flags.TicketRCFile = filepath.Join(os.Getenv("HOME"), ".ticketrc")
 	fs.Var(&flags.ticketRCFlag, flags.ticketRCFlag.name, "a file containing the tickets to use")
 	fs.Lookup(prefix + "ticketrc").DefValue = "$HOME/.ticketrc"
+	flags.ticketFlag = prefix + "ticket"
 	flags.rcFlag = prefix + "ticketrc"
+	flags.setDefaults(defaultTickets)
 }
