@@ -305,9 +305,10 @@ func (d Digest) NPrefix() int {
 	return 0
 }
 
-// Expands tells whether digest d expands the short digest e.
+// Expands tells whether digest d expands digest e.
 func (d Digest) Expands(e Digest) bool {
-	return bytes.HasPrefix(d.b[:], e.b[:4])
+	n := e.NPrefix()
+	return bytes.HasPrefix(d.b[:], e.b[:n])
 }
 
 // String returns the full string representation of the digest: the digest
