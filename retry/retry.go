@@ -88,8 +88,10 @@ func Jitter(policy Policy, frac float64) Policy {
 
 func (b *jitter) Retry(retries int) (bool, time.Duration) {
 	ok, wait := b.policy.Retry(retries)
-	prop := time.Duration(b.frac * float64(wait))
-	wait = wait - prop + time.Duration(rand.Int63n(prop.Nanoseconds()))
+	if wait > 0 {
+		prop := time.Duration(b.frac * float64(wait))
+		wait = wait - prop + time.Duration(rand.Int63n(prop.Nanoseconds()))
+	}
 	return ok, wait
 }
 
