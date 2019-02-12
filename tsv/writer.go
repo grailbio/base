@@ -20,7 +20,7 @@ import (
 type Writer struct {
 	w       *bufio.Writer
 	line    []byte
-	padding [32]byte // nolint: megacheck, structcheck
+	padding [32]byte // nolint: megacheck, structcheck, staticcheck
 }
 
 // NewWriter creates a new tsv.Writer from an io.Writer.
@@ -78,6 +78,28 @@ func (w *Writer) WriteByte(b byte) {
 // otherwise EndLine will clobber the last character.
 func (w *Writer) WritePartialString(s string) {
 	w.line = append(w.line, s...)
+}
+
+// WritePartialBytes appends a []byte WITHOUT the usual subsequent tab.  It
+// must be followed by a non-Partial Write at some point to end the field;
+// otherwise EndLine will clobber the last character.
+func (w *Writer) WritePartialBytes(s []byte) {
+	w.line = append(w.line, s...)
+}
+
+// WriteCsvUint32 converts the given uint32 to a string, and appends that and a
+// comma to the current line.
+func (w *Writer) WriteCsvUint32(ui uint32) {
+	w.line = strconv.AppendUint(w.line, uint64(ui), 10)
+	w.line = append(w.line, ',')
+}
+
+// (Other Csv functions will be added as they're needed.)
+
+// EndCsv finishes the current comma-separated field, converting the last comma
+// to a tab.  It must be nonempty.
+func (w *Writer) EndCsv() {
+	w.line[len(w.line)-1] = '\t'
 }
 
 // EndLine finishes the current line.  It must be nonempty.
