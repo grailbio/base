@@ -3,6 +3,7 @@
 package compress
 
 import (
+	"bytes"
 	"compress/bzip2"
 	"fmt"
 	"io"
@@ -13,6 +14,86 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/yasushi-saito/zlibng"
 )
+
+// errorReader is a ReadCloser implementation that always returns the given
+// error.
+type errorReader struct{ err error }
+
+func (r *errorReader) Read(buf []byte) (int, error) { return 0, r.err }
+func (r *errorReader) Close() error                 { return r.err }
+
+func isBzip2Header(buf []byte) bool {
+	// https://www.forensicswiki.org/wiki/Bzip2
+	if len(buf) < 10 {
+		return false
+	}
+	if !(buf[0] == 'B' && buf[1] == 'Z' && buf[2] == 'h' && buf[3] >= '1' && buf[3] <= '9') {
+		return false
+	}
+	if buf[4] == 0x31 && buf[5] == 0x41 &&
+		buf[6] == 0x59 && buf[7] == 0x26 &&
+		buf[8] == 0x53 && buf[9] == 0x59 { // block magic
+		return true
+	}
+	if buf[4] == 0x17 && buf[5] == 0x72 &&
+		buf[6] == 0x45 && buf[7] == 0x38 &&
+		buf[8] == 0x50 && buf[9] == 0x90 { // eos magic, happens only for an empty bz2 file.
+		return true
+	}
+	return true
+}
+
+func isGzipHeader(buf []byte) bool {
+	if len(buf) < 10 {
+		return false
+	}
+	if !(buf[0] == 0x1f && buf[1] == 0x8b) {
+		return false
+	}
+	if !(buf[2] <= 3 || buf[2] == 8) {
+		return false
+	}
+	if (buf[3] & 0xc0) != 0 {
+		return false
+	}
+	if !(buf[9] <= 0xd || buf[9] == 0xff) {
+		return false
+	}
+	return true
+}
+
+// NewReader creates an uncompressing reader by reading the first few bytes of
+// the input and finding a magic header for either gzip or bzip2. If the magic
+// header is found , it returns an uncompressing ReadCloser and true. Else, it
+// returns ioutil.NopCloser(r) and false.
+//
+// CAUTION: this function will misbehave when the input is a binary string that
+// happens to have the same magic gzip or bzip2 header.  Thus, you should use
+// this function only when the input is expected to be ASCII.
+func NewReader(r io.Reader) (io.ReadCloser, bool) {
+	buf := bytes.Buffer{}
+	_, err := io.CopyN(&buf, r, 128)
+	var m io.Reader
+	switch err {
+	case io.EOF:
+		m = &buf
+	case nil:
+		m = io.MultiReader(&buf, r)
+	default:
+		m = io.MultiReader(&buf, &errorReader{err})
+	}
+	if isGzipHeader(buf.Bytes()) {
+		z, err := zlibng.NewReader(m)
+		if err != nil {
+			return &errorReader{err}, false
+		}
+		return z, true
+	}
+	if isBzip2Header(buf.Bytes()) {
+		return ioutil.NopCloser(bzip2.NewReader(m)), true
+	}
+	return ioutil.NopCloser(m), false
+}
 
 // NewReaderPath creates a reader that uncompresses data read from the given
 // reader.  The compression format is determined by the pathname extensions. The
