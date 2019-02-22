@@ -54,7 +54,7 @@ func setupEc2Blesser(s *session.Session, table string) {
 
 	want := dynamodb.ErrCodeResourceNotFoundException
 	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != want {
-		vlog.Fatal("unexpected error: got %+v, want %+v", err, want)
+		vlog.Fatalf("unexpected error: got %+v, want %+v", err, want)
 	}
 
 	_, err = client.CreateTable(&dynamodb.CreateTableInput{

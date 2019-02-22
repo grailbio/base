@@ -24,7 +24,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
 	admin "google.golang.org/api/admin/directory/v1"
-	"v.io/v23"
+	v23 "v.io/v23"
 	"v.io/v23/context"
 	"v.io/v23/glob"
 	"v.io/v23/naming"
@@ -38,9 +38,12 @@ import (
 )
 
 var (
-	nameFlag      string
-	configDirFlag string
-	regionFlag    string
+	nameFlag             string
+	configDirFlag        string
+	regionFlag           string
+	googleUserSufixFlag  string
+	googleGroupSufixFlag string
+	googleAdminNameFlag  string
 
 	dryrunFlag bool
 
@@ -81,6 +84,11 @@ certificate + the private key and the URL to reach the Docker daemon.
 	root.Flags.BoolVar(&ec2DisableAddrCheckFlag, "danger-danger-danger-ec2-disable-address-check", false, "Disable the IP address check for the EC2-based blessings requests. Only useful for local tests.")
 	root.Flags.BoolVar(&ec2DisableUniquenessCheckFlag, "danger-danger-danger-ec2-disable-uniqueness-check", false, "Disable the uniqueness check for the EC2-based blessings requests. Only useful for local tests.")
 	root.Flags.BoolVar(&ec2DisablePendingTimeCheckFlag, "danger-danger-danger-ec2-disable-pending-time-check", false, "Disable the pendint time check for the EC2-based blessings requests. Only useful for local tests.")
+
+	root.Flags.StringVar(&googleUserSufixFlag, "google-user-domain", "grailbio.com", "Google domain used for validating users")
+	root.Flags.StringVar(&googleGroupSufixFlag, "google-group-domain", "grailbio.com", "Google domain used for matching supported groups")
+	root.Flags.StringVar(&googleAdminNameFlag, "google-admin", "admin@grailbio.com", "Google Admin that can read all group memberhsips")
+
 	return root
 }
 
@@ -93,7 +101,7 @@ type node struct {
 
 var _ rpc.AllGlobber = (*node)(nil)
 
-func (n *node) Glob__(ctx *context.T, call rpc.GlobServerCall, g *glob.Glob) error {
+func (n *node) Glob__(ctx *context.T, call rpc.GlobServerCall, g *glob.Glob) error { // nolint: golint
 	vlog.Infof("Glob: %+v len: %d tail: %+v recursive: %+v restricted: %+v", g, g.Len(), g.Tail(), g.Recursive(), g.Restricted())
 
 	sender := call.SendStream()
@@ -200,7 +208,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	// Note that the blesser/ endpoints are not exposed via Glob__ and the
 	// permissions are governed by the -v23.permissions.{file,literal} flags.
 	d.registry["blesser/google"] = entry{
-		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag)),
+		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag, googleUserSufixFlag)),
 		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}
 	if ec2BlesserRoleFlag != "" {
@@ -211,7 +219,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	}
 
 	for k, v := range cfg {
-		auth := googleGroupsAuthorizer(v.Perms, jwtConfig)
+		auth := googleGroupsAuthorizer(v.Perms, jwtConfig, googleAdminNameFlag, googleUserSufixFlag, googleGroupSufixFlag)
 		vlog.Infof("registry add: %q perms: %+v", k, auth)
 		parts := strings.Split(k, "/")
 		n := d.root
@@ -280,7 +288,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	jwtConfig, err := google.JWTConfigFromJSON(serviceAccountJSON, admin.AdminDirectoryGroupMemberReadonlyScope)
+	jwtConfig, err := google.JWTConfigFromJSON(serviceAccountJSON, admin.AdminDirectoryGroupMemberReadonlyScope+" "+admin.AdminDirectoryGroupReadonlyScope)
 	if err != nil {
 		return err
 	}

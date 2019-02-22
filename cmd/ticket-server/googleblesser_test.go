@@ -10,6 +10,8 @@ import (
 )
 
 func TestCheckClaims(t *testing.T) {
+	googleBlesserInit("grailbio.com")
+
 	cases := []struct {
 		claims    claims
 		errPrefix string

@@ -12,6 +12,9 @@ import (
 )
 
 func TestEmail(t *testing.T) {
+	googleBlesserInit("grailbio.com")
+	googleGroupsInit("grailbio.com", "grailbio.com")
+
 	cases := []struct {
 		blessing string
 		email    string
@@ -35,6 +38,9 @@ func TestEmail(t *testing.T) {
 }
 
 func TestGroup(t *testing.T) {
+	googleBlesserInit("grailbio.com")
+	googleGroupsInit("grailbio.com", "grailbio.com")
+
 	cases := []struct {
 		blessing string
 		email    string
@@ -58,6 +64,9 @@ func TestGroup(t *testing.T) {
 }
 
 func TestAclIncludes(t *testing.T) {
+	googleBlesserInit("grailbio.com")
+	googleGroupsInit("grailbio.com", "grailbio.com")
+
 	cases := []struct {
 		acl  access.AccessList
 		want bool

@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -22,14 +21,18 @@ const (
 	issuer   = "https://accounts.google.com"
 	audience = "27162366543-edih9cqc3t8p5hn9ord1k1n7h4oajfhm.apps.googleusercontent.com"
 
-	// TODO(razvanm): add support for 'grail.com'.
-	hostedDomain = "grailbio.com"
-	emailSuffix  = "@grailbio.com"
-
 	extensionPrefix = "google"
 )
 
-var extensionRE = regexp.MustCompile(strings.Join([]string{extensionPrefix, fmt.Sprintf("([a-z0-9]+%s)", emailSuffix)}, security.ChainSeparator))
+var (
+	hostedDomain string
+	emailSuffix  string
+)
+
+func googleBlesserInit(domain string) {
+	hostedDomain = domain
+	emailSuffix = "@" + domain
+}
 
 func (c *claims) checkClaims() error {
 	if !c.EmailVerified {
@@ -58,7 +61,9 @@ type googleBlesser struct {
 	expirationInterval time.Duration
 }
 
-func newGoogleBlesser(expiration time.Duration) *googleBlesser {
+func newGoogleBlesser(expiration time.Duration, domain string) *googleBlesser {
+	googleBlesserInit(domain)
+
 	provider, err := oidc.NewProvider(context.Background(), issuer)
 	if err != nil {
 		vlog.Fatal(err)
