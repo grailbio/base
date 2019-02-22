@@ -20,12 +20,15 @@ func TestEmail(t *testing.T) {
 		email    string
 	}{
 		{"v23.grail.com:google:razvanm@grailbio.com", "razvanm@grailbio.com"},
+		{"v23.grail.com:google:razvanm@grailbio.com:_role", "razvanm@grailbio.com"},
 		{"v23.grail.com:google:razvanm@gmail.com", ""},
 		{"v23.grail.com:google:razvanm@", ""},
 		{"v23.grail.com:google:razvanm", ""},
 		{"v23.grail.com:google", ""},
 		{"v23.grail.com:xxx:razvanm@grailbio.com", ""},
 		{"v23.grail.com:googlegroups:eng@grailbio.com", ""},
+		{"v23.grail.com:googlegroups:golang-nuts@googlegroups.com:google:razvanm@grailbio.com", ""},
+		{"v23.grail.com:googlegroups:eng@grailbio.com:google:razvanm@grailbio.com", ""},
 	}
 
 	prefix := "v23.grail.com"
@@ -52,6 +55,8 @@ func TestGroup(t *testing.T) {
 		{"v23.grail.com:googlegroups", ""},
 		{"v23.grail.com:xxx:eng@grailbio.com", ""},
 		{"v23.grail.com:google:razvanm@grailbio.com", ""},
+		{"v23.grail.com:google:razvanm@grailbio.com:googlegroups:golang-nuts@googlegroups.com", ""},
+		{"v23.grail.com:google:razvanm@grailbio.com:googlegroups:eng@grailbio.com", ""},
 	}
 
 	prefix := "v23.grail.com"
