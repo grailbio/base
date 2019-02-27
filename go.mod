@@ -28,7 +28,7 @@ require (
 	golang.org/x/net v0.0.0-20181201002055-351d144fa1fc
 	golang.org/x/oauth2 v0.0.0-20181128211412-28207608b838
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
-	golang.org/x/sys v0.0.0-20190124100055-b90733256f2e
+	golang.org/x/sys v0.0.0-20190226215855-775f8194d0f9
 	google.golang.org/api v0.0.0-20181129220737-af4fc4062c26
 	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
