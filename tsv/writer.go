@@ -87,6 +87,14 @@ func (w *Writer) WritePartialBytes(s []byte) {
 	w.line = append(w.line, s...)
 }
 
+// WritePartialUint32 converts the given uint32 to a string, and appends that
+// WITHOUT the usual subsequent tab.  It must be followed by a non-Partial
+// Write at some point to end the field; otherwise EndLine will clobber the
+// last character.
+func (w *Writer) WritePartialUint32(ui uint32) {
+	w.line = strconv.AppendUint(w.line, uint64(ui), 10)
+}
+
 // WriteCsvUint32 converts the given uint32 to a string, and appends that and a
 // comma to the current line.
 func (w *Writer) WriteCsvUint32(ui uint32) {
