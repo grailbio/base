@@ -286,8 +286,7 @@ type lsOpts struct {
 func runLs(out io.Writer, args []string, opts lsOpts) error {
 	type result struct {
 		err   error
-		lines []string      // list of entries found for an arg.
-		done  chan struct{} // binary semaphore.
+		lines chan string // stream of entries found for an arg, closed when done
 	}
 	longOutput := func(path string, info file.Info) string {
 		// TODO(saito) prettyprint
@@ -298,15 +297,15 @@ func runLs(out io.Writer, args []string, opts lsOpts) error {
 	args = expandGlobs(ctx, args)
 	results := make([]result, len(args))
 	for i := range args {
-		results[i].done = make(chan struct{})
+		results[i].lines = make(chan string, 10000)
 		go func(path string, r *result) {
-			defer func() { r.done <- struct{}{} }()
+			defer close(r.lines)
 			// Check if the file is a regular file
 			if info, err := file.Stat(ctx, path); err == nil {
 				if opts.longOutput {
-					r.lines = []string{longOutput(path, info)}
+					r.lines <- longOutput(path, info)
 				} else {
-					r.lines = []string{path}
+					r.lines <- path
 				}
 				return
 			}
@@ -314,11 +313,11 @@ func runLs(out io.Writer, args []string, opts lsOpts) error {
 			for lister.Scan() {
 				switch {
 				case lister.IsDir():
-					r.lines = append(r.lines, lister.Path()+"/")
+					r.lines <- lister.Path() + "/"
 				case opts.longOutput:
-					r.lines = append(r.lines, longOutput(lister.Path(), lister.Info()))
+					r.lines <- longOutput(lister.Path(), lister.Info())
 				default:
-					r.lines = append(r.lines, lister.Path())
+					r.lines <- lister.Path()
 				}
 			}
 			r.err = lister.Err()
@@ -327,13 +326,11 @@ func runLs(out io.Writer, args []string, opts lsOpts) error {
 	// Print the results in order.
 	var err error
 	for i := range results {
-		r := &results[i]
-		<-r.done
-		for _, line := range r.lines {
-			fmt.Fprintln(out, line) // nolint: errcheck
+		for line := range results[i].lines {
+			_, _ = fmt.Fprintln(out, line)
 		}
-		if r.err != nil && err == nil {
-			err = r.err
+		if err2 := results[i].err; err2 != nil && err == nil {
+			err = err2
 		}
 	}
 	return err
