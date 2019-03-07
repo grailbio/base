@@ -45,7 +45,7 @@ type File interface {
 	// files opened for reading. Exactly one of Discard or Close should
 	// be called. No other File, io.ReadSeeker, or io.Writer methods
 	// shall be called after Discard.
-	Discard(ctx context.Context) error
+	Discard(ctx context.Context)
 
 	// Closer commits the contents of a written file, invalidating the
 	// File and all Readers and Writers created from the file. Exactly

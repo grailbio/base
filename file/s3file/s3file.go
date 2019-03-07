@@ -435,14 +435,13 @@ func (f *s3File) Close(ctx context.Context) error {
 	return err
 }
 
-func (f *s3File) Discard(ctx context.Context) error {
+func (f *s3File) Discard(ctx context.Context) {
 	if f.mode != writeonly {
-		return fmt.Errorf("discard %v: file is not opened in write mode", f.name)
+		return
 	}
-	err := f.runRequest(ctx, request{reqType: abortRequest}).err
+	_ = f.runRequest(ctx, request{reqType: abortRequest})
 	close(f.reqCh)
 	f.provider = nil
-	return err
 }
 
 func (f *s3File) String() string {

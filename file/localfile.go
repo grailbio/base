@@ -137,19 +137,17 @@ func (f *localFile) close(_ context.Context, doSync bool) error {
 }
 
 // Discard implements file.File.
-func (f *localFile) Discard(ctx context.Context) error {
+func (f *localFile) Discard(ctx context.Context) {
 	switch f.mode {
-	case readonly:
-		return fmt.Errorf("discard %s: file is not opened in write mode", f.Name())
-	case writeonlyDev:
-		return fmt.Errorf("discard %s: cannot discard writes to devices or sockets", f.Name())
+	case readonly, writeonlyDev:
+		return
 	}
-	err := f.f.Close()
-	e2 := os.Remove(f.f.Name())
-	if e2 != nil && err == nil {
-		err = e2
+	if err := f.f.Close(); err != nil {
+		log.Printf("discard %s: close: %v", f.Name(), err)
 	}
-	return err
+	if err := os.Remove(f.f.Name()); err != nil {
+		log.Printf("discard %s: remove: %v", f.Name(), err)
+	}
 }
 
 // String implements file.File.

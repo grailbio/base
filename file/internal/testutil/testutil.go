@@ -227,9 +227,7 @@ func TestDiscard(ctx context.Context, t *testing.T, impl file.Implementation, di
 	assert.NoError(t, err)
 
 	// Discard, and then make sure it doesn't exist.
-	err = f.Discard(ctx)
-	assert.NoError(t, err)
-
+	f.Discard(ctx)
 	if fileExists(ctx, impl, path) {
 		t.Errorf("path %s exists after call to discard", path)
 	}
