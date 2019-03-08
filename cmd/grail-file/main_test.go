@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grailbio/base/cmd/grail-file/cmd"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/testutil"
 	"github.com/stretchr/testify/assert"
@@ -22,9 +23,9 @@ func readFile(path string) string {
 }
 
 func TestLs(t *testing.T) {
-	doLs := func(dir string, opts lsOpts) []string {
+	doLs := func(args ...string) []string {
 		out := bytes.Buffer{}
-		assert.NoError(t, runLs(&out, []string{dir}, opts))
+		assert.NoError(t, cmd.Ls(context.Background(), &out, args))
 		s := strings.Split(strings.TrimSpace(out.String()), "\n")
 		sort.Strings(s)
 		return s
@@ -40,17 +41,17 @@ func TestLs(t *testing.T) {
 	assert.NoError(t, file.WriteFile(ctx, path1, []byte("1")))
 	assert.Equal(t,
 		[]string{tmpDir + "/0.txt", tmpDir + "/d/"},
-		doLs(tmpDir, lsOpts{}))
+		doLs(tmpDir))
 	assert.Equal(t,
 		[]string{tmpDir + "/0.txt", tmpDir + "/d/1.txt"},
-		doLs(tmpDir, lsOpts{recursive: true}))
+		doLs("-R", tmpDir))
 
-	s := doLs(tmpDir, lsOpts{longOutput: true})
+	s := doLs("-l", tmpDir)
 	assert.Equal(t, 2, len(s))
 	assert.Regexp(t, tmpDir+"/0.txt\t1\t20.*", s[0])
 	assert.Equal(t, tmpDir+"/d/", s[1])
 
-	s = doLs(tmpDir, lsOpts{longOutput: true, recursive: true})
+	s = doLs("-l", "-R", tmpDir)
 	assert.Equal(t, 2, len(s))
 	assert.Regexp(t, tmpDir+"/0.txt\t1\t20.*", s[0])
 	assert.Regexp(t, tmpDir+"/d/1.txt\t1\t20.*", s[1])
@@ -70,23 +71,23 @@ func TestCp(t *testing.T) {
 
 	// "cp xxx yyy", where yyy doesn't exist.
 	dstPath := file.Join(tmpDir, "d0.txt")
-	assert.NoError(t, runCp([]string{src0Path, dstPath}, cprmOpts{}))
+	assert.NoError(t, cmd.Cp(ctx, os.Stdout, []string{src0Path, dstPath}))
 	assert.Equal(t, expected0, readFile(dstPath))
 
 	// "cp x0 x1 yyy", where yyy doesn't exist
 	dstPath = file.Join(tmpDir, "d1")
-	assert.NoError(t, runCp([]string{src0Path, src1Path, dstPath}, cprmOpts{}))
+	assert.NoError(t, cmd.Cp(ctx, os.Stdout, []string{src0Path, src1Path, dstPath}))
 	assert.Equal(t, expected0, readFile(file.Join(dstPath, "tmp0.txt")))
 	assert.Equal(t, expected1, readFile(file.Join(dstPath, "tmp1.txt")))
 
 	// Try "cp xxx yyy/", where yyy doesn't exist. Cp should create file yyy/xxx.
 	dstDir := file.Join(tmpDir, "testdir0")
-	assert.NoError(t, runCp([]string{src0Path, dstDir + "/"}, cprmOpts{}))
+	assert.NoError(t, cmd.Cp(ctx, os.Stdout, []string{src0Path, dstDir + "/"}))
 	assert.Equal(t, expected0, readFile(file.Join(dstDir, "tmp0.txt")))
 
 	dstDir = tmpDir + "/d2"
 	assert.NoError(t, os.Mkdir(dstDir, 0700))
-	assert.NoError(t, runCp([]string{src0Path, dstDir}, cprmOpts{}))
+	assert.NoError(t, cmd.Cp(ctx, os.Stdout, []string{src0Path, dstDir}))
 	assert.Equal(t, expected0, readFile(file.Join(dstDir, "tmp0.txt")))
 }
 
@@ -106,7 +107,7 @@ func TestCpRecursive(t *testing.T) {
 	assert.NoError(t, file.WriteFile(ctx, srcDir+path1, []byte(expected1)))
 	assert.NoError(t, file.WriteFile(ctx, srcDir+path2, []byte(expected2)))
 	dstDir := file.Join(tmpDir, "dir1")
-	assert.NoError(t, runCp([]string{srcDir, dstDir}, cprmOpts{recursive: true}))
+	assert.NoError(t, cmd.Cp(ctx, os.Stdout, []string{"-R", srcDir, dstDir}))
 	assert.Equal(t, expected0, readFile(dstDir+path0))
 	assert.Equal(t, expected1, readFile(dstDir+path1))
 	assert.Equal(t, expected2, readFile(dstDir+path2))
@@ -127,12 +128,12 @@ func TestRm(t *testing.T) {
 	assert.Equal(t, "1", readFile(src1Path))
 	assert.Equal(t, "2", readFile(src2Path))
 
-	assert.NoError(t, runRm([]string{src0Path, src1Path}, cprmOpts{}))
+	assert.NoError(t, cmd.Rm(ctx, os.Stdout, []string{src0Path, src1Path}))
 	assert.Regexp(t, "no such file", readFile(src0Path))
 	assert.Regexp(t, "no such file", readFile(src1Path))
 	assert.Equal(t, "2", readFile(src2Path))
 
-	assert.NoError(t, runRm([]string{src2Path}, cprmOpts{}))
+	assert.NoError(t, cmd.Rm(ctx, os.Stdout, []string{src2Path}))
 	assert.Regexp(t, "no such file", readFile(src0Path))
 	assert.Regexp(t, "no such file", readFile(src1Path))
 	assert.Regexp(t, "no such file", readFile(src2Path))
@@ -149,53 +150,8 @@ func TestRmRecursive(t *testing.T) {
 	assert.NoError(t, file.WriteFile(ctx, src1Path, []byte("1")))
 	assert.NoError(t, file.WriteFile(ctx, src2Path, []byte("2")))
 
-	assert.NoError(t, runRm([]string{file.Join(tmpDir, "dir/dir2")}, cprmOpts{recursive: true}))
+	assert.NoError(t, cmd.Rm(ctx, os.Stdout, []string{"-R", file.Join(tmpDir, "dir/dir2")}))
 	assert.Equal(t, "0", readFile(src0Path))
 	assert.Regexp(t, "no such file", readFile(src1Path))
 	assert.Regexp(t, "no such file", readFile(src2Path))
-}
-
-func TestParseGlob(t *testing.T) {
-	doParse := func(str string) string {
-		prefix, hasGlob := parseGlob(str)
-		if !hasGlob {
-			return "none"
-		}
-		return prefix
-	}
-	assert.Equal(t, "none", doParse("s3://a/b/c"))
-	assert.Equal(t, "none", doParse("s3://a/b\\*/c"))
-	assert.Equal(t, "s3://a/", doParse("s3://a/b*/c"))
-	assert.Equal(t, "s3://a/b/", doParse("s3://a/b/*"))
-	assert.Equal(t, "s3://a/", doParse("s3://a/b?"))
-	assert.Equal(t, "s3://a/", doParse("s3://a/**/b"))
-	assert.Equal(t, "", doParse("**"))
-}
-
-func TestExpandGlob(t *testing.T) {
-	ctx := context.Background()
-	tmpDir, cleanup := testutil.TempDir(t, "", "")
-	defer cleanup()
-	src0Path := file.Join(tmpDir, "abc/def/tmp0")
-	src1Path := file.Join(tmpDir, "abd/efg/hij/tmp1")
-	src2Path := file.Join(tmpDir, "tmp0")
-	assert.NoError(t, file.WriteFile(ctx, src0Path, []byte("a")))
-	assert.NoError(t, file.WriteFile(ctx, src1Path, []byte("b")))
-	assert.NoError(t, file.WriteFile(ctx, src2Path, []byte("c")))
-
-	doExpand := func(str string) string {
-		matches := expandGlob(ctx, tmpDir+"/"+str)
-		for i := range matches {
-			matches[i] = matches[i][len(tmpDir)+1:] // remove the tmpDir part.
-		}
-		return strings.Join(matches, ",")
-	}
-
-	assert.Equal(t, "abc/def/tmp0", doExpand("abc/*/tmp0"))
-	assert.Equal(t, "xxx/yyy", doExpand("xxx/yyy"))
-	assert.Equal(t, "xxx/*", doExpand("xxx/*"))
-	assert.Equal(t, "abc/def/tmp0", doExpand("a*/*/tmp0"))
-	assert.Equal(t, "abd/efg/hij/tmp1", doExpand("abd/**/tmp*"))
-	assert.Equal(t, "abc/def/tmp0,abd/efg/hij/tmp1", doExpand("a*/**/tmp*"))
-	assert.Equal(t, "abc/def/tmp0,abd/efg/hij/tmp1,tmp0", doExpand("**"))
 }

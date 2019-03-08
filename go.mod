@@ -15,7 +15,7 @@ require (
 	github.com/google/gops v0.0.0-20171222022621-e09130d89827
 	github.com/grailbio/testutil v0.0.0-20190127023142-d3ae812e9a0e
 	github.com/grailbio/v23/factories/grail v0.0.0-20190119012339-40e7f427c0fd
-	github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1 // indirect
+	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc
 	github.com/klauspost/compress v1.4.1
 	github.com/klauspost/cpuid v1.2.0 // indirect

@@ -74,8 +74,8 @@ github.com/grpc-ecosystem/grpc-gateway v1.5.0/go.mod h1:RSKVYQBd5MCa4OVpNdGskqpg
 github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1/go.mod h1:E0B/fFc00Y+Rasa88328GlI/XbtyysCtTHZS8h7IrBU=
 github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af h1:pmfjZENx5imkbgOkpRUYLnmbU7UEFbjtDA2hxJ1ichM=
 github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af/go.mod h1:Nht3zPeWKUH0NzdCt2Blrr5ys8VGpn0CEB0cQHVjt7k=
-github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1 h1:PJPDf8OUfOK1bb/NeTKd4f1QXZItOX389VN3B6qC8ro=
-github.com/kardianos/osext v0.0.0-20170510131534-ae77be60afb1/go.mod h1:1NbS8ALrpOvjt0rHPNLyCIeMtbizbir8U//inJ+zuB8=
+github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 h1:iQTw/8FWTuc7uiaSepXwyf3o52HaUYcV+Tu66S3F5GA=
+github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0/go.mod h1:1NbS8ALrpOvjt0rHPNLyCIeMtbizbir8U//inJ+zuB8=
 github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc h1:hsMxTKUbDWam6afrf6TFFBUCCGejgYQzIpwSe14WI4c=
 github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc/go.mod h1:JJNrCn9otv/2QP4D7SMJBgaleKpOf66PnW6F5WGNRIc=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
@@ -235,5 +235,3 @@ v.io v0.1.1 h1:mxdUbe3NlqJslEsjRfLcO7wPlJbCmkKwHY8u0RZUhe8=
 v.io v0.1.1/go.mod h1:kRArv3VozCUAWO4bVMJ9c2fnsULNj2b8avuiUiCGNfg=
 v.io/x/lib v0.1.1 h1:VGwk9xwWUuyBWngu/UbP00nhlGK+EJFkjE//zAElol0=
 v.io/x/lib v0.1.1/go.mod h1:xtLlxrW4beYGmGMZF4QPjgBA4DqwLj1dijfa8SsxmMU=
-v.io/x/ref/lib/flags/sitedefaults v0.1.1 h1:jAeEpnfOK5ddeqjqJPi2X5WgbeYkCA+ogawkJyDgZMI=
-v.io/x/ref/lib/flags/sitedefaults v0.1.1/go.mod h1:ew4Igo60KMBDYhnxH6l7P+qBCJiqR8PVp7fJJYGqILA=
