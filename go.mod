@@ -1,6 +1,7 @@
 module github.com/grailbio/base
 
 require (
+	cloud.google.com/go v0.36.0 // indirect
 	github.com/DataDog/zstd v1.3.4
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5
 	github.com/aws/aws-sdk-go v1.16.15
@@ -18,7 +19,6 @@ require (
 	github.com/keybase/go-keychain v0.0.0-20180801170200-15d3657f24fc
 	github.com/klauspost/compress v1.4.1
 	github.com/klauspost/cpuid v1.2.0 // indirect
-	github.com/kr/pretty v0.1.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/stretchr/testify v1.2.2
@@ -26,10 +26,10 @@ require (
 	github.com/yasushi-saito/zlibng v0.0.0-20190128191412-2ee128fff508
 	golang.org/x/crypto v0.0.0-20190103213133-ff983b9c42bc
 	golang.org/x/net v0.0.0-20181201002055-351d144fa1fc
-	golang.org/x/oauth2 v0.0.0-20181128211412-28207608b838
+	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
 	golang.org/x/sys v0.0.0-20190226215855-775f8194d0f9
-	google.golang.org/api v0.0.0-20181129220737-af4fc4062c26
+	google.golang.org/api v0.1.0
 	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/square/go-jose.v2 v2.2.2 // indirect
