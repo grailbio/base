@@ -186,6 +186,18 @@ func newRetryPolicy(clients []s3iface.S3API) retryPolicy {
 	return retryPolicy{clients: clients, policy: BackoffPolicy}
 }
 
+// Retriable errors not listed in aws' retry policy.
+func otherRetriableError(err error) bool {
+	aerr, ok := err.(awserr.Error)
+	if !ok {
+		return false
+	}
+	return aerr.Code() == awsrequest.ErrCodeSerialization ||
+		aerr.Code() == awsrequest.ErrCodeRead ||
+		aerr.Code() == "SlowDown" ||
+		aerr.Code() == "InternalError"
+}
+
 // client returns the s3 client to be use by the caller.
 func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 
@@ -195,6 +207,16 @@ func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 	if err == nil {
 		return false
+	}
+	if awsrequest.IsErrorRetryable(err) || awsrequest.IsErrorThrottle(err) || otherRetriableError(err) {
+		// Transient errors. Retry with the same client.
+		if retry.Wait(ctx, r.policy, r.retries) != nil {
+			// Context timeout or cancellation
+			r.clients = nil
+			return false
+		}
+		r.retries++
+		return true
 	}
 	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
@@ -206,15 +228,6 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 			// GetObject seems to return this error rather ErrCodeNoSuchKey
 			r.clients = nil
 			return false
-		case awsrequest.ErrCodeSerialization, awsrequest.ErrCodeRead, "SlowDown", "InternalError":
-			// Transient errors. Retry with the same client.
-			if retry.Wait(ctx, r.policy, r.retries) != nil {
-				// Context timeout or cancellation
-				r.clients = nil
-				return false
-			}
-			r.retries++
-			return true
 		default:
 			// Possible cases:
 			//
