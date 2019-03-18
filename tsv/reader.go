@@ -36,18 +36,22 @@ type Reader struct {
 	// be set before reading any data.
 	HasHeaderRow bool
 
-	// ValidateHeader causes the reader to check that the column names listed in
-	// the header row matches the struct fields passed to Read. An error will be
-	// reported through Read(). It must be set before reading any data.
+	// UseHeaderNames causes the reader to set struct fields by matching column
+	// names to struct field names (or `tsv` tag). It must be set before reading
+	// any data.
+	//
+	// If not set, struct fields are filled in order, EVEN IF HasHeaderRow=true.
+	// If set, all struct fields must have a corresponding column in the file.
+	// An error will be reported through Read().
 	//
 	// REQUIRES: HasHeaderRow=true
-	ValidateHeader bool
+	UseHeaderNames bool
 
-	// DisallowUnparsedColumns causes Read() report an error if there are columns
+	// RequireParseAllColumns causes Read() report an error if there are columns
 	// not listed in the passed-in struct. It must be set before reading any data.
 	//
 	// REQUIRES: HasHeaderRow=true
-	DisallowUnparsedColumns bool
+	RequireParseAllColumns bool
 
 	nRow int // # of rows read so far, excluding the header.
 
@@ -70,7 +74,7 @@ func NewReader(in io.Reader) *Reader {
 }
 
 func (r *Reader) validateRowFormat(format rowFormat) error {
-	if r.DisallowUnparsedColumns && len(format) != len(r.columnIndex) {
+	if r.RequireParseAllColumns && len(format) != len(r.columnIndex) {
 		return fmt.Errorf("extra columns found in %+v", r.columnIndex)
 	}
 	for i := range format {
@@ -133,7 +137,7 @@ func (r *Reader) wrapError(err error, col columnFormat) error {
 // struct, and format defines the struct format.
 func (r *Reader) fillRow(val interface{}, row []string) error {
 	dest := reflect.ValueOf(val).Pointer()
-	if r.DisallowUnparsedColumns && len(r.cachedRowFormat) != len(row) { // check this for headerless TSVs
+	if r.RequireParseAllColumns && len(r.cachedRowFormat) != len(row) { // check this for headerless TSVs
 		return fmt.Errorf("extra columns found in %+v", r.cachedRowFormat)
 	}
 
@@ -259,10 +263,10 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 //  err := r.Read(&v)
 //
 //
-// - If !Reader.HasHeaderRow or !Reader.ValidateHeader, the N-th column (base
+// - If !Reader.HasHeaderRow or !Reader.UseHeaderNames, the N-th column (base
 //   zero) will be parsed into the N-th field in the struct.
 //
-// - If Reader.HasHeaderRow and Reader.ValidateHeader, then the struct's field
+// - If Reader.HasHeaderRow and Reader.UseHeaderNames, then the struct's field
 //   name must match one of the column names listed in the first row in the TSV
 //   input. The contents of the column with the matching name will be parsed
 //   into the struct field. By default, the column name is the struct's field
@@ -309,7 +313,7 @@ func (r *Reader) Read(v interface{}) error {
 		if err != nil {
 			return err
 		}
-		if r.ValidateHeader {
+		if r.UseHeaderNames {
 			if err = r.validateRowFormat(rowFormat); err != nil {
 				return err
 			}

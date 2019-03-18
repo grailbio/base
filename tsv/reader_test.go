@@ -153,7 +153,7 @@ key0	1	0.5
 key1	2	1.5
 `)))
 	r.HasHeaderRow = true
-	r.ValidateHeader = true
+	r.UseHeaderNames = true
 	var v row
 	assert.NoError(t, r.Read(&v))
 	expect.EQ(t, v, row{"", 0, 1})
@@ -170,9 +170,43 @@ func TestReadExtraColumns(t *testing.T) {
 	r := tsv.NewReader(bytes.NewReader([]byte(`key1	2	22
 key2	3	33
 `)))
-	r.DisallowUnparsedColumns = true
+	r.RequireParseAllColumns = true
 	var v row
 	expect.Regexp(t, r.Read(&v), "extra columns found")
+}
+
+func TestReadDisallowExtraNamedColumns(t *testing.T) {
+	type row struct {
+		ColA string
+		ColB int
+	}
+	r := tsv.NewReader(bytes.NewReader([]byte(`ColA	ColB	ColC
+key1	2	22
+key2	3	33
+`)))
+	r.HasHeaderRow = true
+	r.UseHeaderNames = true
+	r.RequireParseAllColumns = true
+	var v row
+	expect.Regexp(t, r.Read(&v), "extra columns found")
+}
+
+func TestReadAllowExtraNamedColumns(t *testing.T) {
+	type row struct {
+		ColB int
+		ColA string
+	}
+	r := tsv.NewReader(bytes.NewReader([]byte(`ColA	ColB	ColC
+key1	2	22
+key2	3	33
+`)))
+	r.HasHeaderRow = true
+	r.UseHeaderNames = true
+	var v row
+	expect.NoError(t, r.Read(&v))
+	expect.EQ(t, v, row{2, "key1"})
+	expect.NoError(t, r.Read(&v))
+	expect.EQ(t, v, row{3, "key2"})
 }
 
 func TestReadParseError(t *testing.T) {
@@ -243,7 +277,7 @@ key0	0	0.5
 key1	1	1.5
 `)))
 	r.HasHeaderRow = true
-	r.ValidateHeader = true
+	r.UseHeaderNames = true
 	fmt.Printf("%+v\n", readRow(r))
 	fmt.Printf("%+v\n", readRow(r))
 
@@ -276,7 +310,7 @@ key0	0	0.5
 key1	1	1.5
 `)))
 	r.HasHeaderRow = true
-	r.ValidateHeader = true
+	r.UseHeaderNames = true
 	fmt.Printf("%+v\n", readRow(r))
 	fmt.Printf("%+v\n", readRow(r))
 
