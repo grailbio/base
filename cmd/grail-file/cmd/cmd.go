@@ -6,14 +6,13 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/gobwas/glob"
 	"github.com/gobwas/glob/syntax"
 	"github.com/gobwas/glob/syntax/ast"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
-	"github.com/grailbio/base/traverse"
-	"golang.org/x/sync/errgroup"
 )
 
 var commands = []struct {
@@ -62,24 +61,34 @@ func Run(ctx context.Context, args []string) error {
 	return errors.E("unknown command", args[0])
 }
 
-var parallel = traverse.Limit(16)
+const parallelism = 128
 
 // forEachFile runs the callback for every file under the directory in
 // parallel. It returns any of the errors returned by the callback.
 func forEachFile(ctx context.Context, dir string, callback func(path string) error) error {
-	eg, egCtx := errgroup.WithContext(ctx)
-	lister := file.List(egCtx, dir, true /*recursive*/)
+	err := errors.Once{}
+	wg := sync.WaitGroup{}
+	ch := make(chan string, parallelism*100)
+	for i := 0; i < parallelism; i++ {
+		wg.Add(1)
+		go func() {
+			for path := range ch {
+				err.Set(callback(path))
+			}
+			wg.Done()
+		}()
+	}
+
+	lister := file.List(ctx, dir, true /*recursive*/)
 	for lister.Scan() {
 		if !lister.IsDir() {
-			path := lister.Path()
-			eg.Go(func() error { return callback(path) })
+			ch <- lister.Path()
 		}
 	}
-	err := eg.Wait()
-	if e := lister.Err(); e != nil && err == nil {
-		err = e
-	}
-	return err
+	close(ch)
+	err.Set(lister.Err())
+	wg.Wait()
+	return err.Err()
 }
 
 // parseGlob parses a string that potentially contains glob metacharacters, and

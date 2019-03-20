@@ -11,6 +11,7 @@ import (
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/traverse"
 )
 
 func Cp(ctx context.Context, out io.Writer, args []string) error {
@@ -89,7 +90,7 @@ func Cp(ctx context.Context, out io.Writer, args []string) error {
 		}
 		return copyFileInDir(srcs[0], dst)
 	}
-	return parallel.Each(len(srcs), func(i int) error {
+	return traverse.Limit(parallelism).Each(len(srcs), func(i int) error {
 		return copyFileInDir(srcs[i], dst)
 	})
 }
