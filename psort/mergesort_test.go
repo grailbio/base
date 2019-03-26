@@ -1,6 +1,7 @@
 package psort
 
 import (
+	"fmt"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -78,5 +79,95 @@ func TestSlice(t *testing.T) {
 				t.Errorf("Wrong sort result: want %v\n, got %v\n", expected, in)
 			}
 		}
+	}
+}
+
+func BenchmarkSlice(b *testing.B) {
+	tests := []struct {
+		size        int
+		parallelism int //parallelism = 0 means use sort.Slice() sort
+	}{
+		{
+			size:        100000000,
+			parallelism: 4096,
+		},
+		{
+			size:        100000000,
+			parallelism: 2048,
+		},
+		{
+			size:        100000000,
+			parallelism: 1024,
+		},
+		{
+			size:        100000000,
+			parallelism: 512,
+		},
+		{
+			size:        100000000,
+			parallelism: 256,
+		},
+		{
+			size:        100000000,
+			parallelism: 128,
+		},
+		{
+			size:        100000000,
+			parallelism: 64,
+		},
+		{
+			size:        100000000,
+			parallelism: 32,
+		},
+		{
+			size:        100000000,
+			parallelism: 16,
+		},
+		{
+			size:        100000000,
+			parallelism: 8,
+		},
+		{
+			size:        100000000,
+			parallelism: 4,
+		},
+		{
+			size:        100000000,
+			parallelism: 2,
+		},
+		{
+			size:        100000000,
+			parallelism: 1,
+		},
+		{
+			size:        100000000,
+			parallelism: 0,
+		},
+	}
+
+	for _, test := range tests {
+		b.Run(fmt.Sprintf("size:%d-%d", test.size, test.parallelism), func(b *testing.B) {
+			data := make([]float64, test.size)
+			r := rand.New(rand.NewSource(0))
+			dataCopy := make([]float64, len(data))
+			for i := range data {
+				data[i] = r.Float64()
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				copy(dataCopy, data)
+				b.StartTimer()
+				if test.parallelism == 0 {
+					sort.Slice(dataCopy, func(i, j int) bool {
+						return dataCopy[i] < dataCopy[j]
+					})
+				} else {
+					Slice(dataCopy, func(i, j int) bool {
+						return dataCopy[i] < dataCopy[j]
+					}, test.parallelism)
+				}
+			}
+		})
 	}
 }

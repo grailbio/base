@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+
+	"github.com/grailbio/base/traverse"
 )
 
 const (
@@ -32,15 +34,24 @@ func Slice(slice interface{}, less func(i, j int) bool, parallelism int) {
 	for i := range perm {
 		perm[i] = i
 	}
-	mergeSort(perm, less, parallelism)
+	scratch := make([]int, len(perm))
+	mergeSort(perm, less, parallelism, scratch)
 	result := reflect.MakeSlice(rv.Type(), rv.Len(), rv.Len())
-	for i := range perm {
-		result.Index(i).Set(rv.Index(perm[i]))
-	}
-	reflect.Copy(rv, result)
+	_ = traverse.Limit(parallelism).Range(rv.Len(), func(start, end int) error {
+		for i := start; i < end; i++ {
+			result.Index(i).Set(rv.Index(perm[i]))
+		}
+		return nil
+	})
+	_ = traverse.Limit(parallelism).Range(rv.Len(), func(start, end int) error {
+		for i := start; i < end; i++ {
+			rv.Index(i).Set(result.Index(i))
+		}
+		return nil
+	})
 }
 
-func mergeSort(perm []int, less func(i, j int) bool, parallelism int) {
+func mergeSort(perm []int, less func(i, j int) bool, parallelism int, scratch []int) {
 	if parallelism == 1 || len(perm) < serialThreshold {
 		sortSerial(perm, less)
 		return
@@ -53,14 +64,21 @@ func mergeSort(perm []int, less func(i, j int) bool, parallelism int) {
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(1)
 	go func() {
-		mergeSort(left, less, (parallelism+1)/2)
+		mergeSort(left, less, (parallelism+1)/2, scratch[:len(perm)/2])
 		waitGroup.Done()
 	}()
-	mergeSort(right, less, parallelism/2)
+	mergeSort(right, less, parallelism/2, scratch[len(perm)/2:])
 	waitGroup.Wait()
 
-	sorted := merge(left, right, less, parallelism)
-	copy(perm, sorted)
+	merge(left, right, less, parallelism, scratch)
+	parallelCopy(perm, scratch, parallelism)
+}
+
+func parallelCopy(dst, src []int, parallelism int) {
+	_ = traverse.Limit(parallelism).Range(len(dst), func(start, end int) error {
+		copy(dst[start:end], src[start:end])
+		return nil
+	})
 }
 
 func sortSerial(perm []int, less func(i, j int) bool) {
@@ -69,12 +87,12 @@ func sortSerial(perm []int, less func(i, j int) bool) {
 	})
 }
 
-func merge(perm1, perm2 []int, less func(i, j int) bool, parallelism int) []int {
+func merge(perm1, perm2 []int, less func(i, j int) bool, parallelism int, out []int) {
 	if parallelism == 1 || len(perm1)+len(perm2) < serialThreshold {
-		return mergeSerial(perm1, perm2, less)
+		mergeSerial(perm1, perm2, less, out)
+		return
 	}
 
-	out := make([]int, len(perm1)+len(perm2))
 	if len(perm1) < len(perm2) {
 		perm1, perm2 = perm2, perm1
 	}
@@ -88,18 +106,14 @@ func merge(perm1, perm2 []int, less func(i, j int) bool, parallelism int) []int 
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(1)
 	go func() {
-		merged := merge(perm1[:r], perm2[:s], less, (parallelism+1)/2)
-		copy(out[:r+s], merged)
+		merge(perm1[:r], perm2[:s], less, (parallelism+1)/2, out[:r+s])
 		waitGroup.Done()
 	}()
-	merged := merge(perm1[r:], perm2[s:], less, parallelism/2)
-	copy(out[r+s:], merged)
+	merge(perm1[r:], perm2[s:], less, parallelism/2, out[r+s:])
 	waitGroup.Wait()
-	return out
 }
 
-func mergeSerial(perm1, perm2 []int, less func(i, j int) bool) []int {
-	out := make([]int, len(perm1)+len(perm2))
+func mergeSerial(perm1, perm2 []int, less func(i, j int) bool, out []int) {
 	var idx1, idx2, idxOut int
 	for idx1 < len(perm1) && idx2 < len(perm2) {
 		if less(perm1[idx1], perm2[idx2]) {
@@ -121,5 +135,4 @@ func mergeSerial(perm1, perm2 []int, less func(i, j int) bool) []int {
 		idx2++
 		idxOut++
 	}
-	return out
 }
