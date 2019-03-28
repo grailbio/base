@@ -44,9 +44,7 @@ func Slice(slice interface{}, less func(i, j int) bool, parallelism int) {
 		return nil
 	})
 	_ = traverse.Limit(parallelism).Range(rv.Len(), func(start, end int) error {
-		for i := start; i < end; i++ {
-			rv.Index(i).Set(result.Index(i))
-		}
+		reflect.Copy(rv.Slice(start, end), result.Slice(start, end))
 		return nil
 	})
 }
