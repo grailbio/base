@@ -102,6 +102,13 @@ func (w *Writer) WriteCsvUint32(ui uint32) {
 	w.line = append(w.line, ',')
 }
 
+// WriteCsvByte appends the given literal byte (no number->string conversion)
+// and a comma to the current line.
+func (w *Writer) WriteCsvByte(b byte) {
+	w.line = append(w.line, b)
+	w.line = append(w.line, ',')
+}
+
 // (Other Csv functions will be added as they're needed.)
 
 // EndCsv finishes the current comma-separated field, converting the last comma
