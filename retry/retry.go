@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"math/rand"
 	"time"
 
@@ -62,7 +63,16 @@ func Backoff(initial, max time.Duration, factor float64) Policy {
 }
 
 func (b *backoff) Retry(retries int) (bool, time.Duration) {
-	wait := time.Duration(float64(b.initial) * math.Pow(b.factor, float64(retries)))
+	if retries < 0 {
+		panic("retries < 0")
+	}
+	// Use big.Float to handle overflow.
+	f := big.Float{}
+	f.SetFloat64(float64(b.initial) * math.Pow(b.factor, float64(retries)))
+	// We're not worried about the loss in accuracy in the conversion, as it's
+	// best-effort, so we ignore it.
+	ns, _ := f.Int64()
+	wait := time.Duration(ns)
 	if wait > b.max {
 		wait = b.max
 	}
