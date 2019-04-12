@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/big"
 	"math/rand"
 	"time"
 
@@ -51,10 +50,24 @@ type backoff struct {
 	initial, max time.Duration
 }
 
+// maxInt64Convertible is the maximum float64 that can be converted to an int64
+// accurately. We use this to prevent overflow when computing the exponential
+// backoff, which we compute with float64s. It is important that we push it
+// through float64 then int64 so that we get compilation error if we use a
+// value that cannot be represented as an int64. This value was produced with:
+//   math.Nextafter(float64(math.MaxInt64), 0)
+const maxInt64Convertible = int64(float64(9223372036854774784))
+
+// MaxBackoffMax is the maximum value that can be passed as max to Backoff.
+const MaxBackoffMax = time.Duration(maxInt64Convertible)
+
 // Backoff returns a Policy that initially waits for the amount of
 // time specified by parameter initial; on each try this value is
 // multiplied by the provided factor, up to the max duration.
 func Backoff(initial, max time.Duration, factor float64) Policy {
+	if max > MaxBackoffMax {
+		panic("max > MaxBackoffMax")
+	}
 	return &backoff{
 		initial: initial,
 		max:     max,
@@ -66,17 +79,9 @@ func (b *backoff) Retry(retries int) (bool, time.Duration) {
 	if retries < 0 {
 		panic("retries < 0")
 	}
-	// Use big.Float to handle overflow.
-	f := big.Float{}
-	f.SetFloat64(float64(b.initial) * math.Pow(b.factor, float64(retries)))
-	// We're not worried about the loss in accuracy in the conversion, as it's
-	// best-effort, so we ignore it.
-	ns, _ := f.Int64()
-	wait := time.Duration(ns)
-	if wait > b.max {
-		wait = b.max
-	}
-	return true, wait
+	nsfloat64 := float64(b.initial) * math.Pow(b.factor, float64(retries))
+	nsfloat64 = math.Min(nsfloat64, float64(b.max))
+	return true, time.Duration(int64(nsfloat64))
 }
 
 type jitter struct {

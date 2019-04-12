@@ -6,7 +6,6 @@ package retry
 
 import (
 	"context"
-	"math"
 	"testing"
 	"time"
 
@@ -37,20 +36,17 @@ func TestBackoff(t *testing.T) {
 // TestBackoffOverflow tests the behavior of exponential backoff for large
 // numbers of retries.
 func TestBackoffOverflow(t *testing.T) {
-	// initial is carefully chosen so that initial*1.0001 produces a float64
-	// that overflows int64 when cast but equals the float64 representation of
-	// MaxInt64.
-	initial := time.Duration(9222449791875588096)
-	policy := Backoff(initial, math.MaxInt64, 1.0001)
-
+	policy := Backoff(time.Second, 10*time.Second, 2)
 	expect := []time.Duration{
-		initial,
-		math.MaxInt64,
-		math.MaxInt64,
-		math.MaxInt64,
+		10 * time.Second,
+		10 * time.Second,
+		10 * time.Second,
+		10 * time.Second,
 	}
 	for retries, wait := range expect {
-		keepgoing, dur := policy.Retry(retries)
+		// Use a large number of retries that might overflow exponential
+		// calculations.
+		keepgoing, dur := policy.Retry(1000 + retries)
 		if !keepgoing {
 			t.Fatal("!keepgoing")
 		}
