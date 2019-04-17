@@ -129,11 +129,11 @@ func (t TicketEcrTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketTlsServerTicket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketTlsServerTicket) Build(ctx *TicketContext) (Ticket, error) {
 	r := TicketTlsServerTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
-		r, err = t.Value.TlsCertAuthorityBuilder.newTlsServerTicket()
+		r, err = t.Value.TlsCertAuthorityBuilder.newTlsServerTicket(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -143,11 +143,11 @@ func (t TicketTlsServerTicket) Build(_ *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketTlsClientTicket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketTlsClientTicket) Build(ctx *TicketContext) (Ticket, error) {
 	r := TicketTlsClientTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
-		r, err = t.Value.TlsCertAuthorityBuilder.newTlsClientTicket()
+		r, err = t.Value.TlsCertAuthorityBuilder.newTlsClientTicket(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -157,11 +157,11 @@ func (t TicketTlsClientTicket) Build(_ *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketDockerTicket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketDockerTicket) Build(ctx *TicketContext) (Ticket, error) {
 	r := TicketDockerTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
-		r, err = t.Value.TlsCertAuthorityBuilder.newDockerTicket()
+		r, err = t.Value.TlsCertAuthorityBuilder.newDockerTicket(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -171,11 +171,11 @@ func (t TicketDockerTicket) Build(_ *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketDockerServerTicket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketDockerServerTicket) Build(ctx *TicketContext) (Ticket, error) {
 	r := TicketDockerServerTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
-		r, err = t.Value.TlsCertAuthorityBuilder.newDockerServerTicket()
+		r, err = t.Value.TlsCertAuthorityBuilder.newDockerServerTicket(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -185,11 +185,11 @@ func (t TicketDockerServerTicket) Build(_ *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketDockerClientTicket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketDockerClientTicket) Build(ctx *TicketContext) (Ticket, error) {
 	r := TicketDockerClientTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
-		r, err = t.Value.TlsCertAuthorityBuilder.newDockerClientTicket()
+		r, err = t.Value.TlsCertAuthorityBuilder.newDockerClientTicket(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -227,7 +227,7 @@ func (t TicketVanadiumTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket.
-func (t TicketGenericTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketGenericTicket) Build(_ *TicketContext) (Ticket, error) {
 	r := TicketGenericTicket{}
 	r = *mergeOrDie(&r, &t).(*TicketGenericTicket)
 	var err error

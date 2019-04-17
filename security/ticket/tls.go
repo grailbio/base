@@ -17,8 +17,8 @@ import (
 
 const driftMargin = 10 * time.Minute
 
-func (b *TlsCertAuthorityBuilder) newTlsClientTicket() (TicketTlsClientTicket, error) {
-	tlsCredentials, err := b.genTlsCredentials()
+func (b *TlsCertAuthorityBuilder) newTlsClientTicket(ctx *TicketContext) (TicketTlsClientTicket, error) {
+	tlsCredentials, err := b.genTlsCredentials(ctx)
 
 	if err != nil {
 		return TicketTlsClientTicket{}, err
@@ -31,8 +31,8 @@ func (b *TlsCertAuthorityBuilder) newTlsClientTicket() (TicketTlsClientTicket, e
 	}, nil
 }
 
-func (b *TlsCertAuthorityBuilder) newTlsServerTicket() (TicketTlsServerTicket, error) {
-	tlsCredentials, err := b.genTlsCredentials()
+func (b *TlsCertAuthorityBuilder) newTlsServerTicket(ctx *TicketContext) (TicketTlsServerTicket, error) {
+	tlsCredentials, err := b.genTlsCredentials(ctx)
 
 	if err != nil {
 		return TicketTlsServerTicket{}, err
@@ -45,8 +45,8 @@ func (b *TlsCertAuthorityBuilder) newTlsServerTicket() (TicketTlsServerTicket, e
 	}, nil
 }
 
-func (b *TlsCertAuthorityBuilder) newDockerTicket() (TicketDockerTicket, error) {
-	tlsCredentials, err := b.genTlsCredentials()
+func (b *TlsCertAuthorityBuilder) newDockerTicket(ctx *TicketContext) (TicketDockerTicket, error) {
+	tlsCredentials, err := b.genTlsCredentials(ctx)
 
 	if err != nil {
 		return TicketDockerTicket{}, err
@@ -59,8 +59,8 @@ func (b *TlsCertAuthorityBuilder) newDockerTicket() (TicketDockerTicket, error) 
 	}, nil
 }
 
-func (b *TlsCertAuthorityBuilder) newDockerServerTicket() (TicketDockerServerTicket, error) {
-	tlsCredentials, err := b.genTlsCredentialsWithKeyUsage([]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+func (b *TlsCertAuthorityBuilder) newDockerServerTicket(ctx *TicketContext) (TicketDockerServerTicket, error) {
+	tlsCredentials, err := b.genTlsCredentialsWithKeyUsage(ctx, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
 
 	if err != nil {
 		return TicketDockerServerTicket{}, err
@@ -73,8 +73,8 @@ func (b *TlsCertAuthorityBuilder) newDockerServerTicket() (TicketDockerServerTic
 	}, nil
 }
 
-func (b *TlsCertAuthorityBuilder) newDockerClientTicket() (TicketDockerClientTicket, error) {
-	tlsCredentials, err := b.genTlsCredentialsWithKeyUsage([]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+func (b *TlsCertAuthorityBuilder) newDockerClientTicket(ctx *TicketContext) (TicketDockerClientTicket, error) {
+	tlsCredentials, err := b.genTlsCredentialsWithKeyUsage(ctx, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 
 	if err != nil {
 		return TicketDockerClientTicket{}, err
@@ -87,11 +87,11 @@ func (b *TlsCertAuthorityBuilder) newDockerClientTicket() (TicketDockerClientTic
 	}, nil
 }
 
-func (b *TlsCertAuthorityBuilder) genTlsCredentials() (TlsCredentials, error) {
-	return b.genTlsCredentialsWithKeyUsage([]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
+func (b *TlsCertAuthorityBuilder) genTlsCredentials(ctx *TicketContext) (TlsCredentials, error) {
+	return b.genTlsCredentialsWithKeyUsage(ctx, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 }
 
-func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(keyUsage []x509.ExtKeyUsage) (TlsCredentials, error) {
+func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(ctx *TicketContext, keyUsage []x509.ExtKeyUsage) (TlsCredentials, error) {
 	vlog.Infof("TlsCertAuthorityBuilder: %+v", b)
 	empty := TlsCredentials{}
 
@@ -104,7 +104,11 @@ func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(keyUsage []x509.
 		return empty, err
 	}
 	ttl := time.Duration(b.TtlSec) * time.Second
-	cert, key, err := authority.IssueWithKeyUsage(b.CommonName, ttl, nil, b.San, keyUsage)
+	commonName := b.CommonName
+	if commonName == "" {
+		commonName = ctx.remoteBlessings.String()
+	}
+	cert, key, err := authority.IssueWithKeyUsage(commonName, ttl, nil, b.San, keyUsage)
 	if err != nil {
 		return empty, err
 	}
