@@ -464,7 +464,7 @@ func (f *s3File) Discard(ctx context.Context) {
 }
 
 func (f *s3File) String() string {
-	return "s3://" + f.name
+	return f.name
 }
 
 // Send a request to the handleRequests goroutine and wait for a response. The
