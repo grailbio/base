@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -163,7 +162,7 @@ type s3Lister struct {
 	// consecutiveEmptyResponses counts how many times S3's ListObjectsV2WithContext returned
 	// 0 records (either contents or common prefixes) consecutively.
 	// Many empty responses would cause Scan to appear to hang, so we log a warning.
-	consecutiveEmptyResponses uint32
+	consecutiveEmptyResponses int
 }
 
 // s3Reader implements io.ReadSeeker for S3.
@@ -1015,9 +1014,12 @@ func (l *s3Lister) Scan() bool {
 			nRecords += len(res.CommonPrefixes)
 		}
 		if nRecords > 0 {
-			atomic.StoreUint32(&l.consecutiveEmptyResponses, 0)
-		} else if n := atomic.AddUint32(&l.consecutiveEmptyResponses, 1); n > 7 && n&(n-1) == 0 {
-			log.Printf("s3file.list.scan: warning: S3 returned empty response %d consecutive times", n)
+			l.consecutiveEmptyResponses = 0
+		} else {
+			l.consecutiveEmptyResponses++
+			if n := l.consecutiveEmptyResponses; n > 7 && n&(n-1) == 0 {
+				log.Printf("s3file.list.scan: warning: S3 returned empty response %d consecutive times", n)
+			}
 		}
 		l.objects = make([]s3Obj, 0, nRecords)
 		for _, objVal := range res.Contents {

@@ -63,7 +63,7 @@ type Implementation interface {
 	Remove(ctx context.Context, path string) error
 }
 
-// Lister lists files in a directory tree.
+// Lister lists files in a directory tree. Not thread safe.
 type Lister interface {
 	// Scan advances the lister to the next entry.  It returns
 	// false either when the scan stops because we have reached the end of the input
