@@ -82,6 +82,8 @@ type defaultProvider struct {
 	mruRegion *regionCache
 }
 
+// GetRegion finds or creates a regionCache object for the given region.
+//
 // REQUIRES: p.mu is locked
 func (p *defaultProvider) getRegion(region string) (*regionCache, error) {
 	c, ok := p.regions[region]

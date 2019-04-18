@@ -8,9 +8,10 @@ package vcontext
 import (
 	"sync"
 
+	"github.com/grailbio/base/backgroundcontext"
 	"github.com/grailbio/base/grail"
 	_ "github.com/grailbio/v23/factories/grail" // Needed to initialize v23
-	"v.io/v23"
+	v23 "v.io/v23"
 	"v.io/v23/context"
 	"v.io/x/ref/runtime/factories/library"
 )
@@ -35,6 +36,7 @@ func Background() *context.T {
 		var shutdown v23.Shutdown
 		ctx, shutdown = v23.Init()
 		grail.RegisterShutdownCallback(grail.Shutdown(shutdown))
+		backgroundcontext.Set(ctx)
 	})
 	return ctx
 }
