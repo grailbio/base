@@ -40,7 +40,7 @@ The third form copies each of "src" to destdir/<base>.
 This command supports globs defined in https://github.com/gobwas/glob.`},
 }
 
-func printHelp() {
+func PrintHelp() {
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	for _, c := range commands {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", c.name, c.help)
@@ -48,17 +48,17 @@ func printHelp() {
 }
 
 func Run(ctx context.Context, args []string) error {
+
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "No subcommand given\n\n")
-		printHelp()
-		return nil
+		PrintHelp()
+		return errors.E("No subcommand given")
 	}
 	for _, c := range commands {
 		if c.name == args[0] {
 			return c.callback(ctx, os.Stdout, args[1:])
 		}
 	}
-	printHelp()
+	PrintHelp()
 	return errors.E("unknown command", args[0])
 }
 
