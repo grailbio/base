@@ -49,8 +49,9 @@ func printHelp() {
 
 func Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "No subcommand given\n\n")
 		printHelp()
-		return errors.E("No subcommand given")
+		return nil
 	}
 	for _, c := range commands {
 		if c.name == args[0] {
