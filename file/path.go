@@ -111,17 +111,17 @@ func Dir(path string) string {
 // Join joins any number of path elements into a single path, adding a separator
 // if necessary. It is the same as filepath.Join if elems[0] is a local
 // filesystem path. Else, it works like filepath.Join, with the following
-// differences: (1) the path separator is always '/'. (3) The each element is
+// differences: (1) the path separator is always '/'. (2) Each element is
 // not cleaned; for example if an element contains repeated "/"s in the middle,
 // they are preserved.
 func Join(elems ...string) string {
 	if len(elems) == 0 {
 		return filepath.Join(elems...)
 	}
-	// Remove leading or trailing "/"s from the string.
-	clean := func(p string) string {
+	// Remove leading (optional) or trailing "/"s from the string.
+	clean := func(p string, leading bool) string {
 		var s, e int
-		for s = 0; s < len(p); s++ {
+		for s = 0; leading && s < len(p); s++ {
 			if p[s] != urlSeparator {
 				break
 			}
@@ -138,9 +138,9 @@ func Join(elems ...string) string {
 	}
 
 	newElems := make([]string, 0, len(elems))
-	newElems = append(newElems, elems[0])
+	newElems = append(newElems, clean(elems[0], false))
 	for i := 1; i < len(elems); i++ {
-		e := clean(elems[i])
+		e := clean(elems[i], true)
 		if e != "" {
 			newElems = append(newElems, e)
 		}
