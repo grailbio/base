@@ -373,6 +373,11 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 			if *resp.ETag == "" {
 				return response{err: errors.E(errors.NotExist, "s3file.stat", path)}
 			}
+			if *resp.ContentLength == 0 && strings.HasSuffix(path, "/") {
+				// Assume this is a directory marker:
+				// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
+				return response{err: errors.E(errors.NotExist, "s3file.stat", path)}
+			}
 			return response{info: &s3Info{
 				name:    filepath.Base(path),
 				size:    *resp.ContentLength,
