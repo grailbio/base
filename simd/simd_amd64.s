@@ -12,17 +12,6 @@
         DATA ·Reverse8<>+0x08(SB)/8, $0x0001020304050607
         GLOBL ·Reverse8<>(SB), 24, $16
 
-// This was forked from github.com/willf/bitset .
-// Some form of AVX2/AVX-512 detection will probably be added later.
-TEXT ·hasSSE42Asm(SB),4,$0-1
-        MOVQ    $1, AX
-        CPUID
-        // CPUID function explicitly fills CX register.
-        SHRQ    $23, CX
-        ANDQ    $1, CX
-        MOVB    CX, ret+0(FP)
-        RET
-
 TEXT ·unpackedNibbleLookupTinyInplaceSSSE3Asm(SB),4,$0-16
         // DI = pointer to current main[] element.
         MOVQ    main+0(FP), DI

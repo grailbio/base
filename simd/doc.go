@@ -6,11 +6,11 @@
 // operations on byte arrays which the compiler cannot be trusted to
 // autovectorize within the next several years.
 //
-// The backend currently assumes SSE4.2 is available, and does not use anything
-// past that.  (init() checks for SSE4.2 support, and panics when it isn't
-// there.)  However, the interface is designed to allow the backend to
-// autodetect e.g. AVX2/AVX-512 and opportunistically use those instructions,
-// without any changes to properly written higher-level code.
+// The backend assumes SSE4.2 is available: init() checks for SSE4.2 support,
+// and panics when it isn't there.  The interface is designed to allow the
+// backend to also autodetect e.g. AVX2/AVX-512 and opportunistically use those
+// instructions, without any changes to properly written higher-level code.
+// Implementation of the AVX2 part of this is in progress.
 //
 //
 // The central constraint driving this package's design is the standard Go

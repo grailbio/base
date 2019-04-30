@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	gunsafe "github.com/grailbio/base/unsafe"
+	"golang.org/x/sys/cpu"
 )
 
 // amd64 compile-time constants.
@@ -32,26 +33,15 @@ const BitsPerWord = BytesPerWord * 8
 
 // const minPageSize = 4096  may be relevant for safe functions soon.
 
-// These could be compile-time constants for now, but not after AVX2
-// autodetection is added.
-
 // bytesPerVec is the size of the maximum-width vector that may be used.  It is
-// currently always 16, but it will be set to larger values at runtime in the
-// future when AVX2/AVX-512/etc. is detected.
+// at least 16, but will soon be set to 32 if AVX2 support is detected.  It
+// may be set to 64 in the future when AVX-512 is detected.
 var bytesPerVec int
 
 // log2BytesPerVec supports efficient division by bytesPerVec.
 var log2BytesPerVec uint
 
 // *** the following functions are defined in simd_amd64.s
-
-// Strictly speaking, hasSSE42Asm() duplicates code in e.g.
-// github.com/klauspost/cpuid , but it's literally only a few bytes.
-// Todo: look into replacing this with go:linkname exploitation of the
-// runtime's cpuid check results, and empty import of runtime.
-
-//go:noescape
-func hasSSE42Asm() bool
 
 // There was a unpackedNibbleLookupInplaceSSSE3Asm function here, but it
 // actually benchmarked worse than the general-case function.
@@ -89,7 +79,7 @@ func reverse8SSSE3Asm(dst, src unsafe.Pointer, nByte int)
 // *** end assembly function signatures
 
 func init() {
-	if !hasSSE42Asm() {
+	if !cpu.X86.HasSSE42 {
 		panic("SSE4.2 required.")
 	}
 	bytesPerVec = 16
