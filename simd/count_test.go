@@ -584,10 +584,10 @@ func TestCount3Bytes(t *testing.T) {
 	}
 }
 
-func countNibblesInSetSlow(src []byte, tablePtr *[16]byte) int {
+func countNibblesInSetSlow(src []byte, tablePtr *simd.NibbleLookupTable) int {
 	cnt := 0
 	for _, srcByte := range src {
-		cnt += int(tablePtr[srcByte&15] + tablePtr[srcByte>>4])
+		cnt += int(tablePtr.Get(srcByte&15) + tablePtr.Get(srcByte>>4))
 	}
 	return cnt
 }
@@ -608,9 +608,10 @@ func TestCountNibblesInSet(t *testing.T) {
 		baseCode2 := baseCode1 + 1 + byte(rand.Intn(int(15-baseCode1)))
 		table[baseCode1] = 1
 		table[baseCode2] = 1
+		nlt := simd.MakeNibbleLookupTable(table)
 
-		result1 := countNibblesInSetSlow(srcSlice, &table)
-		result2 := simd.CountNibblesInSet(srcSlice, &table)
+		result1 := countNibblesInSetSlow(srcSlice, &nlt)
+		result2 := simd.CountNibblesInSet(srcSlice, &nlt)
 		if result1 != result2 {
 			t.Fatal("Mismatched CountNibblesInSet result.")
 		}
@@ -639,10 +640,12 @@ func TestCountNibblesInTwoSets(t *testing.T) {
 		for ii := 0; ii != 5; ii++ {
 			table2[rand.Intn(16)] = 1
 		}
+		nlt1 := simd.MakeNibbleLookupTable(table1)
+		nlt2 := simd.MakeNibbleLookupTable(table2)
 
-		result1a := countNibblesInSetSlow(srcSlice, &table1)
-		result1b := countNibblesInSetSlow(srcSlice, &table2)
-		result2a, result2b := simd.CountNibblesInTwoSets(srcSlice, &table1, &table2)
+		result1a := countNibblesInSetSlow(srcSlice, &nlt1)
+		result1b := countNibblesInSetSlow(srcSlice, &nlt2)
+		result2a, result2b := simd.CountNibblesInTwoSets(srcSlice, &nlt1, &nlt2)
 		if (result1a != result2a) || (result1b != result2b) {
 			t.Fatal("Mismatched CountNibblesInTwoSets result.")
 		}
@@ -654,10 +657,10 @@ func TestCountNibblesInTwoSets(t *testing.T) {
 	}
 }
 
-func countUnpackedNibblesInSetSlow(src []byte, tablePtr *[16]byte) int {
+func countUnpackedNibblesInSetSlow(src []byte, tablePtr *simd.NibbleLookupTable) int {
 	cnt := 0
 	for _, srcByte := range src {
-		cnt += int(tablePtr[srcByte])
+		cnt += int(tablePtr.Get(srcByte))
 	}
 	return cnt
 }
@@ -678,9 +681,10 @@ func TestCountUnpackedNibblesInSet(t *testing.T) {
 		baseCode2 := baseCode1 + 1 + byte(rand.Intn(int(15-baseCode1)))
 		table[baseCode1] = 1
 		table[baseCode2] = 1
+		nlt := simd.MakeNibbleLookupTable(table)
 
-		result1 := countUnpackedNibblesInSetSlow(srcSlice, &table)
-		result2 := simd.CountUnpackedNibblesInSet(srcSlice, &table)
+		result1 := countUnpackedNibblesInSetSlow(srcSlice, &nlt)
+		result2 := simd.CountUnpackedNibblesInSet(srcSlice, &nlt)
 		if result1 != result2 {
 			t.Fatal("Mismatched CountUnpackedNibblesInSet result.")
 		}
@@ -709,10 +713,12 @@ func TestCountUnpackedNibblesInTwoSets(t *testing.T) {
 		for ii := 0; ii != 5; ii++ {
 			table2[rand.Intn(16)] = 1
 		}
+		nlt1 := simd.MakeNibbleLookupTable(table1)
+		nlt2 := simd.MakeNibbleLookupTable(table2)
 
-		result1a := countUnpackedNibblesInSetSlow(srcSlice, &table1)
-		result1b := countUnpackedNibblesInSetSlow(srcSlice, &table2)
-		result2a, result2b := simd.CountUnpackedNibblesInTwoSets(srcSlice, &table1, &table2)
+		result1a := countUnpackedNibblesInSetSlow(srcSlice, &nlt1)
+		result1b := countUnpackedNibblesInSetSlow(srcSlice, &nlt2)
+		result2a, result2b := simd.CountUnpackedNibblesInTwoSets(srcSlice, &nlt1, &nlt2)
 		if (result1a != result2a) || (result1b != result2b) {
 			t.Fatal("Mismatched CountUnpackedNibblesInTwoSets result.")
 		}

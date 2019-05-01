@@ -31,6 +31,37 @@ const Log2BytesPerWord = uint(3)
 // BitsPerWord is the number of bits in a machine word.
 const BitsPerWord = BytesPerWord * 8
 
+// This must be at least <maximum supported vector size> / 16.
+const nibbleLookupDup = 1
+
+// NibbleLookupTable represents a parallel-byte-substitution operation f, where
+// every byte b in a byte-slice is replaced with
+//   f(b) := shuffle[0][b & 15] for b <= 127, and
+//   f(b) := 0 for b > 127.
+// (The second part is usually irrelevant in practice, but must be defined this
+// way to allow _mm_shuffle_epi8()/_mm256_shuffle_epi8()/_mm512_shuffle_epi8()
+// to be used to implement the operation efficiently.)
+// It's named NibbleLookupTable rather than ByteLookupTable since only the
+// bottom nibble of each byte can be used for table lookup.
+// It potentially stores multiple adjacent copies of the lookup table since
+// that speeds up the AVX2 and AVX-512 use cases (the table can be loaded with
+// a single _mm256_loadu_si256 operation, instead of e.g. _mm_loadu_si128
+// followed by _mm256_set_m128i with the same argument twice), and the typical
+// use case involves initializing very few tables and using them many, many
+// times.
+type NibbleLookupTable struct {
+	shuffle [nibbleLookupDup][16]byte
+}
+
+// Get performs the b <= 127 part of the lookup operation described above.
+// The b > 127 branch is omitted because in many use cases (e.g.
+// PackedNibbleLookup below), it can be proven that b > 127 is impossible, and
+// removing the if-statement is a significant performance win when it's
+// possible.
+func (t *NibbleLookupTable) Get(b byte) byte {
+	return t.shuffle[0][b]
+}
+
 // const minPageSize = 4096  may be relevant for safe functions soon.
 
 // bytesPerVec is the size of the maximum-width vector that may be used.  It is
@@ -150,9 +181,6 @@ func ResizeUnsafe(bufptr *[]byte, len int) {
 // XcapUnsafe is shorthand for ResizeUnsafe's most common use case (no length
 // change, just want to ensure sufficient capacity).
 func XcapUnsafe(bufptr *[]byte) {
-	// mid-stack inlining isn't yet working as I write this, but it should be
-	// available soon enough:
-	//   https://github.com/golang/go/issues/19348
 	ResizeUnsafe(bufptr, len(*bufptr))
 }
 
@@ -167,7 +195,7 @@ func XcapUnsafe(bufptr *[]byte) {
 // past the end of dst[] are changed.  Use the safe version of this function if
 // any of these properties are problematic.
 // These assumptions are always satisfied when the last
-// potentially-size-increasing operation on dst[] is {Re}makeUnsafe(),
+// potentially-size-increasing operation on dst[] is {Make,Remake}Unsafe(),
 // ResizeUnsafe(), or XcapUnsafe().
 func Memset8Unsafe(dst []byte, val byte) {
 	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
@@ -209,6 +237,14 @@ func Memset8(dst []byte, val byte) {
 	*((*uintptr)(dstWordsIter)) = valWord
 }
 
+// MakeNibbleLookupTable generates a NibbleLookupTable from a [16]byte.
+func MakeNibbleLookupTable(table [16]byte) (t NibbleLookupTable) {
+	for i := range t.shuffle {
+		t.shuffle[i] = table
+	}
+	return
+}
+
 // UnpackedNibbleLookupUnsafeInplace replaces the bytes in main[] as follows:
 //   if value < 128, set to table[value & 15]
 //   otherwise, set to 0
@@ -217,14 +253,14 @@ func Memset8(dst []byte, val byte) {
 // assumptions about capacity which aren't checked at runtime.  Use the safe
 // version of this function when that's a problem.
 // These assumptions are always satisfied when the last
-// potentially-size-increasing operation on main[] is {Re}makeUnsafe(),
+// potentially-size-increasing operation on main[] is {Make,Remake}Unsafe(),
 // ResizeUnsafe(), or XcapUnsafe().
 //
 // 1. cap(main) must be at least RoundUpPow2(len(main) + 1, bytesPerVec).
 //
 // 2. The caller does not care if a few bytes past the end of main[] are
 // changed.
-func UnpackedNibbleLookupUnsafeInplace(main []byte, tablePtr *[16]byte) {
+func UnpackedNibbleLookupUnsafeInplace(main []byte, tablePtr *NibbleLookupTable) {
 	mainLen := len(main)
 	mainHeader := (*reflect.SliceHeader)(unsafe.Pointer(&main))
 	if mainLen <= 16 {
@@ -240,7 +276,7 @@ func UnpackedNibbleLookupUnsafeInplace(main []byte, tablePtr *[16]byte) {
 // UnpackedNibbleLookupInplace replaces the bytes in main[] as follows:
 //   if value < 128, set to table[value & 15]
 //   otherwise, set to 0
-func UnpackedNibbleLookupInplace(main []byte, tablePtr *[16]byte) {
+func UnpackedNibbleLookupInplace(main []byte, tablePtr *NibbleLookupTable) {
 	// May want to define variants of these functions which have undefined
 	// results for input values in [16, 128); this will be useful for
 	// cross-platform ARM/x86 code.
@@ -251,7 +287,7 @@ func UnpackedNibbleLookupInplace(main []byte, tablePtr *[16]byte) {
 		// justifications for exporting Unsafe functions at all.)
 		for pos, curByte := range main {
 			if curByte < 128 {
-				curByte = tablePtr[curByte&15]
+				curByte = tablePtr.Get(curByte & 15)
 			} else {
 				curByte = 0
 			}
@@ -280,7 +316,7 @@ func UnpackedNibbleLookupInplace(main []byte, tablePtr *[16]byte) {
 //
 // 3. The caller does not care if a few bytes past the end of dst[] are
 // changed.
-func UnpackedNibbleLookupUnsafe(dst, src []byte, tablePtr *[16]byte) {
+func UnpackedNibbleLookupUnsafe(dst, src []byte, tablePtr *NibbleLookupTable) {
 	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
 	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
 	unpackedNibbleLookupSSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), unsafe.Pointer(tablePtr), srcHeader.Len)
@@ -290,7 +326,7 @@ func UnpackedNibbleLookupUnsafe(dst, src []byte, tablePtr *[16]byte) {
 //   if src[pos] < 128, set dst[pos] := table[src[pos] & 15]
 //   otherwise, set dst[pos] := 0
 // It panics if len(src) != len(dst).
-func UnpackedNibbleLookup(dst, src []byte, tablePtr *[16]byte) {
+func UnpackedNibbleLookup(dst, src []byte, tablePtr *NibbleLookupTable) {
 	srcLen := len(src)
 	if len(dst) != srcLen {
 		panic("UnpackedNibbleLookup() requires len(src) == len(dst).")
@@ -298,7 +334,7 @@ func UnpackedNibbleLookup(dst, src []byte, tablePtr *[16]byte) {
 	if srcLen < 16 {
 		for pos, curByte := range src {
 			if curByte < 128 {
-				curByte = tablePtr[curByte&15]
+				curByte = tablePtr.Get(curByte & 15)
 			} else {
 				curByte = 0
 			}
@@ -329,7 +365,7 @@ func UnpackedNibbleLookup(dst, src []byte, tablePtr *[16]byte) {
 //
 // 3. The caller does not care if a few bytes past the end of dst[] are
 // changed.
-func PackedNibbleLookupUnsafe(dst, src []byte, tablePtr *[16]byte) {
+func PackedNibbleLookupUnsafe(dst, src []byte, tablePtr *NibbleLookupTable) {
 	// Note that this is not the correct order for .bam seq[] unpacking; use
 	// biosimd.UnpackAndReplaceSeqUnsafe() for that.
 	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
@@ -345,7 +381,7 @@ func PackedNibbleLookupUnsafe(dst, src []byte, tablePtr *[16]byte) {
 // Nothing bad happens if len(dst) is odd and some high bits in the last src[]
 // byte are set, though it's generally good practice to ensure that case
 // doesn't come up.
-func PackedNibbleLookup(dst, src []byte, tablePtr *[16]byte) {
+func PackedNibbleLookup(dst, src []byte, tablePtr *NibbleLookupTable) {
 	// This takes ~15% longer than the unsafe function on the short-array
 	// benchmark.
 	dstLen := len(dst)
@@ -357,8 +393,8 @@ func PackedNibbleLookup(dst, src []byte, tablePtr *[16]byte) {
 	if nSrcFullByte < 16 {
 		for srcPos := 0; srcPos < nSrcFullByte; srcPos++ {
 			srcByte := src[srcPos]
-			dst[2*srcPos] = tablePtr[srcByte&15]
-			dst[2*srcPos+1] = tablePtr[srcByte>>4]
+			dst[2*srcPos] = tablePtr.Get(srcByte & 15)
+			dst[2*srcPos+1] = tablePtr.Get(srcByte >> 4)
 		}
 	} else {
 		srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
@@ -367,7 +403,7 @@ func PackedNibbleLookup(dst, src []byte, tablePtr *[16]byte) {
 	}
 	if srcOdd == 1 {
 		srcByte := src[nSrcFullByte]
-		dst[2*nSrcFullByte] = tablePtr[srcByte&15]
+		dst[2*nSrcFullByte] = tablePtr.Get(srcByte & 15)
 	}
 }
 

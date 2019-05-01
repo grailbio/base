@@ -234,7 +234,7 @@ func TestMemset8(t *testing.T) {
 }
 
 func unpackedNibbleLookupSubtask(main []byte, nIter int) int {
-	table := [...]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
 		// Note that this uses the result of one lookup operation as the input to
 		// the next.
@@ -315,9 +315,9 @@ func Benchmark_UnpackedNibbleLookupLongMax(b *testing.B) {
 // This only matches UnpackedNibbleLookupInplace when all bytes < 128; the test
 // has been restricted accordingly.  _mm_shuffle_epi8()'s treatment of bytes >=
 // 128 usually isn't relevant.
-func unpackedNibbleLookupInplaceSlow(main []byte, tablePtr *[16]byte) {
+func unpackedNibbleLookupInplaceSlow(main []byte, tablePtr *simd.NibbleLookupTable) {
 	for idx := range main {
-		main[idx] = tablePtr[main[idx]&15]
+		main[idx] = tablePtr.Get(main[idx] & 15)
 	}
 }
 
@@ -329,7 +329,7 @@ func TestUnpackedNibbleLookup(t *testing.T) {
 	main3Arr := simd.MakeUnsafe(maxSize)
 	main4Arr := simd.MakeUnsafe(maxSize)
 	main5Arr := simd.MakeUnsafe(maxSize)
-	table := [...]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
 		sliceStart := rand.Intn(maxSize)
 		sliceEnd := sliceStart + rand.Intn(maxSize-sliceStart)
@@ -378,7 +378,7 @@ func TestUnpackedNibbleLookup(t *testing.T) {
 }
 
 func packedNibbleLookupSubtask(dst, src []byte, nIter int) int {
-	table := [...]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
 		simd.PackedNibbleLookupUnsafe(dst, src, &table)
 	}
@@ -456,18 +456,18 @@ func Benchmark_PackedNibbleLookupLongMax(b *testing.B) {
 	benchmarkPackedNibbleLookup(runtime.NumCPU(), 249250621, 50, b)
 }
 
-func packedNibbleLookupSlow(dst, src []byte, tablePtr *[16]byte) {
+func packedNibbleLookupSlow(dst, src []byte, tablePtr *simd.NibbleLookupTable) {
 	dstLen := len(dst)
 	nSrcFullByte := dstLen / 2
 	srcOdd := dstLen & 1
 	for srcPos := 0; srcPos < nSrcFullByte; srcPos++ {
 		srcByte := src[srcPos]
-		dst[2*srcPos] = tablePtr[srcByte&15]
-		dst[2*srcPos+1] = tablePtr[srcByte>>4]
+		dst[2*srcPos] = tablePtr.Get(srcByte & 15)
+		dst[2*srcPos+1] = tablePtr.Get(srcByte >> 4)
 	}
 	if srcOdd == 1 {
 		srcByte := src[nSrcFullByte]
-		dst[2*nSrcFullByte] = tablePtr[srcByte&15]
+		dst[2*nSrcFullByte] = tablePtr.Get(srcByte & 15)
 	}
 }
 
@@ -478,7 +478,7 @@ func TestPackedNibbleLookup(t *testing.T) {
 	srcArr := simd.MakeUnsafe(maxSrcSize)
 	dst1Arr := simd.MakeUnsafe(maxDstSize)
 	dst2Arr := simd.MakeUnsafe(maxDstSize)
-	table := [...]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0}
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
 		srcSliceStart := rand.Intn(maxSrcSize)
 		dstSliceStart := srcSliceStart * 2

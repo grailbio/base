@@ -31,15 +31,15 @@ func count2BytesSSE41Asm(src unsafe.Pointer, val1, val2, nByte int) int
 func count3BytesSSE41Asm(src unsafe.Pointer, val1, val2, val3, nByte int) int
 
 //go:noescape
-func countNibblesInSetSSE41Asm(src unsafe.Pointer, tablePtr *[16]byte, nByte int) int
+func countNibblesInSetSSE41Asm(src unsafe.Pointer, tablePtr *NibbleLookupTable, nByte int) int
 
-func countNibblesInTwoSetsSSE41Asm(cnt2Ptr *int, src unsafe.Pointer, table1Ptr, table2Ptr *[16]byte, nByte int) int
-
-//go:noescape
-func countUnpackedNibblesInSetSSE41Asm(src unsafe.Pointer, tablePtr *[16]byte, nByte int) int
+func countNibblesInTwoSetsSSE41Asm(cnt2Ptr *int, src unsafe.Pointer, table1Ptr, table2Ptr *NibbleLookupTable, nByte int) int
 
 //go:noescape
-func countUnpackedNibblesInTwoSetsSSE41Asm(cnt2Ptr *int, src unsafe.Pointer, table1Ptr, table2Ptr *[16]byte, nByte int) int
+func countUnpackedNibblesInSetSSE41Asm(src unsafe.Pointer, tablePtr *NibbleLookupTable, nByte int) int
+
+//go:noescape
+func countUnpackedNibblesInTwoSetsSSE41Asm(cnt2Ptr *int, src unsafe.Pointer, table1Ptr, table2Ptr *NibbleLookupTable, nByte int) int
 
 //go:noescape
 func accumulate8SSE41Asm(src unsafe.Pointer, nByte int) int
@@ -209,12 +209,12 @@ func Count3Bytes(src []byte, val1, val2, val3 byte) int {
 //
 // WARNING: This function does not validate the table.  It may return a garbage
 // result on invalid input.  (However, it won't corrupt memory.)
-func CountNibblesInSet(src []byte, tablePtr *[16]byte) int {
+func CountNibblesInSet(src []byte, tablePtr *NibbleLookupTable) int {
 	nSrcByte := len(src)
 	if nSrcByte < 16 {
 		cnt := 0
 		for _, srcByte := range src {
-			cnt += int(tablePtr[srcByte&15] + tablePtr[srcByte>>4])
+			cnt += int(tablePtr.Get(srcByte&15) + tablePtr.Get(srcByte>>4))
 		}
 		return cnt
 	}
@@ -228,7 +228,7 @@ func CountNibblesInSet(src []byte, tablePtr *[16]byte) int {
 //
 // WARNING: This function does not validate the tables.  It may crash or return
 // garbage results on invalid input.  (However, it won't corrupt memory.)
-func CountNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *[16]byte) (int, int) {
+func CountNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *NibbleLookupTable) (int, int) {
 	nSrcByte := len(src)
 	cnt2 := 0
 	if nSrcByte < 16 {
@@ -236,8 +236,8 @@ func CountNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *[16]byte) (int, int
 		for _, srcByte := range src {
 			lowBits := srcByte & 15
 			highBits := srcByte >> 4
-			cnt1 += int(table1Ptr[lowBits] + table1Ptr[highBits])
-			cnt2 += int(table2Ptr[lowBits] + table2Ptr[highBits])
+			cnt1 += int(table1Ptr.Get(lowBits) + table1Ptr.Get(highBits))
+			cnt2 += int(table2Ptr.Get(lowBits) + table2Ptr.Get(highBits))
 		}
 		return cnt1, cnt2
 	}
@@ -252,12 +252,12 @@ func CountNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *[16]byte) (int, int
 //
 // WARNING: This function does not validate the table.  It may crash or return
 // a garbage result on invalid input.  (However, it won't corrupt memory.)
-func CountUnpackedNibblesInSet(src []byte, tablePtr *[16]byte) int {
+func CountUnpackedNibblesInSet(src []byte, tablePtr *NibbleLookupTable) int {
 	nSrcByte := len(src)
 	if nSrcByte < 16 {
 		cnt := 0
 		for _, srcByte := range src {
-			cnt += int(tablePtr[srcByte])
+			cnt += int(tablePtr.Get(srcByte))
 		}
 		return cnt
 	}
@@ -272,7 +272,7 @@ func CountUnpackedNibblesInSet(src []byte, tablePtr *[16]byte) int {
 //
 // WARNING: This function does not validate the tables.  It may crash or return
 // garbage results on invalid input.  (However, it won't corrupt memory.)
-func CountUnpackedNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *[16]byte) (int, int) {
+func CountUnpackedNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *NibbleLookupTable) (int, int) {
 	// Building this out now so that biosimd.PackedSeqCountTwo is not a valid
 	// reason to stick to packed .bam seq[] representation.
 	nSrcByte := len(src)
@@ -280,8 +280,8 @@ func CountUnpackedNibblesInTwoSets(src []byte, table1Ptr, table2Ptr *[16]byte) (
 	if nSrcByte < 16 {
 		cnt1 := 0
 		for _, srcByte := range src {
-			cnt1 += int(table1Ptr[srcByte])
-			cnt2 += int(table2Ptr[srcByte])
+			cnt1 += int(table1Ptr.Get(srcByte))
+			cnt2 += int(table2Ptr.Get(srcByte))
 		}
 		return cnt1, cnt2
 	}
