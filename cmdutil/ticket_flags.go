@@ -125,7 +125,7 @@ func (tf *TicketFlags) ReadEnvOrFile() error {
 // supplied FlagSet. The flags are:
 // --<prefix>ticket
 // --<prefix>ticket-timeout
-// --<prefix>tickerc
+// --<prefix>ticketrc
 func RegisterTicketFlags(fs *flag.FlagSet, prefix string, defaultTickets []string, flags *TicketFlags) {
 	flags.fs = fs
 	desc := "Comma separated list of GRAIL security tickets, and/or the flag may be repeated"
