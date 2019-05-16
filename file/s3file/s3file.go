@@ -138,6 +138,8 @@ type s3File struct {
 	// Active GetObject body reader. Created by a Read() request. Closed on Seek
 	// or Close call.
 	bodyReader io.ReadCloser
+	// AWS request ID for the bodyReader. Non-empty iff bodyReader!=nil.
+	bodyReaderRequestIDs s3RequestIDs
 
 	// Seek offset.
 	// INVARIANT: position >= 0 && (position > 0 ⇒ info != nil)
@@ -191,16 +193,47 @@ func newRetryPolicy(clients []s3iface.S3API) retryPolicy {
 	return retryPolicy{clients: clients, policy: BackoffPolicy}
 }
 
+type s3RequestIDs struct {
+	amzRequestID string
+	amzID2       string
+}
+
+func (ids s3RequestIDs) String() string {
+	return fmt.Sprintf("x-amz-request-id: %s, x-amz-id-2: %s", ids.amzRequestID, ids.amzID2)
+}
+
+func captureRequestIDs(ptr *s3RequestIDs) awsrequest.Option {
+	h0 := awsrequest.WithGetResponseHeader("x-amz-request-id", &ptr.amzRequestID)
+	h1 := awsrequest.WithGetResponseHeader("x-amz-id-2", &ptr.amzID2)
+	return func(r *awsrequest.Request) {
+		h0(r)
+		h1(r)
+	}
+}
+
+func getAWSError(err error) (awsError awserr.Error, found bool) {
+	errors.Visit(err, func(err error) {
+		if err == nil || awsError != nil {
+			return
+		}
+		if e, ok := err.(awserr.Error); ok {
+			found = true
+			awsError = e
+		}
+	})
+	return
+}
+
 // Retriable errors not listed in aws' retry policy.
 func otherRetriableError(err error) bool {
-	aerr, ok := err.(awserr.Error)
-	if !ok {
-		return false
-	}
-	return aerr.Code() == awsrequest.ErrCodeSerialization ||
+	aerr, ok := getAWSError(err)
+	if ok && (aerr.Code() == awsrequest.ErrCodeSerialization ||
 		aerr.Code() == awsrequest.ErrCodeRead ||
 		aerr.Code() == "SlowDown" ||
-		aerr.Code() == "InternalError"
+		aerr.Code() == "InternalError") {
+		return true
+	}
+	return false
 }
 
 // client returns the s3 client to be use by the caller.
@@ -223,7 +256,7 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 		r.retries++
 		return true
 	}
-	if aerr, ok := err.(awserr.Error); ok {
+	if aerr, ok := getAWSError(err); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
 			// No point in trying again.
@@ -360,23 +393,24 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 		}
 		policy := newRetryPolicy(clients)
 		for {
+			var ids s3RequestIDs
 			resp, err := policy.client().HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 				Bucket: aws.String(bucket),
 				Key:    aws.String(key),
-			})
+			}, captureRequestIDs(&ids))
 			if policy.shouldRetry(ctx, err) {
 				continue
 			}
 			if err != nil {
-				return response{err: errors.E(annotate(err), fmt.Sprintf("s3file.stat %s", path))}
+				return response{err: annotate(err, ids, fmt.Sprintf("s3file.stat %s", path))}
 			}
 			if *resp.ETag == "" {
-				return response{err: errors.E(errors.NotExist, "s3file.stat", path)}
+				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
 			}
 			if *resp.ContentLength == 0 && strings.HasSuffix(path, "/") {
 				// Assume this is a directory marker:
 				// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
-				return response{err: errors.E(errors.NotExist, "s3file.stat", path)}
+				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
 			}
 			return response{info: &s3Info{
 				name:    filepath.Base(path),
@@ -402,12 +436,14 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		}
 		policy := newRetryPolicy(clients)
 		for {
-			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+			var ids s3RequestIDs
+			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)},
+				captureRequestIDs(&ids))
 			if policy.shouldRetry(ctx, err) {
 				continue
 			}
 			if err != nil {
-				err = errors.E(annotate(err), "s3file.remove", path)
+				err = annotate(err, ids, "s3file.remove", path)
 			}
 			return response{err: err}
 		}
@@ -498,7 +534,7 @@ func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
 
 func (f *s3File) handleStat(req request) {
 	if err := f.maybeFillInfo(req.ctx); err != nil {
-		req.ch <- response{err: errors.E(annotate(err), "s3file.stat", f.name)}
+		req.ch <- response{err: errors.E(err, "s3file.stat", f.name)}
 		return
 	}
 	if f.info == nil {
@@ -526,21 +562,23 @@ func (f *s3File) maybeFillInfo(ctx context.Context) error {
 	}
 	policy := newRetryPolicy(clients)
 	for {
+		var ids s3RequestIDs
 		output, err := policy.client().GetObjectWithContext(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(f.bucket),
-			Key:    aws.String(f.key)})
+			Key:    aws.String(f.key)},
+			captureRequestIDs(&ids))
 		if policy.shouldRetry(ctx, err) {
 			continue
 		}
 		if err != nil {
-			return annotate(err)
+			return annotate(err, ids)
 		}
 		if output.Body == nil {
-			panic("GetObject with nil Body")
+			panic(ids.String() + ": GetObject with nil Body")
 		}
 		output.Body.Close() // nolint: errcheck
 		if *output.ETag == "" {
-			return errors.E("read", f.name, errors.NotExist)
+			return errors.E("read", f.name, errors.NotExist, "awsrequestID:", ids.String())
 		}
 		f.info = newInfo(f.name, output)
 		return nil
@@ -600,6 +638,7 @@ func (f *s3File) handleSeek(req request) {
 	if f.bodyReader != nil {
 		f.bodyReader.Close() // nolint: errcheck
 		f.bodyReader = nil
+		f.bodyReaderRequestIDs = s3RequestIDs{}
 	}
 	req.ch <- response{off: f.position}
 }
@@ -631,21 +670,23 @@ func (f *s3File) startGetObjectRequest(ctx context.Context, client s3iface.S3API
 		}
 		input.Range = aws.String(fmt.Sprintf("bytes=%d-", f.position))
 	}
-	output, err := client.GetObjectWithContext(ctx, input)
+	var ids s3RequestIDs
+	output, err := client.GetObjectWithContext(ctx, input, captureRequestIDs(&ids))
 	if err != nil {
-		return err
+		return annotate(err, ids)
 	}
 	if *output.ETag == "" {
 		output.Body.Close() // nolint: errcheck
-		return fmt.Errorf("read %v: File does not exist", f.name)
+		return fmt.Errorf("read %v: File does not exist, awsrequestID: %v", f.name, ids)
 	}
 	if f.info != nil && f.info.etag != *output.ETag {
 		output.Body.Close() // nolint: errcheck
 		return errors.E(
 			errors.Precondition,
-			fmt.Sprintf("read %v: ETag changed from %v to %v", f.name, f.info.etag, *output.ETag))
+			fmt.Sprintf("read %v: ETag changed from %v to %v, awsrequestID: %v", f.name, f.info.etag, *output.ETag, ids))
 	}
 	f.bodyReader = output.Body // take ownership
+	f.bodyReaderRequestIDs = ids
 	if f.info == nil {
 		f.info = newInfo(f.name, output)
 	}
@@ -680,13 +721,15 @@ func (f *s3File) handleRead(req request) {
 			f.position += int64(n)
 		}
 		if err != nil {
+			requestIDs := f.bodyReaderRequestIDs
 			f.bodyReader.Close() // nolint: errcheck
 			f.bodyReader = nil
+			f.bodyReaderRequestIDs = s3RequestIDs{}
 			if err != io.EOF {
 				retries++
 				if retries <= maxRetries {
-					log.Error.Printf("s3read %v: retrying (%d) GetObject after error %v",
-						f.name, retries, err)
+					log.Error.Printf("s3read %v: retrying (%d) GetObject after error %v, awsrequestID: %v",
+						f.name, retries, err, requestIDs)
 					continue
 				}
 			}
@@ -763,17 +806,18 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 	}
 	policy := newRetryPolicy(clients)
 	for {
-		resp, err := policy.client().CreateMultipartUploadWithContext(ctx, params)
+		var ids s3RequestIDs
+		resp, err := policy.client().CreateMultipartUploadWithContext(ctx, params, captureRequestIDs(&ids))
 		if policy.shouldRetry(ctx, err) {
 			continue
 		}
 		if err != nil {
-			return nil, errors.E(err, "s3file.CreateMultipartUploadWithContext", path)
+			return nil, annotate(err, ids, "s3file.CreateMultipartUploadWithContext", path)
 		}
 		u.client = policy.client()
 		u.uploadID = *resp.UploadId
 		if u.uploadID == "" {
-			panic(fmt.Sprintf("empty uploadID: %+v", resp))
+			panic(fmt.Sprintf("empty uploadID: %+v, awsrequestID: %v", resp, ids))
 		}
 		break
 	}
@@ -798,13 +842,14 @@ func (u *s3Uploader) uploadThread() {
 			UploadId:   aws.String(chunk.uploadID),
 			PartNumber: &chunk.partNum,
 		}
-		resp, err := chunk.client.UploadPartWithContext(u.ctx, params)
+		var ids s3RequestIDs
+		resp, err := chunk.client.UploadPartWithContext(u.ctx, params, captureRequestIDs(&ids))
 		if policy.shouldRetry(u.ctx, err) {
 			goto retry
 		}
 		u.bufPool.Put(chunk.buf)
 		if err != nil {
-			u.err.Set(errors.E(annotate(err), fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
+			u.err.Set(annotate(err, ids, fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
 			continue
 		}
 		partNum := chunk.partNum
@@ -848,15 +893,15 @@ func (u *s3Uploader) write(buf []byte) {
 func (u *s3Uploader) abort() error {
 	policy := newRetryPolicy([]s3iface.S3API{u.client})
 	for {
+		var ids s3RequestIDs
 		_, err := u.client.AbortMultipartUploadWithContext(u.ctx, &s3.AbortMultipartUploadInput{
 			Bucket:   aws.String(u.bucket),
 			Key:      aws.String(u.key),
 			UploadId: aws.String(u.uploadID),
-		})
+		}, captureRequestIDs(&ids))
 		if !policy.shouldRetry(u.ctx, err) {
 			if err != nil {
-				err = errors.E(annotate(err),
-					fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
+				err = annotate(err, ids, fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
 			}
 			return err
 		}
@@ -878,15 +923,15 @@ func (u *s3Uploader) finish() error {
 			// so work around the bug by issuing a separate PutObject request.
 			u.abort() // nolint: errcheck
 			for {
+				var ids s3RequestIDs
 				_, err := u.client.PutObjectWithContext(u.ctx, &s3.PutObjectInput{
 					Bucket: aws.String(u.bucket),
 					Key:    aws.String(u.key),
 					Body:   bytes.NewReader(nil),
-				})
+				}, captureRequestIDs(&ids))
 				if !policy.shouldRetry(u.ctx, err) {
 					if err != nil {
-						err = errors.E(annotate(err),
-							fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
+						err = annotate(err, ids, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
 					}
 					u.err.Set(err)
 					break
@@ -904,11 +949,11 @@ func (u *s3Uploader) finish() error {
 				MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
 			}
 			for {
-				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params)
+				var ids s3RequestIDs
+				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params, captureRequestIDs(&ids))
 				if !policy.shouldRetry(u.ctx, err) {
 					if err != nil {
-						err = errors.E(annotate(err),
-							fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
+						err = annotate(err, ids, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
 					}
 					u.err.Set(err)
 					break
@@ -1004,13 +1049,13 @@ func (l *s3Lister) Scan() bool {
 		if l.showDirs() {
 			req.Delimiter = aws.String(pathSeparator)
 		}
-
-		res, err := l.policy.client().ListObjectsV2WithContext(l.ctx, req)
+		var ids s3RequestIDs
+		res, err := l.policy.client().ListObjectsV2WithContext(l.ctx, req, captureRequestIDs(&ids))
 		if l.policy.shouldRetry(l.ctx, err) {
 			continue
 		}
 		if err != nil {
-			l.err = errors.E(annotate(err), fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
+			l.err = annotate(err, ids, fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
 			return false
 		}
 		l.token = res.NextContinuationToken
@@ -1104,36 +1149,39 @@ func ParseURL(url string) (scheme, bucket, key string, err error) {
 	return scheme, parts[0], parts[1], nil
 }
 
-// Annotate interprets err as an AWS request error and returns a
-// version of it annotated with severity and kind from the errors
-// package.
-func annotate(err error) error {
-	aerr, ok := err.(awserr.Error)
+// Annotate interprets err as an AWS request error and returns a version of it
+// annotated with severity and kind from the errors package. The optional args
+// are passed to errors.E.
+func annotate(err error, ids s3RequestIDs, args ...interface{}) error {
+	e := func(prefixArgs ...interface{}) error {
+		return errors.E(append(prefixArgs, args...)...)
+	}
+	aerr, ok := getAWSError(err)
 	if !ok {
-		return err
+		return e(err, "awsrequestID:", ids.String())
 	}
 	if awsrequest.IsErrorThrottle(err) {
-		return errors.E(err, errors.Temporary, errors.Unavailable)
+		return e(err, errors.Temporary, errors.Unavailable, "awsrequestID:", ids.String())
 	}
 	if awsrequest.IsErrorRetryable(err) {
-		return errors.E(err, errors.Temporary)
+		return e(err, errors.Temporary, "awsrequestID:", ids.String(), args)
 	}
 	// The underlying error was an S3 error. Try to classify it.
 	// Best guess based on Amazon's descriptions:
 	switch aerr.Code() {
 	// Code NotFound is not documented, but it's what the API actually returns.
 	case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NoSuchVersion", "NotFound":
-		return errors.E(err, errors.NotExist)
+		return e(err, errors.NotExist, "awsrequestID:", ids.String())
 	case "AccessDenied":
-		return errors.E(err, errors.NotAllowed)
+		return e(err, errors.NotAllowed, "awsrequestID:", ids.String())
 	case "InvalidRequest", "InvalidArgument", "EntityTooSmall", "EntityTooLarge", "KeyTooLong", "MethodNotAllowed":
-		return errors.E(err, errors.Fatal)
+		return e(err, errors.Fatal, "awsrequestID:", ids.String())
 	case "ExpiredToken", "AccountProblem", "ServiceUnavailable", "TokenRefreshRequired", "OperationAborted":
-		return errors.E(err, errors.Unavailable)
+		return e(err, errors.Unavailable, "awsrequestID:", ids.String())
 	case "PreconditionFailed":
-		return errors.E(err, errors.Precondition)
+		return e(err, errors.Precondition, "awsrequestID:", ids.String())
 	case "SlowDown":
-		return errors.E(errors.Temporary, errors.Unavailable)
+		return e(errors.Temporary, errors.Unavailable, "awsrequestID:", ids.String())
 	}
-	return err
+	return e(err)
 }

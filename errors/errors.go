@@ -430,6 +430,16 @@ func Match(err1, err2 error) bool {
 	return true
 }
 
+// Visit calls the given function for every error object in the chain, including
+// itself.  Recursion stops after the function finds an error object of type
+// other than *Error.
+func Visit(err error, callback func(err error)) {
+	callback(err)
+	if next, ok := err.(*Error); ok {
+		callback(next.Err)
+	}
+}
+
 // New is synonymous with errors.New, and is provided here so that
 // users need only import one errors package.
 func New(msg string) error {
