@@ -64,7 +64,7 @@ func (t T) Each(n int, fn func(i int) error) error {
 	}
 	// Propagate panics.
 	if err, ok := err.(panicErr); ok {
-		panic(fmt.Sprintf("traverse child: %s\n%s", err.v, string(err.stack)))
+		panic(fmt.Sprintf("traverse child: %v\n%s", err.v, string(err.stack)))
 	}
 	return err
 }
