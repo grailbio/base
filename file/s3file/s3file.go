@@ -1164,7 +1164,7 @@ func annotate(err error, ids s3RequestIDs, args ...interface{}) error {
 		return e(err, errors.Temporary, errors.Unavailable, "awsrequestID:", ids.String())
 	}
 	if awsrequest.IsErrorRetryable(err) {
-		return e(err, errors.Temporary, "awsrequestID:", ids.String(), args)
+		return e(err, errors.Temporary, "awsrequestID:", ids.String())
 	}
 	// The underlying error was an S3 error. Try to classify it.
 	// Best guess based on Amazon's descriptions:
