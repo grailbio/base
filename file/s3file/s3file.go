@@ -72,6 +72,17 @@ const (
 	uploadParallelism = 16
 )
 
+func mergeFileOpts(opts []file.Opts) (o file.Opts) {
+	switch len(opts) {
+	case 0:
+	case 1:
+		o = opts[0]
+	default:
+		panic(fmt.Sprintf("More than one options specified: %+v", opts))
+	}
+	return
+}
+
 // Operations on a file are internally implemented by a goroutine running
 // handleRequests. Requests to handleRequests are sent through s3File.reqCh. The
 // response to a request is sent through request.ch.
@@ -126,6 +137,7 @@ type s3File struct {
 	name     string         // "s3://bucket/key/.."
 	provider ClientProvider // Used to create s3 clients.
 	mode     accessMode
+	opts     file.Opts
 
 	bucket string // bucket part of "name".
 	key    string // key part "name".
@@ -180,17 +192,29 @@ type s3Writer struct {
 }
 
 type retryPolicy struct {
-	clients []s3iface.S3API
-	policy  retry.Policy
-	retries int
+	clients               []s3iface.S3API
+	policy                retry.Policy
+	opts                  file.Opts // passed to Open() or Stat request.
+	notFoundRetryDeadline time.Time // when to give up retrying after KeyNotFound.
+	retries               int
 }
 
 // BackoffPolicy defines backoff timing parameters. It is exposed publicly only
 // for unittests.
 var BackoffPolicy = retry.Backoff(500*time.Millisecond, time.Minute, 1.2)
 
-func newRetryPolicy(clients []s3iface.S3API) retryPolicy {
-	return retryPolicy{clients: clients, policy: BackoffPolicy}
+// MaxRetryDuration defines the max amount of time Open can spend retrying on
+// errors, in case file.Opts.RetryWhenNotFound=true.  The current value of 6min
+// is chosen because S3 negative-cache TTL seems to be around 5min.
+var MaxRetryDuration = 6 * time.Minute
+
+func newRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
+	return retryPolicy{
+		clients:               clients,
+		policy:                BackoffPolicy,
+		opts:                  opts,
+		notFoundRetryDeadline: time.Now().Add(MaxRetryDuration),
+	}
 }
 
 type s3RequestIDs struct {
@@ -256,7 +280,19 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 		r.retries++
 		return true
 	}
-	if aerr, ok := getAWSError(err); ok {
+	aerr, ok := getAWSError(err)
+	if ok {
+		if r.opts.RetryWhenNotFound && aerr.Code() == s3.ErrCodeNoSuchKey {
+			ctx2, cancel := context.WithDeadline(ctx, r.notFoundRetryDeadline)
+			waitErr := retry.Wait(ctx2, r.policy, r.retries)
+			cancel()
+			if waitErr != nil {
+				r.clients = nil
+				return false
+			}
+			return true
+		}
+
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
 			// No point in trying again.
@@ -311,7 +347,7 @@ func runRequest(ctx context.Context, handler func() response) response {
 	}
 }
 
-func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMode) (file.File, error) {
+func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMode, opts ...file.Opts) (*s3File, error) {
 	_, bucket, key, err := ParseURL(path)
 	if err != nil {
 		return nil, err
@@ -330,6 +366,7 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 	f := &s3File{
 		name:     path,
 		mode:     mode,
+		opts:     mergeFileOpts(opts),
 		provider: impl.provider,
 		bucket:   bucket,
 		key:      key,
@@ -337,18 +374,18 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 		reqCh:    make(chan request, 16),
 	}
 	go f.handleRequests()
-	// If we're opening the file for reading, make sure we return an
-	// early error if the file does not exist.
-	if mode != writeonly {
-		_, err = f.Stat(ctx)
-	}
 	return f, err
 }
 
 // Open opens a file for reading. The provided path should be of form
 // "bucket/key..."
-func (impl *s3Impl) Open(ctx context.Context, path string) (file.File, error) {
-	return impl.internalOpen(ctx, path, readonly)
+func (impl *s3Impl) Open(ctx context.Context, path string, opts ...file.Opts) (file.File, error) {
+	f, err := impl.internalOpen(ctx, path, readonly, opts...)
+	res := f.runRequest(ctx, request{reqType: statRequest})
+	if res.err != nil {
+		return nil, res.err
+	}
+	return f, err
 }
 
 // Create opens a file for writing.
@@ -371,7 +408,7 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 	}
 	return &s3Lister{
 		ctx:     ctx,
-		policy:  newRetryPolicy(clients),
+		policy:  newRetryPolicy(clients, file.Opts{}),
 		dir:     dir,
 		scheme:  scheme,
 		bucket:  bucket,
@@ -381,7 +418,7 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 }
 
 // Stat implements file.Implementation interface.
-func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
+func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (file.Info, error) {
 	resp := runRequest(ctx, func() response {
 		_, bucket, key, err := ParseURL(path)
 		if err != nil {
@@ -391,7 +428,7 @@ func (impl *s3Impl) Stat(ctx context.Context, path string) (file.Info, error) {
 		if err != nil {
 			return response{err: err}
 		}
-		policy := newRetryPolicy(clients)
+		policy := newRetryPolicy(clients, mergeFileOpts(opts))
 		for {
 			var ids s3RequestIDs
 			resp, err := policy.client().HeadObjectWithContext(ctx, &s3.HeadObjectInput{
@@ -434,7 +471,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		if err != nil {
 			return response{err: errors.E(err, "s3file.remove", path)}
 		}
-		policy := newRetryPolicy(clients)
+		policy := newRetryPolicy(clients, file.Opts{})
 		for {
 			var ids s3RequestIDs
 			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)},
@@ -525,22 +562,13 @@ func (f *s3File) runRequest(ctx context.Context, req request) response {
 }
 
 func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
-	res := f.runRequest(ctx, request{reqType: statRequest})
-	if res.err != nil {
-		return nil, res.err
-	}
-	return res.info, nil
-}
-
-func (f *s3File) handleStat(req request) {
-	if err := f.maybeFillInfo(req.ctx); err != nil {
-		req.ch <- response{err: errors.E(err, "s3file.stat", f.name)}
-		return
+	if f.mode != readonly {
+		return nil, errors.E(errors.NotSupported, f.name, "stat for writeonly file not supported")
 	}
 	if f.info == nil {
-		panic(fmt.Sprintf("failed to fill stats in %+v", f))
+		panic(f)
 	}
-	req.ch <- response{info: f.info}
+	return f.info, nil
 }
 
 func newInfo(path string, output *s3.GetObjectOutput) *s3Info {
@@ -552,36 +580,38 @@ func newInfo(path string, output *s3.GetObjectOutput) *s3Info {
 	}
 }
 
-func (f *s3File) maybeFillInfo(ctx context.Context) error {
-	if f.info != nil {
-		return nil
-	}
-	clients, err := f.provider.Get(ctx, "GetObject", f.name)
+func (f *s3File) handleStat(req request) {
+	ctx := req.ctx
+	clients, err := f.provider.Get(req.ctx, "GetObject", f.name)
 	if err != nil {
-		return err
+		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.stat %v", f.name))}
+		return
 	}
-	policy := newRetryPolicy(clients)
+	policy := newRetryPolicy(clients, f.opts)
 	for {
 		var ids s3RequestIDs
 		output, err := policy.client().GetObjectWithContext(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(f.bucket),
 			Key:    aws.String(f.key)},
 			captureRequestIDs(&ids))
-		if policy.shouldRetry(ctx, err) {
+		if policy.shouldRetry(req.ctx, err) {
 			continue
 		}
 		if err != nil {
-			return annotate(err, ids)
+			req.ch <- response{err: errors.E(annotate(err, ids), fmt.Sprintf("s3file.stat %v", f.name))}
+			return
 		}
 		if output.Body == nil {
 			panic(ids.String() + ": GetObject with nil Body")
 		}
 		output.Body.Close() // nolint: errcheck
 		if *output.ETag == "" {
-			return errors.E("read", f.name, errors.NotExist, "awsrequestID:", ids.String())
+			req.ch <- response{err: errors.E("read", f.name, errors.NotExist, "awsrequestID:", ids.String())}
+			return
 		}
 		f.info = newInfo(f.name, output)
-		return nil
+		req.ch <- response{err: nil}
+		return
 	}
 }
 
@@ -611,9 +641,8 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 
 // Seek implements io.Seeker
 func (f *s3File) handleSeek(req request) {
-	if err := f.maybeFillInfo(req.ctx); err != nil {
-		req.ch <- response{off: f.position, err: errors.E(err, fmt.Sprintf("s3file.seek(%s,%d,%d)", f.name, req.off, req.whence))}
-		return
+	if f.info == nil {
+		panic("stat not filled")
 	}
 	var newPosition int64
 	switch req.whence {
@@ -702,7 +731,7 @@ func (f *s3File) handleRead(req request) {
 		return
 	}
 	maxRetries := maxRetries(clients)
-	policy := newRetryPolicy(clients)
+	policy := newRetryPolicy(clients, f.opts)
 	retries := 0
 	for len(buf) > 0 {
 		if f.bodyReader == nil {
@@ -804,7 +833,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
 		nextPartNum: 1,
 	}
-	policy := newRetryPolicy(clients)
+	policy := newRetryPolicy(clients, file.Opts{})
 	for {
 		var ids s3RequestIDs
 		resp, err := policy.client().CreateMultipartUploadWithContext(ctx, params, captureRequestIDs(&ids))
@@ -833,7 +862,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 func (u *s3Uploader) uploadThread() {
 	defer u.sg.Done()
 	for chunk := range u.reqCh {
-		policy := newRetryPolicy([]s3iface.S3API{chunk.client})
+		policy := newRetryPolicy([]s3iface.S3API{chunk.client}, file.Opts{})
 	retry:
 		params := &s3.UploadPartInput{
 			Bucket:     aws.String(u.bucket),
@@ -891,7 +920,7 @@ func (u *s3Uploader) write(buf []byte) {
 }
 
 func (u *s3Uploader) abort() error {
-	policy := newRetryPolicy([]s3iface.S3API{u.client})
+	policy := newRetryPolicy([]s3iface.S3API{u.client}, file.Opts{})
 	for {
 		var ids s3RequestIDs
 		_, err := u.client.AbortMultipartUploadWithContext(u.ctx, &s3.AbortMultipartUploadInput{
@@ -916,7 +945,7 @@ func (u *s3Uploader) finish() error {
 	}
 	close(u.reqCh)
 	u.sg.Wait()
-	policy := newRetryPolicy([]s3iface.S3API{u.client})
+	policy := newRetryPolicy([]s3iface.S3API{u.client}, file.Opts{})
 	if u.err.Err() == nil {
 		if len(u.parts) == 0 {
 			// Special case: an empty file. CompleteMultiPartUpload with empty parts causes an error,

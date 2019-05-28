@@ -54,7 +54,7 @@ func (impl *localImpl) String() string {
 }
 
 // Open implements file.Implementation.
-func (impl *localImpl) Open(ctx context.Context, path string) (File, error) {
+func (impl *localImpl) Open(ctx context.Context, path string, _ ...Opts) (File, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -187,7 +187,7 @@ func (*localImpl) Remove(ctx context.Context, path string) error {
 }
 
 // Stat implements file.Implementation
-func (impl *localImpl) Stat(ctx context.Context, path string) (Info, error) {
+func (impl *localImpl) Stat(ctx context.Context, path string, _ ...Opts) (Info, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {

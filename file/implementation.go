@@ -21,7 +21,7 @@ type Implementation interface {
 	//
 	// Open returns an error of kind errors.NotExist if there is
 	// no file at the provided path.
-	Open(ctx context.Context, path string) (File, error)
+	Open(ctx context.Context, path string, opts ...Opts) (File, error)
 
 	// Create opens a file for writing. If "path" already exists, the old contents
 	// will be destroyed. If "path" does not exist already, the file will be newly
@@ -56,7 +56,7 @@ type Implementation interface {
 	//
 	// Stat returns an error of kind errors.NotExist if there is
 	// no file at the provided path.
-	Stat(ctx context.Context, path string) (Info, error)
+	Stat(ctx context.Context, path string, opts ...Opts) (Info, error)
 
 	// Remove removes the file. The path passed to file.Remove() is passed here
 	// unchanged.
@@ -178,12 +178,12 @@ func findImpl(path string) (Implementation, error) {
 //
 // Open returns an error of kind errors.NotExist if the file at the
 // provided path does not exist.
-func Open(ctx context.Context, path string) (File, error) {
+func Open(ctx context.Context, path string, opts ...Opts) (File, error) {
 	impl, err := findImpl(path)
 	if err != nil {
 		return nil, err
 	}
-	return impl.Open(ctx, path)
+	return impl.Open(ctx, path, opts...)
 }
 
 // Create opens the given file writeonly. It is a shortcut for calling
@@ -201,12 +201,12 @@ func Create(ctx context.Context, path string) (File, error) {
 //
 // Stat returns an error of kind errors.NotExist if the file at the
 // provided path does not exist.
-func Stat(ctx context.Context, path string) (Info, error) {
+func Stat(ctx context.Context, path string, opts ...Opts) (Info, error) {
 	impl, err := findImpl(path)
 	if err != nil {
 		return nil, err
 	}
-	return impl.Stat(ctx, path)
+	return impl.Stat(ctx, path, opts...)
 }
 
 type errorLister struct{ err error }
@@ -247,4 +247,26 @@ func Remove(ctx context.Context, path string) error {
 		return err
 	}
 	return impl.Remove(ctx, path)
+}
+
+// Opts controls the file access requests, such as Open and Stat.
+type Opts struct {
+	// When set, this flag causes the file package to keep retrying when the file
+	// is reported as not found. This flag should be set when:
+	//
+	// 1. you are accessing a file on S3, and
+	//
+	// 2. an application may have attempted to GET the same file in recent past
+	// (~5 minutes). The said application may be on a different machine.
+	//
+	// This flag is honored only by S3 to work around the problem where s3 may
+	// report spurious KeyNotFound error after a GET request to the same file.
+	// For more details, see
+	// https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#CoreConcepts,
+	// section "S3 Data Consistency Model". In particular:
+	//
+	//   The caveat is that if you make a HEAD or GET request to the key
+	//   name (to find if the object exists) before creating the object, Amazon S3
+	//   provides eventual consistency for read-after-write.
+	RetryWhenNotFound bool
 }

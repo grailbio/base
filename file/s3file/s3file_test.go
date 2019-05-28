@@ -270,6 +270,34 @@ func TestReadRetryAfterError(t *testing.T) {
 	}
 }
 
+func TestRetryWhenNotFound(t *testing.T) {
+	client := s3test.NewClient(t, "b")
+
+	provider := &testProvider{clients: []s3iface.S3API{client}}
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+
+	ctx := context.Background()
+	// By default, there is no retry.
+	_, err := impl.Open(ctx, "s3://b/file.txt")
+	assert.Regexp(t, err, "NoSuchKey")
+
+	doneCh := make(chan bool)
+	go func() {
+		_, err := impl.Open(ctx, "s3://b/file.txt", file.Opts{RetryWhenNotFound: true})
+		assert.NoError(t, err)
+		doneCh <- true
+	}()
+	time.Sleep(1 * time.Second)
+	select {
+	case <-doneCh:
+		t.Fatal("should not reach here")
+	default:
+	}
+	writeFile(ctx, t, impl, "s3://b/file.txt", "data")
+	fmt.Println("wrote file")
+	<-doneCh
+}
+
 func TestCancellation(t *testing.T) {
 	client := s3test.NewClient(t, "b")
 

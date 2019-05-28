@@ -435,8 +435,13 @@ func Match(err1, err2 error) bool {
 // other than *Error.
 func Visit(err error, callback func(err error)) {
 	callback(err)
-	if next, ok := err.(*Error); ok {
-		callback(next.Err)
+	for {
+		next, ok := err.(*Error)
+		if !ok {
+			break
+		}
+		err = next.Err
+		callback(err)
 	}
 }
 

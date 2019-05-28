@@ -28,7 +28,7 @@ type errFile struct {
 
 func (f *errFile) String() string { return f.err.Error() }
 
-func (f *errFile) Open(ctx context.Context, path string) (file.File, error) {
+func (f *errFile) Open(ctx context.Context, path string, opts ...file.Opts) (file.File, error) {
 	return nil, f.err
 }
 
@@ -40,7 +40,7 @@ func (f *errFile) List(ctx context.Context, dir string, recursive bool) file.Lis
 	return nil
 }
 
-func (f *errFile) Stat(ctx context.Context, path string) (file.Info, error) {
+func (f *errFile) Stat(ctx context.Context, path string, opts ...file.Opts) (file.Info, error) {
 	return nil, f.err
 }
 
