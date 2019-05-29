@@ -12,127 +12,6 @@ import (
 	"github.com/grailbio/base/simd"
 )
 
-/*
-Initial benchmark results:
-  MacBook Pro (15-inch, 2016)
-  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
-
-Benchmark_FirstUnequalShort1-8                20          63531902 ns/op
-Benchmark_FirstUnequalShort4-8               100          17527367 ns/op
-Benchmark_FirstUnequalShortMax-8             100          16960390 ns/op
-Benchmark_FirstUnequalLong1-8                  2         730374209 ns/op
-Benchmark_FirstUnequalLong4-8                  3         334514352 ns/op
-Benchmark_FirstUnequalLongMax-8                5         296666922 ns/op
-
-(bytes.Compare()'s speed is essentially identical.)
-
-Benchmark_FirstLeqShort1-8            20          66917028 ns/op
-Benchmark_FirstLeqShort4-8           100          18748334 ns/op
-Benchmark_FirstLeqShortMax-8         100          18819918 ns/op
-Benchmark_FirstLeqLong1-8              3         402510849 ns/op
-Benchmark_FirstLeqLong4-8             10         118810967 ns/op
-Benchmark_FirstLeqLongMax-8           10         122304803 ns/op
-
-For reference, firstUnequal8Slow has the following results:
-Benchmark_FirstUnequalShort1-8                 5         255419211 ns/op
-Benchmark_FirstUnequalShort4-8                20          72590461 ns/op
-Benchmark_FirstUnequalShortMax-8              20          68392202 ns/op
-Benchmark_FirstUnequalLong1-8                  1        4258976363 ns/op
-Benchmark_FirstUnequalLong4-8                  1        1088713962 ns/op
-Benchmark_FirstUnequalLongMax-8                1        1326682888 ns/op
-
-firstLeq8Slow:
-Benchmark_FirstLeqShort1-8             5         248776883 ns/op
-Benchmark_FirstLeqShort4-8            20          67078584 ns/op
-Benchmark_FirstLeqShortMax-8          20          65117954 ns/op
-Benchmark_FirstLeqLong1-8              1        3972184399 ns/op
-Benchmark_FirstLeqLong4-8              1        1069477371 ns/op
-Benchmark_FirstLeqLongMax-8            1        1238397122 ns/op
-*/
-
-func firstUnequalSubtask(arg1, arg2 []byte, nIter int) int {
-	curPos := 0
-	endPos := len(arg1)
-	for iter := 0; iter < nIter; iter++ {
-		if curPos >= endPos {
-			curPos = 0
-		}
-		curPos = simd.FirstUnequal8Unsafe(arg1, arg2, curPos)
-		curPos++
-	}
-	return curPos
-}
-
-func firstUnequalSubtaskFuture(arg1, arg2 []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- firstUnequalSubtask(arg1, arg2, nIter) }()
-	return future
-}
-
-func multiFirstUnequal(arg1s, arg2s [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = firstUnequalSubtaskFuture(arg1s[0], arg2s[0], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = firstUnequalSubtaskFuture(arg1s[0], arg2s[0], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkFirstUnequal(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	arg1Slices := make([][]byte, 1)
-	for ii := range arg1Slices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		arg1Slices[ii] = newArr[:nByte]
-	}
-	arg2Slices := make([][]byte, 1)
-	for ii := range arg2Slices {
-		newArr := simd.MakeUnsafe(nByte + 63)
-		arg2Slices[ii] = newArr[:nByte]
-		arg2Slices[ii][nByte/2] = 128
-	}
-	for i := 0; i < b.N; i++ {
-		multiFirstUnequal(arg1Slices, arg2Slices, cpus, nJob)
-	}
-}
-
-func Benchmark_FirstUnequalShort1(b *testing.B) {
-	benchmarkFirstUnequal(1, 75, 9999999, b)
-}
-
-func Benchmark_FirstUnequalShort4(b *testing.B) {
-	benchmarkFirstUnequal(4, 75, 9999999, b)
-}
-
-func Benchmark_FirstUnequalShortMax(b *testing.B) {
-	benchmarkFirstUnequal(runtime.NumCPU(), 75, 9999999, b)
-}
-
-func Benchmark_FirstUnequalLong1(b *testing.B) {
-	benchmarkFirstUnequal(1, 249250621, 50, b)
-}
-
-func Benchmark_FirstUnequalLong4(b *testing.B) {
-	benchmarkFirstUnequal(4, 249250621, 50, b)
-}
-
-func Benchmark_FirstUnequalLongMax(b *testing.B) {
-	benchmarkFirstUnequal(runtime.NumCPU(), 249250621, 50, b)
-}
-
 func firstUnequal8Slow(arg1, arg2 []byte, startPos int) int {
 	// Slow, but straightforward-to-verify implementation.
 	endPos := len(arg1)
@@ -189,6 +68,153 @@ func TestFirstUnequal(t *testing.T) {
 	}
 }
 
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_FirstUnequal8/UnsafeShort1Cpu-8                     10         104339029 ns/op
+Benchmark_FirstUnequal8/UnsafeShortHalfCpu-8                  50          28360826 ns/op
+Benchmark_FirstUnequal8/UnsafeShortAllCpu-8                  100          24272646 ns/op
+Benchmark_FirstUnequal8/UnsafeLong1Cpu-8                       2         654616638 ns/op
+Benchmark_FirstUnequal8/UnsafeLongHalfCpu-8                    3         499705618 ns/op
+Benchmark_FirstUnequal8/UnsafeLongAllCpu-8                     3         477807746 ns/op
+Benchmark_FirstUnequal8/SIMDShort1Cpu-8                       10         114335599 ns/op
+Benchmark_FirstUnequal8/SIMDShortHalfCpu-8                    50          30189426 ns/op
+Benchmark_FirstUnequal8/SIMDShortAllCpu-8                     50          26847829 ns/op
+Benchmark_FirstUnequal8/SIMDLong1Cpu-8                         2         735662635 ns/op
+Benchmark_FirstUnequal8/SIMDLongHalfCpu-8                      3         488191229 ns/op
+Benchmark_FirstUnequal8/SIMDLongAllCpu-8                       3         480315740 ns/op
+Benchmark_FirstUnequal8/SlowShort1Cpu-8                        2         608618106 ns/op
+Benchmark_FirstUnequal8/SlowShortHalfCpu-8                    10         166658947 ns/op
+Benchmark_FirstUnequal8/SlowShortAllCpu-8                     10         154372585 ns/op
+Benchmark_FirstUnequal8/SlowLong1Cpu-8                         1        3883830889 ns/op
+Benchmark_FirstUnequal8/SlowLongHalfCpu-8                      1        1080159614 ns/op
+Benchmark_FirstUnequal8/SlowLongAllCpu-8                       1        1046794857 ns/op
+
+Notes: There is practically no speed penalty relative to bytes.Compare().
+*/
+
+type cmpArgs struct {
+	arg1 []byte
+	arg2 []byte
+}
+
+func firstUnequal8UnsafeSubtask(args interface{}, nIter int) int {
+	a := args.(cmpArgs)
+	curPos := 0
+	endPos := len(a.arg1)
+	for iter := 0; iter < nIter; iter++ {
+		if curPos >= endPos {
+			curPos = 0
+		}
+		curPos = simd.FirstUnequal8Unsafe(a.arg1, a.arg2, curPos)
+		curPos++
+	}
+	return curPos
+}
+
+func firstUnequal8SimdSubtask(args interface{}, nIter int) int {
+	a := args.(cmpArgs)
+	curPos := 0
+	endPos := len(a.arg1)
+	for iter := 0; iter < nIter; iter++ {
+		if curPos >= endPos {
+			curPos = 0
+		}
+		curPos = simd.FirstUnequal8(a.arg1, a.arg2, curPos)
+		curPos++
+	}
+	return curPos
+}
+
+func firstUnequal8SlowSubtask(args interface{}, nIter int) int {
+	a := args.(cmpArgs)
+	curPos := 0
+	endPos := len(a.arg1)
+	for iter := 0; iter < nIter; iter++ {
+		if curPos >= endPos {
+			curPos = 0
+		}
+		curPos = firstUnequal8Slow(a.arg1, a.arg2, curPos)
+		curPos++
+	}
+	return curPos
+}
+
+// Necessary to customize the initialization function; the default setting of
+// src = {0, 3, 6, 9, ...} and dst = {0, 0, 0, 0, ...} results in too many
+// mismatches for a realistic benchmark.
+// (We'll want to remove some overlap with multiBenchmarkDstSrc later, but
+// let's first see what other ways we need to customize these benchmarks.)
+func firstUnequal8MultiBenchmark(bf multiBenchFunc, benchmarkSubtype string, nByte, nJob int, b *testing.B) {
+	totalCpu := runtime.NumCPU()
+	cases := []struct {
+		nCpu    int
+		descrip string
+	}{
+		{
+			nCpu:    1,
+			descrip: "1Cpu",
+		},
+		{
+			nCpu:    (totalCpu + 1) / 2,
+			descrip: "HalfCpu",
+		},
+		{
+			nCpu:    totalCpu,
+			descrip: "AllCpu",
+		},
+	}
+	for _, c := range cases {
+		success := b.Run(benchmarkSubtype+c.descrip, func(b *testing.B) {
+			var argSlice []interface{}
+			for i := 0; i < c.nCpu; i++ {
+				// Previously, we only allocated these once, and all elements of
+				// argSlice referred to the same two arrays.  Don't see a reason to
+				// preserve that behavior when all the other benchmarks work
+				// differently.
+				newArrArg1 := simd.MakeUnsafe(nByte + 63)
+				newArrArg2 := simd.MakeUnsafe(nByte + 63)
+				newArrArg2[nByte/2] = 128
+				newArgs := cmpArgs{
+					arg1: newArrArg1[:nByte],
+					arg2: newArrArg2[:nByte],
+				}
+				argSlice = append(argSlice, newArgs)
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				multiBenchmark(bf, argSlice, c.nCpu, nJob)
+			}
+		})
+		if !success {
+			panic("benchmark failed")
+		}
+	}
+}
+
+func Benchmark_FirstUnequal8(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   firstUnequal8UnsafeSubtask,
+			tag: "Unsafe",
+		},
+		{
+			f:   firstUnequal8SimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   firstUnequal8SlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		firstUnequal8MultiBenchmark(f.f, f.tag+"Short", 150, 9999999, b)
+		firstUnequal8MultiBenchmark(f.f, f.tag+"Long", 249250621, 50, b)
+	}
+}
+
 func firstGreater8Slow(arg []byte, val byte, startPos int) int {
 	// Slow, but straightforward-to-verify implementation.
 	endPos := len(arg)
@@ -235,86 +261,6 @@ func TestFirstGreater(t *testing.T) {
 	}
 }
 
-func firstLeqSubtask(arg []byte, nIter int) int {
-	curPos := 0
-	endPos := len(arg)
-	for iter := 0; iter < nIter; iter++ {
-		if curPos >= endPos {
-			curPos = 0
-		}
-		curPos = simd.FirstLeq8Unsafe(arg, 0, curPos)
-		curPos++
-	}
-	return curPos
-}
-
-func firstLeqSubtaskFuture(arg []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- firstLeqSubtask(arg, nIter) }()
-	return future
-}
-
-func multiFirstLeq(args [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = firstLeqSubtaskFuture(args[0], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = firstLeqSubtaskFuture(args[0], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkFirstLeq(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	argSlices := make([][]byte, 1)
-	for ii := range argSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		simd.Memset8(newArr, 255)
-		// Just change one byte in the middle.
-		newArr[nByte/2] = 0
-		argSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiFirstLeq(argSlices, cpus, nJob)
-	}
-}
-
-func Benchmark_FirstLeqShort1(b *testing.B) {
-	benchmarkFirstLeq(1, 75, 9999999, b)
-}
-
-func Benchmark_FirstLeqShort4(b *testing.B) {
-	benchmarkFirstLeq(4, 75, 9999999, b)
-}
-
-func Benchmark_FirstLeqShortMax(b *testing.B) {
-	benchmarkFirstLeq(runtime.NumCPU(), 75, 9999999, b)
-}
-
-func Benchmark_FirstLeqLong1(b *testing.B) {
-	benchmarkFirstLeq(1, 249250621, 50, b)
-}
-
-func Benchmark_FirstLeqLong4(b *testing.B) {
-	benchmarkFirstLeq(4, 249250621, 50, b)
-}
-
-func Benchmark_FirstLeqLongMax(b *testing.B) {
-	benchmarkFirstLeq(runtime.NumCPU(), 249250621, 50, b)
-}
-
 func firstLeq8Slow(arg []byte, val byte, startPos int) int {
 	// Slow, but straightforward-to-verify implementation.
 	endPos := len(arg)
@@ -358,5 +304,112 @@ func TestFirstLeq8(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_FirstLeq8/SIMDShort1Cpu-8                   20          87235782 ns/op
+Benchmark_FirstLeq8/SIMDShortHalfCpu-8                50          23864936 ns/op
+Benchmark_FirstLeq8/SIMDShortAllCpu-8                100          21211734 ns/op
+Benchmark_FirstLeq8/SIMDLong1Cpu-8                     3         402996726 ns/op
+Benchmark_FirstLeq8/SIMDLongHalfCpu-8                  5         245066128 ns/op
+Benchmark_FirstLeq8/SIMDLongAllCpu-8                   5         231557103 ns/op
+Benchmark_FirstLeq8/SlowShort1Cpu-8                    2         549800977 ns/op
+Benchmark_FirstLeq8/SlowShortHalfCpu-8                10         152074140 ns/op
+Benchmark_FirstLeq8/SlowShortAllCpu-8                 10         142355855 ns/op
+Benchmark_FirstLeq8/SlowLong1Cpu-8                     1        3687059961 ns/op
+Benchmark_FirstLeq8/SlowLongHalfCpu-8                  1        1030280464 ns/op
+Benchmark_FirstLeq8/SlowLongAllCpu-8                   1        1019364554 ns/op
+*/
+
+func firstLeq8SimdSubtask(args interface{}, nIter int) int {
+	a := args.(cmpArgs)
+	curPos := 0
+	endPos := len(a.arg1)
+	for iter := 0; iter < nIter; iter++ {
+		if curPos >= endPos {
+			curPos = 0
+		}
+		curPos = simd.FirstLeq8(a.arg1, 0, curPos)
+		curPos++
+	}
+	return curPos
+}
+
+func firstLeq8SlowSubtask(args interface{}, nIter int) int {
+	a := args.(cmpArgs)
+	curPos := 0
+	endPos := len(a.arg1)
+	for iter := 0; iter < nIter; iter++ {
+		if curPos >= endPos {
+			curPos = 0
+		}
+		curPos = firstLeq8Slow(a.arg1, 0, curPos)
+		curPos++
+	}
+	return curPos
+}
+
+func firstLeq8MultiBenchmark(bf multiBenchFunc, benchmarkSubtype string, nByte, nJob int, b *testing.B) {
+	totalCpu := runtime.NumCPU()
+	cases := []struct {
+		nCpu    int
+		descrip string
+	}{
+		{
+			nCpu:    1,
+			descrip: "1Cpu",
+		},
+		{
+			nCpu:    (totalCpu + 1) / 2,
+			descrip: "HalfCpu",
+		},
+		{
+			nCpu:    totalCpu,
+			descrip: "AllCpu",
+		},
+	}
+	for _, c := range cases {
+		success := b.Run(benchmarkSubtype+c.descrip, func(b *testing.B) {
+			var argSlice []interface{}
+			for i := 0; i < c.nCpu; i++ {
+				newArr := simd.MakeUnsafe(nByte + 63)
+				simd.Memset8(newArr, 255)
+				// Just change one byte in the middle.
+				newArr[nByte/2] = 0
+				newArgs := cmpArgs{
+					arg1: newArr[:nByte],
+				}
+				argSlice = append(argSlice, newArgs)
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				multiBenchmark(bf, argSlice, c.nCpu, nJob)
+			}
+		})
+		if !success {
+			panic("benchmark failed")
+		}
+	}
+}
+
+func Benchmark_FirstLeq8(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   firstLeq8SimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   firstLeq8SlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		firstLeq8MultiBenchmark(f.f, f.tag+"Short", 150, 9999999, b)
+		firstLeq8MultiBenchmark(f.f, f.tag+"Long", 249250621, 50, b)
 	}
 }

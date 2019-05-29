@@ -86,19 +86,16 @@ func FirstUnequal8Unsafe(arg1, arg2 []byte, startPos int) int {
 //
 // This is essentially an extension of bytes.Compare().
 func FirstUnequal8(arg1, arg2 []byte, startPos int) int {
-	// This takes ~20-25% longer on the short-array benchmark.
+	// This takes ~10% longer on the short-array benchmark.
 	endPos := len(arg1)
-	if endPos != len(arg2) {
-		panic("FirstUnequal8() requires len(arg1) == len(arg2).")
-	}
-	if startPos < 0 {
-		// This check is kind of paranoid.  It's here because
+	if endPos != len(arg2) || (startPos < 0) {
+		// The startPos < 0 check is kind of paranoid.  It's here because
 		// unsafe.Pointer(arg1Header.Data + uintptr(startPos)) does not
 		// automatically error out on negative startPos, and it also doesn't hurt
 		// to protect against (endPos - startPos) integer overflow; but feel free
 		// to request its removal if you are using this function in a time-critical
 		// loop.
-		panic("FirstUnequal8() requires nonnegative startPos.")
+		panic("FirstUnequal8() requires len(arg1) == len(arg2) and nonnegative startPos.")
 	}
 	nByte := endPos - startPos
 	if nByte < BytesPerWord {

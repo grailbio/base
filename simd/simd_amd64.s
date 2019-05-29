@@ -415,7 +415,9 @@ TEXT ·bitFromEveryByteSSE2Asm(SB),4,$0-32
 
         MOVQ    nDstByte+24(FP), CX
         SUBQ    $2, CX
-        XORQ    DX, DX
+        // Compilers emit this instead of XORQ DX,DX since it's smaller and has
+        // the same effect.
+        XORL    DX, DX
 
         CMPQ    CX, DX
         JLE     bitFromEveryByteSSE2AsmOdd

@@ -9,107 +9,11 @@ import (
 	"math/bits"
 	"math/rand"
 	"reflect"
-	"runtime"
 	"testing"
 	"unsafe"
 
 	"github.com/grailbio/base/simd"
 )
-
-/*
-Initial benchmark results:
-  MacBook Pro (15-inch, 2016)
-  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
-
-Benchmark_ByteShortPopcnt1-8                   2         880567116 ns/op
-Benchmark_ByteShortPopcnt4-8                   5         249242503 ns/op
-Benchmark_ByteShortPopcntMax-8                10         197222506 ns/op
-Benchmark_ByteShortOldPopcnt1-8                2         992499107 ns/op
-Benchmark_ByteShortOldPopcnt4-8                5         273206944 ns/op
-Benchmark_ByteShortOldPopcntMax-8              5         270066225 ns/op
-Benchmark_ByteLongPopcnt1-8                    1        1985211630 ns/op
-Benchmark_ByteLongPopcnt4-8                    2         511618631 ns/op
-Benchmark_ByteLongPopcntMax-8                  3         506767183 ns/op
-Benchmark_ByteLongOldPopcnt1-8                 1        2473936090 ns/op
-Benchmark_ByteLongOldPopcnt4-8                 2         747990164 ns/op
-Benchmark_ByteLongOldPopcntMax-8               2         743366724 ns/op
-
-Only differences between new and old code so far are
-  (i) 2x loop-unroll, and
-  (ii) per-call "do we have SSE4.2" flag checks.
-I did try implementing the 2x loop-unroll in the math/bits code, but it did not
-have much of an effect there.
-
-
-Benchmark_CountCGShort1-8             20          86156256 ns/op
-Benchmark_CountCGShort4-8            100          23032100 ns/op
-Benchmark_CountCGShortMax-8          100          22272840 ns/op
-Benchmark_CountCGLong1-8               1        1025820961 ns/op
-Benchmark_CountCGLong4-8               1        1461443453 ns/op
-Benchmark_CountCGLongMax-8             1        2180675096 ns/op
-
-Benchmark_Count3BytesShort1-8                 10         105075618 ns/op
-Benchmark_Count3BytesShort4-8                 50          29571207 ns/op
-Benchmark_Count3BytesShortMax-8               50          27188249 ns/op
-Benchmark_Count3BytesLong1-8                   1        1308949833 ns/op
-Benchmark_Count3BytesLong4-8                   1        1612130605 ns/op
-Benchmark_Count3BytesLongMax-8                 1        2319478110 ns/op
-
-Benchmark_Accumulate8Short1-8                 20          67181978 ns/op
-Benchmark_Accumulate8Short4-8                100          18216505 ns/op
-Benchmark_Accumulate8ShortMax-8              100          17359664 ns/op
-Benchmark_Accumulate8Long1-8                   1        1050107761 ns/op
-Benchmark_Accumulate8Long4-8                   1        1440863620 ns/op
-Benchmark_Accumulate8LongMax-8                 1        2202725361 ns/op
-
-Benchmark_Accumulate8GreaterShort1-8                  20          91913187 ns/op
-Benchmark_Accumulate8GreaterShort4-8                  50          25629176 ns/op
-Benchmark_Accumulate8GreaterShortMax-8               100          22020836 ns/op
-Benchmark_Accumulate8GreaterLong1-8                    1        1166256065 ns/op
-Benchmark_Accumulate8GreaterLong4-8                    1        1529133163 ns/op
-Benchmark_Accumulate8GreaterLongMax-8                  1        2447755677 ns/op
-
-For comparison, countCGStandard:
-Benchmark_CountCGShort1-8              5         206159939 ns/op
-Benchmark_CountCGShort4-8             20          55653414 ns/op
-Benchmark_CountCGShortMax-8           30          49566408 ns/op
-Benchmark_CountCGLong1-8               1        1786864086 ns/op
-Benchmark_CountCGLong4-8               1        1975270955 ns/op
-Benchmark_CountCGLongMax-8             1        2846417721 ns/op
-
-countCGNaive:
-Benchmark_CountCGShort1-8              2         753564012 ns/op
-Benchmark_CountCGShort4-8              5         200074546 ns/op
-Benchmark_CountCGShortMax-8           10         193392413 ns/op
-Benchmark_CountCGLong1-8               1        12838546141 ns/op
-Benchmark_CountCGLong4-8               1        4371080727 ns/op
-Benchmark_CountCGLongMax-8             1        5023199989 ns/op
-(lesson: don't forget to use bytes.Count() when it's applicable!)
-
-count3BytesStandard:
-Benchmark_Count3BytesShort1-8                  5         288822460 ns/op
-Benchmark_Count3BytesShort4-8                 20          81116028 ns/op
-Benchmark_Count3BytesShortMax-8               20          75587001 ns/op
-Benchmark_Count3BytesLong1-8                   1        2526123231 ns/op
-Benchmark_Count3BytesLong4-8                   1        2425857828 ns/op
-Benchmark_Count3BytesLongMax-8                 1        3235725694 ns/op
-
-accumulate8Slow:
-Benchmark_Accumulate8Short1-8                  3         394838027 ns/op
-Benchmark_Accumulate8Short4-8                 10         105763035 ns/op
-Benchmark_Accumulate8ShortMax-8               20          93473300 ns/op
-Benchmark_Accumulate8Long1-8                   1        5143881564 ns/op
-Benchmark_Accumulate8Long4-8                   1        3501219437 ns/op
-Benchmark_Accumulate8LongMax-8                 1        3096559063 ns/op
-
-accumulate8GreaterSlow:
-Benchmark_Accumulate8GreaterShort1-8                   3         466978266 ns/op
-Benchmark_Accumulate8GreaterShort4-8                  10         125637387 ns/op
-Benchmark_Accumulate8GreaterShortMax-8                10         117808985 ns/op
-Benchmark_Accumulate8GreaterLong1-8                    1        9825147670 ns/op
-Benchmark_Accumulate8GreaterLong4-8                    1        5815093074 ns/op
-Benchmark_Accumulate8GreaterLongMax-8                  1        4554119137 ns/op
-*/
 
 func init() {
 	if unsafe.Sizeof(uintptr(0)) != 8 {
@@ -154,134 +58,6 @@ func popcntBytesNoasm(byteslice []byte) int {
 	return tot
 }
 
-func popcntSubtaskOld(byteSlice []byte, nIter int) int {
-	sum := 0
-	for iter := 0; iter < nIter; iter++ {
-		sum += popcntBytesNoasm(byteSlice)
-	}
-	return sum
-}
-
-func popcntSubtaskOldFuture(byteSlice []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- popcntSubtaskOld(byteSlice, nIter) }()
-	return future
-}
-
-func popcntSubtask(byteSlice []byte, nIter int) int {
-	sum := 0
-	for iter := 0; iter < nIter; iter++ {
-		sum += simd.Popcnt(byteSlice)
-	}
-	return sum
-}
-
-func popcntSubtaskFuture(byteSlice []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- popcntSubtask(byteSlice, nIter) }()
-	return future
-}
-
-func multiBytePopcnt(byteSlice []byte, cpus int, nJob int, useOld bool) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	// Note that this straightforward sharding scheme sometimes doesn't work well
-	// with hyperthreading: on my Mac, I get more consistent performance dividing
-	// cpus by two to set it to the actual number of cores.  However, this
-	// doesn't happen on my adhoc instance.
-	// In any case, I'll experiment with other concurrency patterns soon.
-	var taskIdx int
-	if useOld {
-		for ; taskIdx < shardRemainder; taskIdx++ {
-			sumFutures[taskIdx] = popcntSubtaskOldFuture(byteSlice, shardSizeP1)
-		}
-		for ; taskIdx < cpus; taskIdx++ {
-			sumFutures[taskIdx] = popcntSubtaskOldFuture(byteSlice, shardSizeBase)
-		}
-	} else {
-		for ; taskIdx < shardRemainder; taskIdx++ {
-			sumFutures[taskIdx] = popcntSubtaskFuture(byteSlice, shardSizeP1)
-		}
-		for ; taskIdx < cpus; taskIdx++ {
-			sumFutures[taskIdx] = popcntSubtaskFuture(byteSlice, shardSizeBase)
-		}
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-	// fmt.Println(sum)
-}
-
-func benchmarkBytePopcnt(cpus int, nByte int, nJob int, useOld bool, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	byteArr := make([]byte, nByte+1)
-	for uii := uint(0); uii < uint(nByte); uii++ {
-		byteArr[uii] = (byte)(uii)
-	}
-	byteSlice := byteArr[1 : nByte+1] // force unaligned
-	for i := 0; i < b.N; i++ {
-		multiBytePopcnt(byteSlice, cpus, nJob, useOld)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_ByteShortPopcnt1(b *testing.B) {
-	benchmarkBytePopcnt(1, 75, 99999999, false, b)
-}
-
-func Benchmark_ByteShortPopcnt4(b *testing.B) {
-	benchmarkBytePopcnt(4, 75, 99999999, false, b)
-}
-
-func Benchmark_ByteShortPopcntMax(b *testing.B) {
-	benchmarkBytePopcnt(runtime.NumCPU(), 75, 99999999, false, b)
-}
-
-func Benchmark_ByteShortOldPopcnt1(b *testing.B) {
-	benchmarkBytePopcnt(1, 75, 99999999, true, b)
-}
-
-func Benchmark_ByteShortOldPopcnt4(b *testing.B) {
-	benchmarkBytePopcnt(4, 75, 99999999, true, b)
-}
-
-func Benchmark_ByteShortOldPopcntMax(b *testing.B) {
-	benchmarkBytePopcnt(runtime.NumCPU(), 75, 99999999, true, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_ByteLongPopcnt1(b *testing.B) {
-	benchmarkBytePopcnt(1, 249250621, 100, false, b)
-}
-
-func Benchmark_ByteLongPopcnt4(b *testing.B) {
-	benchmarkBytePopcnt(4, 249250621, 100, false, b)
-}
-
-func Benchmark_ByteLongPopcntMax(b *testing.B) {
-	benchmarkBytePopcnt(runtime.NumCPU(), 249250621, 100, false, b)
-}
-
-func Benchmark_ByteLongOldPopcnt1(b *testing.B) {
-	benchmarkBytePopcnt(1, 249250621, 100, true, b)
-}
-
-func Benchmark_ByteLongOldPopcnt4(b *testing.B) {
-	benchmarkBytePopcnt(4, 249250621, 100, true, b)
-}
-
-func Benchmark_ByteLongOldPopcntMax(b *testing.B) {
-	benchmarkBytePopcnt(runtime.NumCPU(), 249250621, 100, true, b)
-}
-
 func popcntBytesSlow(bytes []byte) int {
 	// Slow (factor of 5-8x), but straightforward-to-verify implementation.
 	tot := 0
@@ -323,83 +99,82 @@ func TestBytePopcnt(t *testing.T) {
 	}
 }
 
-func countCGSubtask(src []byte, nIter int) int {
-	tot := 0
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Popcnt/SIMDShort1Cpu-8                      20          90993141 ns/op
+Benchmark_Popcnt/SIMDShortHalfCpu-8                   50          24639468 ns/op
+Benchmark_Popcnt/SIMDShortAllCpu-8                   100          23098747 ns/op
+Benchmark_Popcnt/SIMDLong1Cpu-8                        2         909927976 ns/op
+Benchmark_Popcnt/SIMDLongHalfCpu-8                     3         488961048 ns/op
+Benchmark_Popcnt/SIMDLongAllCpu-8                      3         466249901 ns/op
+Benchmark_Popcnt/NoasmShort1Cpu-8                     10         106873386 ns/op
+Benchmark_Popcnt/NoasmShortHalfCpu-8                  50          29290668 ns/op
+Benchmark_Popcnt/NoasmShortAllCpu-8                   50          29559455 ns/op
+Benchmark_Popcnt/NoasmLong1Cpu-8                       1        1217844097 ns/op
+Benchmark_Popcnt/NoasmLongHalfCpu-8                    2         507946501 ns/op
+Benchmark_Popcnt/NoasmLongAllCpu-8                     3         483458386 ns/op
+Benchmark_Popcnt/SlowShort1Cpu-8                       2         519449562 ns/op
+Benchmark_Popcnt/SlowShortHalfCpu-8                   10         139108095 ns/op
+Benchmark_Popcnt/SlowShortAllCpu-8                    10         143346876 ns/op
+Benchmark_Popcnt/SlowLong1Cpu-8                        1        7515831696 ns/op
+Benchmark_Popcnt/SlowLongHalfCpu-8                     1        2083880380 ns/op
+Benchmark_Popcnt/SlowLongAllCpu-8                      1        2064129411 ns/op
+
+Notes: The current SSE4.2 SIMD implementation just amounts to a 2x-unrolled
+OnesCount64 loop without flag-rechecking overhead; they're using the same
+underlying instruction.  AVX2/AVX-512 allow for faster bulk processing, though;
+see e.g. https://github.com/kimwalisch/libpopcnt .
+*/
+
+func popcntSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	sum := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += simd.MaskThenCountByte(src, 0xfb, 'C')
+		sum += simd.Popcnt(a.src)
 	}
-	return tot
+	return sum
 }
 
-func countCGSubtaskFuture(src []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- countCGSubtask(src, nIter) }()
-	return future
-}
-
-func multiCountCG(srcs [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = countCGSubtaskFuture(srcs[taskIdx], shardSizeP1)
+func popcntNoasmSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	sum := 0
+	for iter := 0; iter < nIter; iter++ {
+		sum += popcntBytesNoasm(a.src)
 	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = countCGSubtaskFuture(srcs[taskIdx], shardSizeBase)
+	return sum
+}
+
+func popcntSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	sum := 0
+	for iter := 0; iter < nIter; iter++ {
+		sum += popcntBytesSlow(a.src)
 	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
+	return sum
+}
+
+func Benchmark_Popcnt(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   popcntSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   popcntNoasmSubtask,
+			tag: "Noasm",
+		},
+		{
+			f:   popcntSlowSubtask,
+			tag: "Slow",
+		},
 	}
-}
-
-func benchmarkCountCG(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 75, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[1 : nByte+1]
-	}
-	for i := 0; i < b.N; i++ {
-		multiCountCG(mainSlices, cpus, nJob)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_CountCGShort1(b *testing.B) {
-	benchmarkCountCG(1, 75, 9999999, b)
-}
-
-func Benchmark_CountCGShort4(b *testing.B) {
-	benchmarkCountCG(4, 75, 9999999, b)
-}
-
-func Benchmark_CountCGShortMax(b *testing.B) {
-	benchmarkCountCG(runtime.NumCPU(), 75, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_CountCGLong1(b *testing.B) {
-	benchmarkCountCG(1, 249250621, 50, b)
-}
-
-func Benchmark_CountCGLong4(b *testing.B) {
-	benchmarkCountCG(4, 249250621, 50, b)
-}
-
-func Benchmark_CountCGLongMax(b *testing.B) {
-	benchmarkCountCG(runtime.NumCPU(), 249250621, 50, b)
 }
 
 var cgArr = [...]byte{'C', 'G'}
@@ -442,6 +217,60 @@ func TestCountCG(t *testing.T) {
 	}
 }
 
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_CountCG/SIMDShort1Cpu-8                     10         119280079 ns/op
+Benchmark_CountCG/SIMDShortHalfCpu-8                  50          34743805 ns/op
+Benchmark_CountCG/SIMDShortAllCpu-8                   50          28507338 ns/op
+Benchmark_CountCG/SIMDLong1Cpu-8                       2         765099599 ns/op
+Benchmark_CountCG/SIMDLongHalfCpu-8                    3         491655239 ns/op
+Benchmark_CountCG/SIMDLongAllCpu-8                     3         452592924 ns/op
+Benchmark_CountCG/StandardShort1Cpu-8                  5         237081120 ns/op
+Benchmark_CountCG/StandardShortHalfCpu-8              20          64949969 ns/op
+Benchmark_CountCG/StandardShortAllCpu-8               20          59167932 ns/op
+Benchmark_CountCG/StandardLong1Cpu-8                   1        1496389230 ns/op
+Benchmark_CountCG/StandardLongHalfCpu-8                2         931898463 ns/op
+Benchmark_CountCG/StandardLongAllCpu-8                 2         980615182 ns/op
+*/
+
+func countCGSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	for iter := 0; iter < nIter; iter++ {
+		tot += simd.MaskThenCountByte(a.src, 0xfb, 'C')
+	}
+	return tot
+}
+
+func countCGStandardSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	for iter := 0; iter < nIter; iter++ {
+		tot += countCGStandard(a.src)
+	}
+	return tot
+}
+
+func Benchmark_CountCG(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   countCGSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   countCGStandardSubtask,
+			tag: "Standard",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
+	}
+}
+
 func count2BytesStandard(src, vals []byte) int {
 	// Not 'Slow' since bytes.Count is decently optimized for a single byte.
 	return bytes.Count(src, vals[:1]) + bytes.Count(src, vals[1:2])
@@ -472,88 +301,6 @@ func TestCount2Bytes(t *testing.T) {
 	}
 }
 
-func count3BytesSubtask(src []byte, nIter int) int {
-	tot := 0
-	// vals := [...]byte{'A', 'T', 'N'}
-	// valsSlice := vals[:]
-	for iter := 0; iter < nIter; iter++ {
-		tot += simd.Count3Bytes(src, 'A', 'T', 'N')
-		// tot += count3BytesStandard(src, valsSlice)
-	}
-	return tot
-}
-
-func count3BytesSubtaskFuture(src []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- count3BytesSubtask(src, nIter) }()
-	return future
-}
-
-func multiCount3Bytes(srcs [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = count3BytesSubtaskFuture(srcs[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = count3BytesSubtaskFuture(srcs[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkCount3Bytes(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiCount3Bytes(mainSlices, cpus, nJob)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_Count3BytesShort1(b *testing.B) {
-	benchmarkCount3Bytes(1, 75, 9999999, b)
-}
-
-func Benchmark_Count3BytesShort4(b *testing.B) {
-	benchmarkCount3Bytes(4, 75, 9999999, b)
-}
-
-func Benchmark_Count3BytesShortMax(b *testing.B) {
-	benchmarkCount3Bytes(runtime.NumCPU(), 75, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_Count3BytesLong1(b *testing.B) {
-	benchmarkCount3Bytes(1, 249250621, 50, b)
-}
-
-func Benchmark_Count3BytesLong4(b *testing.B) {
-	benchmarkCount3Bytes(4, 249250621, 50, b)
-}
-
-func Benchmark_Count3BytesLongMax(b *testing.B) {
-	benchmarkCount3Bytes(runtime.NumCPU(), 249250621, 50, b)
-}
-
 func count3BytesStandard(src, vals []byte) int {
 	return bytes.Count(src, vals[:1]) + bytes.Count(src, vals[1:2]) + bytes.Count(src, vals[2:3])
 }
@@ -581,6 +328,61 @@ func TestCount3Bytes(t *testing.T) {
 		if result1 != result2 {
 			t.Fatal("Mismatched Count3Bytes result.")
 		}
+	}
+}
+
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Count3Bytes/SIMDShort1Cpu-8                 10         141085860 ns/op
+Benchmark_Count3Bytes/SIMDShortHalfCpu-8              30          40371892 ns/op
+Benchmark_Count3Bytes/SIMDShortAllCpu-8               30          37769995 ns/op
+Benchmark_Count3Bytes/SIMDLong1Cpu-8                   2         945534510 ns/op
+Benchmark_Count3Bytes/SIMDLongHalfCpu-8                3         499146889 ns/op
+Benchmark_Count3Bytes/SIMDLongAllCpu-8                 3         475811932 ns/op
+Benchmark_Count3Bytes/StandardShort1Cpu-8              3         346637595 ns/op
+Benchmark_Count3Bytes/StandardShortHalfCpu-8          20          96524251 ns/op
+Benchmark_Count3Bytes/StandardShortAllCpu-8           20          87056185 ns/op
+Benchmark_Count3Bytes/StandardLong1Cpu-8               1        2260954596 ns/op
+Benchmark_Count3Bytes/StandardLongHalfCpu-8            1        1518757560 ns/op
+Benchmark_Count3Bytes/StandardLongAllCpu-8             1        1468352229 ns/op
+*/
+
+func count3BytesSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	for iter := 0; iter < nIter; iter++ {
+		tot += simd.Count3Bytes(a.src, 'A', 'T', 'N')
+	}
+	return tot
+}
+
+func count3BytesStandardSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	vals := []byte{'A', 'T', 'N'}
+	for iter := 0; iter < nIter; iter++ {
+		tot += count3BytesStandard(a.src, vals)
+	}
+	return tot
+}
+
+func Benchmark_Count3Bytes(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   count3BytesSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   count3BytesStandardSubtask,
+			tag: "Standard",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }
 
@@ -730,86 +532,6 @@ func TestCountUnpackedNibblesInTwoSets(t *testing.T) {
 	}
 }
 
-func accumulate8Subtask(src []byte, nIter int) int {
-	tot := 0
-	for iter := 0; iter < nIter; iter++ {
-		tot += simd.Accumulate8(src)
-		// tot += accumulate8Slow(src)
-	}
-	return tot
-}
-
-func accumulate8SubtaskFuture(src []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- accumulate8Subtask(src, nIter) }()
-	return future
-}
-
-func multiAccumulate8(srcs [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = accumulate8SubtaskFuture(srcs[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = accumulate8SubtaskFuture(srcs[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkAccumulate8(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiAccumulate8(mainSlices, cpus, nJob)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_Accumulate8Short1(b *testing.B) {
-	benchmarkAccumulate8(1, 75, 9999999, b)
-}
-
-func Benchmark_Accumulate8Short4(b *testing.B) {
-	benchmarkAccumulate8(4, 75, 9999999, b)
-}
-
-func Benchmark_Accumulate8ShortMax(b *testing.B) {
-	benchmarkAccumulate8(runtime.NumCPU(), 75, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_Accumulate8Long1(b *testing.B) {
-	benchmarkAccumulate8(1, 249250621, 50, b)
-}
-
-func Benchmark_Accumulate8Long4(b *testing.B) {
-	benchmarkAccumulate8(4, 249250621, 50, b)
-}
-
-func Benchmark_Accumulate8LongMax(b *testing.B) {
-	benchmarkAccumulate8(runtime.NumCPU(), 249250621, 50, b)
-}
-
 func accumulate8Slow(src []byte) int {
 	cnt := 0
 	for _, srcByte := range src {
@@ -838,84 +560,58 @@ func TestAccumulate8(t *testing.T) {
 	}
 }
 
-func accumulate8GreaterSubtask(src []byte, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Accumulate8/SIMDShort1Cpu-8                 20          92560842 ns/op
+Benchmark_Accumulate8/SIMDShortHalfCpu-8              50          24796260 ns/op
+Benchmark_Accumulate8/SIMDShortAllCpu-8              100          21541910 ns/op
+Benchmark_Accumulate8/SIMDLong1Cpu-8                   2         778781187 ns/op
+Benchmark_Accumulate8/SIMDLongHalfCpu-8                3         466101270 ns/op
+Benchmark_Accumulate8/SIMDLongAllCpu-8                 3         472125495 ns/op
+Benchmark_Accumulate8/SlowShort1Cpu-8                  2         725211331 ns/op
+Benchmark_Accumulate8/SlowShortHalfCpu-8              10         192303935 ns/op
+Benchmark_Accumulate8/SlowShortAllCpu-8               10         146159760 ns/op
+Benchmark_Accumulate8/SlowLong1Cpu-8                   1        5371110621 ns/op
+Benchmark_Accumulate8/SlowLongHalfCpu-8                1        1473946277 ns/op
+Benchmark_Accumulate8/SlowLongAllCpu-8                 1        1118962315 ns/op
+*/
+
+func accumulate8SimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += simd.Accumulate8Greater(src, 14)
-		// tot += accumulate8GreaterSlow(src, 14)
+		tot += simd.Accumulate8(a.src)
 	}
 	return tot
 }
 
-func accumulate8GreaterSubtaskFuture(src []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- accumulate8GreaterSubtask(src, nIter) }()
-	return future
-}
-
-func multiAccumulate8Greater(srcs [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = accumulate8GreaterSubtaskFuture(srcs[taskIdx], shardSizeP1)
+func accumulate8SlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	for iter := 0; iter < nIter; iter++ {
+		tot += accumulate8Slow(a.src)
 	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = accumulate8GreaterSubtaskFuture(srcs[taskIdx], shardSizeBase)
+	return tot
+}
+
+func Benchmark_Accumulate8(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   accumulate8SimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   accumulate8SlowSubtask,
+			tag: "Slow",
+		},
 	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
-}
-
-func benchmarkAccumulate8Greater(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj*3) & 127
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiAccumulate8Greater(mainSlices, cpus, nJob)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_Accumulate8GreaterShort1(b *testing.B) {
-	benchmarkAccumulate8Greater(1, 75, 9999999, b)
-}
-
-func Benchmark_Accumulate8GreaterShort4(b *testing.B) {
-	benchmarkAccumulate8Greater(4, 75, 9999999, b)
-}
-
-func Benchmark_Accumulate8GreaterShortMax(b *testing.B) {
-	benchmarkAccumulate8Greater(runtime.NumCPU(), 75, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_Accumulate8GreaterLong1(b *testing.B) {
-	benchmarkAccumulate8Greater(1, 249250621, 50, b)
-}
-
-func Benchmark_Accumulate8GreaterLong4(b *testing.B) {
-	benchmarkAccumulate8Greater(4, 249250621, 50, b)
-}
-
-func Benchmark_Accumulate8GreaterLongMax(b *testing.B) {
-	benchmarkAccumulate8Greater(runtime.NumCPU(), 249250621, 50, b)
 }
 
 func accumulate8GreaterSlow(src []byte, val byte) int {
@@ -947,5 +643,59 @@ func TestAccumulate8Greater(t *testing.T) {
 		if result1 != result2 {
 			t.Fatal("Mismatched Accumulate8Greater result.")
 		}
+	}
+}
+
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Accumulate8Greater/SIMDShort1Cpu-8                  10         137436870 ns/op
+Benchmark_Accumulate8Greater/SIMDShortHalfCpu-8               50          36257710 ns/op
+Benchmark_Accumulate8Greater/SIMDShortAllCpu-8                50          32131334 ns/op
+Benchmark_Accumulate8Greater/SIMDLong1Cpu-8                    2         895831574 ns/op
+Benchmark_Accumulate8Greater/SIMDLongHalfCpu-8                 2         501501504 ns/op
+Benchmark_Accumulate8Greater/SIMDLongAllCpu-8                  3         473122019 ns/op
+Benchmark_Accumulate8Greater/SlowShort1Cpu-8                   1        1026311714 ns/op
+Benchmark_Accumulate8Greater/SlowShortHalfCpu-8                5         270841153 ns/op
+Benchmark_Accumulate8Greater/SlowShortAllCpu-8                 5         254131935 ns/op
+Benchmark_Accumulate8Greater/SlowLong1Cpu-8                    1        7651910478 ns/op
+Benchmark_Accumulate8Greater/SlowLongHalfCpu-8                 1        2113221447 ns/op
+Benchmark_Accumulate8Greater/SlowLongAllCpu-8                  1        2047822921 ns/op
+*/
+
+func accumulate8GreaterSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	for iter := 0; iter < nIter; iter++ {
+		tot += simd.Accumulate8Greater(a.src, 14)
+	}
+	return tot
+}
+
+func accumulate8GreaterSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	tot := 0
+	for iter := 0; iter < nIter; iter++ {
+		tot += accumulate8GreaterSlow(a.src, 14)
+	}
+	return tot
+}
+
+func Benchmark_Accumulate8Greater(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   accumulate8GreaterSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   accumulate8GreaterSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }

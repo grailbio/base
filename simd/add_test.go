@@ -7,110 +7,10 @@ package simd_test
 import (
 	"bytes"
 	"math/rand"
-	"runtime"
 	"testing"
 
 	"github.com/grailbio/base/simd"
 )
-
-/*
-Initial benchmark results:
-  MacBook Pro (15-inch, 2016)
-  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
-
-Benchmark_AddConstShort1-8            20          65355577 ns/op
-Benchmark_AddConstShort4-8           100          22503200 ns/op
-Benchmark_AddConstShortMax-8         100          18402022 ns/op
-Benchmark_AddConstLong1-8              1        1314456098 ns/op
-Benchmark_AddConstLong4-8              1        1963028701 ns/op
-Benchmark_AddConstLongMax-8            1        2640851500 ns/op
-
-For comparison, addConst8Slow:
-Benchmark_AddConstShort1-8             3         394073399 ns/op
-Benchmark_AddConstShort4-8            10         112302717 ns/op
-Benchmark_AddConstShortMax-8          10         101881678 ns/op
-Benchmark_AddConstLong1-8              1        5806941582 ns/op
-Benchmark_AddConstLong4-8              1        2451731455 ns/op
-Benchmark_AddConstLongMax-8            1        3305500509 ns/op
-*/
-
-func addConstSubtask(dst []byte, nIter int) int {
-	for iter := 0; iter < nIter; iter++ {
-		simd.AddConst8UnsafeInplace(dst, 33)
-	}
-	return int(dst[0])
-}
-
-func addConstSubtaskFuture(dst []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- addConstSubtask(dst, nIter) }()
-	return future
-}
-
-func multiAddConst(dsts [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = addConstSubtaskFuture(dsts[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = addConstSubtaskFuture(dsts[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkAddConst(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiAddConst(mainSlices, cpus, nJob)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_AddConstShort1(b *testing.B) {
-	benchmarkAddConst(1, 75, 9999999, b)
-}
-
-func Benchmark_AddConstShort4(b *testing.B) {
-	benchmarkAddConst(4, 75, 9999999, b)
-}
-
-func Benchmark_AddConstShortMax(b *testing.B) {
-	benchmarkAddConst(runtime.NumCPU(), 75, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_AddConstLong1(b *testing.B) {
-	benchmarkAddConst(1, 249250621, 50, b)
-}
-
-func Benchmark_AddConstLong4(b *testing.B) {
-	benchmarkAddConst(4, 249250621, 50, b)
-}
-
-func Benchmark_AddConstLongMax(b *testing.B) {
-	benchmarkAddConst(runtime.NumCPU(), 249250621, 50, b)
-}
 
 func addConst8Slow(dst []byte, val byte) {
 	// strangely, this takes ~35% less time than the single-parameter for loop on
@@ -177,6 +77,60 @@ func TestAddConst(t *testing.T) {
 		if !bytes.Equal(src2Slice, main3Slice) {
 			t.Fatal("AddConst8Inplace(., -byteVal) didn't invert AddConst8Inplace(., byteVal).")
 		}
+	}
+}
+
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_AddConst8Inplace/SIMDShort1Cpu-8                    20          94449590 ns/op
+Benchmark_AddConst8Inplace/SIMDShortHalfCpu-8                 50          28197917 ns/op
+Benchmark_AddConst8Inplace/SIMDShortAllCpu-8                  50          27452313 ns/op
+Benchmark_AddConst8Inplace/SIMDLong1Cpu-8                      1        1145256373 ns/op
+Benchmark_AddConst8Inplace/SIMDLongHalfCpu-8                   2         959236835 ns/op
+Benchmark_AddConst8Inplace/SIMDLongAllCpu-8                    2         982555560 ns/op
+Benchmark_AddConst8Inplace/SlowShort1Cpu-8                     2         707287108 ns/op
+Benchmark_AddConst8Inplace/SlowShortHalfCpu-8                 10         199415710 ns/op
+Benchmark_AddConst8Inplace/SlowShortAllCpu-8                   5         245220685 ns/op
+Benchmark_AddConst8Inplace/SlowLong1Cpu-8                      1        5480013373 ns/op
+Benchmark_AddConst8Inplace/SlowLongHalfCpu-8                   1        1467424090 ns/op
+Benchmark_AddConst8Inplace/SlowLongAllCpu-8                    1        1554565031 ns/op
+*/
+
+func addConst8InplaceSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		simd.AddConst8Inplace(a.dst, 33)
+	}
+	return int(a.dst[0])
+}
+
+func addConst8InplaceSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		addConst8Slow(a.dst, 33)
+	}
+	return int(a.dst[0])
+}
+
+func Benchmark_AddConst8Inplace(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   addConst8InplaceSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   addConst8InplaceSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 150, 0, 9999999, b)
+		// GRCh37 chromosome 1 length is 249250621, so that's a plausible
+		// long-array use case.
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
 	}
 }
 

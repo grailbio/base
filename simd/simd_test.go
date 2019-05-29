@@ -8,154 +8,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math/rand"
-	"runtime"
 	"testing"
 
 	"github.com/grailbio/base/simd"
 	"github.com/grailbio/testutil/assert"
 )
 
-/*
-Initial benchmark results:
-  MacBook Pro (15-inch, 2016)
-  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
-
-Benchmark_Memset8Short1-8             20          56542414 ns/op
-Benchmark_Memset8Short4-8            100          15969877 ns/op
-Benchmark_Memset8ShortMax-8          100          15780214 ns/op
-Benchmark_Memset8Long1-8               1        1279094415 ns/op
-Benchmark_Memset8Long4-8               1        1902840097 ns/op
-Benchmark_Memset8LongMax-8             1        2715013574 ns/op
-
-Benchmark_UnpackedNibbleLookupShort1-8                20          66268257 ns/op
-Benchmark_UnpackedNibbleLookupShort4-8               100          18575755 ns/op
-Benchmark_UnpackedNibbleLookupShortMax-8             100          17474281 ns/op
-Benchmark_UnpackedNibbleLookupLong1-8                  1        1330878965 ns/op
-Benchmark_UnpackedNibbleLookupLong4-8                  1        1977241995 ns/op
-Benchmark_UnpackedNibbleLookupLongMax-8                1        2793933818 ns/op
-
-Benchmark_PackedNibbleLookupShort1-8                  20          80579763 ns/op
-Benchmark_PackedNibbleLookupShort4-8                 100          23488681 ns/op
-Benchmark_PackedNibbleLookupShortMax-8               100          21701360 ns/op
-Benchmark_PackedNibbleLookupLong1-8                    1        1470408074 ns/op
-Benchmark_PackedNibbleLookupLong4-8                    1        2103843655 ns/op
-Benchmark_PackedNibbleLookupLongMax-8                  1        2767976716 ns/op
-
-Benchmark_InterleaveShort1-8                  10         122320311 ns/op
-Benchmark_InterleaveShort4-8                  50          33240437 ns/op
-Benchmark_InterleaveShortMax-8                50          27383249 ns/op
-Benchmark_InterleaveLong1-8                    1        1557992496 ns/op
-Benchmark_InterleaveLong4-8                    1        2177311837 ns/op
-Benchmark_InterleaveLongMax-8                  1        2838302958 ns/op
-
-Benchmark_Reverse8Short1-8            20          66878761 ns/op
-Benchmark_Reverse8Short4-8           100          18888361 ns/op
-Benchmark_Reverse8ShortMax-8         100          17845626 ns/op
-Benchmark_Reverse8Long1-8              1        1274790843 ns/op
-Benchmark_Reverse8Long4-8              1        1962669700 ns/op
-Benchmark_Reverse8LongMax-8            1        2719838443 ns/op
-
-Benchmark_BitFromEveryByte-8                         200           7089305 ns/op
-Benchmark_BitFromEveryByteFancyNoasm-8                20          58323674 ns/op
-Benchmark_BitFromEveryByteSlow-8                       3         418394417 ns/op
-
-
-For comparison, memset8:
-Benchmark_Memset8Short1-8               5         270933107 ns/op
-Benchmark_Memset8Short4-8              20          78389931 ns/op
-Benchmark_Memset8ShortMax-8            20          66983738 ns/op
-Benchmark_Memset8Long1-8                1        1342542739 ns/op
-Benchmark_Memset8Long4-8                1        1944395002 ns/op
-Benchmark_Memset8LongMax-8              1        2757737157 ns/op
-
-memset-to-zero range for loop:
-Benchmark_Memset8Short1-8             30          37976858 ns/op
-Benchmark_Memset8Short4-8             50          25033805 ns/op
-Benchmark_Memset8ShortMax-8          100          14801649 ns/op
-Benchmark_Memset8Long1-8               3         448067523 ns/op
-Benchmark_Memset8Long4-8               1        1361988705 ns/op
-Benchmark_Memset8LongMax-8             1        2126505354 ns/op
-(Note that this is usually better than simd.Memset8.  This is due to reduced
-function call overhead and use of AVX2 (with cache-bypassing stores in the AVX2
->32 MiB case); there was no advantage to replacing simd.Memset8 with the
-non-AVX2 portion of runtime.memclr_amd64.)
-
-unpackedNibbleLookupInplaceSlow (&15 removed, bytes restricted to 0..15):
-Benchmark_UnpackedNibbleLookupShort1-8                 2         524170511 ns/op
-Benchmark_UnpackedNibbleLookupShort4-8                10         147371412 ns/op
-Benchmark_UnpackedNibbleLookupShortMax-8              10         142252262 ns/op
-Benchmark_UnpackedNibbleLookupLong1-8                  1        8123456605 ns/op
-Benchmark_UnpackedNibbleLookupLong4-8                  1        5069456472 ns/op
-Benchmark_UnpackedNibbleLookupLongMax-8                1        3929059263 ns/op
-
-packedNibbleLookupSlow:
-Benchmark_PackedNibbleLookupShort1-8                   2         572680365 ns/op
-Benchmark_PackedNibbleLookupShort4-8                  10         158619127 ns/op
-Benchmark_PackedNibbleLookupShortMax-8                10         155940159 ns/op
-Benchmark_PackedNibbleLookupLong1-8                    1        8956157310 ns/op
-Benchmark_PackedNibbleLookupLong4-8                    1        3226223964 ns/op
-Benchmark_PackedNibbleLookupLongMax-8                  1        3788519710 ns/op
-
-interleaveSlow:
-Benchmark_InterleaveShort1-8                   2         779212342 ns/op
-Benchmark_InterleaveShort4-8                   5         207224364 ns/op
-Benchmark_InterleaveShortMax-8                 5         213528353 ns/op
-Benchmark_InterleaveLong1-8                    1        6926143664 ns/op
-Benchmark_InterleaveLong4-8                    1        2745455753 ns/op
-Benchmark_InterleaveLongMax-8                  1        3664858002 ns/op
-
-reverseSlow:
-Benchmark_Reverse8Short1-8              3         423063894 ns/op
-Benchmark_Reverse8Short4-8             10         112274707 ns/op
-Benchmark_Reverse8ShortMax-8           10         196379771 ns/op
-Benchmark_Reverse8Long1-8               1        6270445876 ns/op
-Benchmark_Reverse8Long4-8               1        3965932146 ns/op
-Benchmark_Reverse8LongMax-8             1        3349559784 ns/op
-*/
-
-func memset8Subtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
-	for iter := 0; iter < nIter; iter++ {
-		// Compiler-recognized range-for loop, for comparison.
-		/*
-			for pos := range dst {
-				dst[pos] = 0
-			}
-		*/
-		simd.Memset8Unsafe(a.dst, 78)
-	}
-	return int(a.dst[0])
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_Memset8Short1(b *testing.B) {
-	multiBenchmarkDstSrc(memset8Subtask, 1, 75, 0, 9999999, b)
-}
-
-func Benchmark_Memset8Short4(b *testing.B) {
-	multiBenchmarkDstSrc(memset8Subtask, 4, 75, 0, 9999999, b)
-}
-
-func Benchmark_Memset8ShortMax(b *testing.B) {
-	multiBenchmarkDstSrc(memset8Subtask, runtime.NumCPU(), 75, 0, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_Memset8Long1(b *testing.B) {
-	multiBenchmarkDstSrc(memset8Subtask, 1, 249250621, 0, 50, b)
-}
-
-func Benchmark_Memset8Long4(b *testing.B) {
-	multiBenchmarkDstSrc(memset8Subtask, 4, 249250621, 0, 50, b)
-}
-
-func Benchmark_Memset8LongMax(b *testing.B) {
-	multiBenchmarkDstSrc(memset8Subtask, runtime.NumCPU(), 249250621, 0, 50, b)
-}
-
-func memset8(dst []byte, val byte) {
+// This is the most-frequently-recommended implementation.  It's decent, so the
+// suffix is 'Standard' instead of 'Slow'.
+func memset8Standard(dst []byte, val byte) {
 	dstLen := len(dst)
 	if dstLen != 0 {
 		dst[0] = val
@@ -178,7 +39,7 @@ func TestMemset8(t *testing.T) {
 		main2Slice := main2Arr[sliceStart:sliceEnd]
 		main3Slice := main3Arr[sliceStart:sliceEnd]
 		byteVal := byte(rand.Intn(256))
-		memset8(main1Slice, byteVal)
+		memset8Standard(main1Slice, byteVal)
 		simd.Memset8Unsafe(main2Slice, byteVal)
 		if !bytes.Equal(main1Slice, main2Slice) {
 			t.Fatal("Mismatched Memset8Unsafe result.")
@@ -198,41 +59,89 @@ func TestMemset8(t *testing.T) {
 	}
 }
 
-func unpackedNibbleLookupSubtask(args interface{}, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Memset8/SIMDShort1Cpu-8                     20          62706981 ns/op
+Benchmark_Memset8/SIMDShortHalfCpu-8                 100          17559573 ns/op
+Benchmark_Memset8/SIMDShortAllCpu-8                  100          17149982 ns/op
+Benchmark_Memset8/SIMDLong1Cpu-8                       1        1101524485 ns/op
+Benchmark_Memset8/SIMDLongHalfCpu-8                    2         925331938 ns/op
+Benchmark_Memset8/SIMDLongAllCpu-8                     2         971422170 ns/op
+Benchmark_Memset8/StandardShort1Cpu-8                  5         314689466 ns/op
+Benchmark_Memset8/StandardShortHalfCpu-8              20          88260588 ns/op
+Benchmark_Memset8/StandardShortAllCpu-8               20          84317546 ns/op
+Benchmark_Memset8/StandardLong1Cpu-8                   1        1082736141 ns/op
+Benchmark_Memset8/StandardLongHalfCpu-8                2         992904776 ns/op
+Benchmark_Memset8/StandardLongAllCpu-8                 1        1052452033 ns/op
+Benchmark_Memset8/RangeZeroShort1Cpu-8                30          44907924 ns/op
+Benchmark_Memset8/RangeZeroShortHalfCpu-8            100          24173280 ns/op
+Benchmark_Memset8/RangeZeroShortAllCpu-8             100          14991003 ns/op
+Benchmark_Memset8/RangeZeroLong1Cpu-8                  3         401003587 ns/op
+Benchmark_Memset8/RangeZeroLongHalfCpu-8               3         400711072 ns/op
+Benchmark_Memset8/RangeZeroLongAllCpu-8                3         404863223 ns/op
+
+Notes: simd.Memset8 is broadly useful for short arrays, though usually a bit
+worse than memclr.  However, memclr wins handily in the 249 MB long case on the
+test machine, thanks to AVX2 (and, in the AVX2 subroutine, cache-bypassing
+stores).
+When the simd.Memset8 AVX2 implementation is written, it should obviously
+imitate what memclr is doing.
+*/
+
+func memset8SimdSubtask(args interface{}, nIter int) int {
 	a := args.(dstSrcArgs)
-	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		// Note that this uses the result of one lookup operation as the input to
-		// the next.
-		// (Given the current table, all values should be 1 or 0 after 3 or more
-		// iterations.)
-		simd.UnpackedNibbleLookupUnsafeInplace(a.dst, &table)
+		simd.Memset8(a.dst, 78)
 	}
 	return int(a.dst[0])
 }
 
-func Benchmark_UnpackedNibbleLookupShort1(b *testing.B) {
-	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 1, 75, 0, 9999999, b)
+func memset8StandardSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		memset8Standard(a.dst, 78)
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_UnpackedNibbleLookupShort4(b *testing.B) {
-	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 4, 75, 0, 9999999, b)
+func memset8RangeZeroSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		// Compiler-recognized loop, which gets converted to a memclr call with
+		// fancier optimizations than simd.Memset8.
+		for pos := range a.dst {
+			a.dst[pos] = 0
+		}
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_UnpackedNibbleLookupShortMax(b *testing.B) {
-	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, runtime.NumCPU(), 75, 0, 9999999, b)
-}
-
-func Benchmark_UnpackedNibbleLookupLong1(b *testing.B) {
-	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 1, 249250621, 0, 50, b)
-}
-
-func Benchmark_UnpackedNibbleLookupLong4(b *testing.B) {
-	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 4, 249250621, 0, 50, b)
-}
-
-func Benchmark_UnpackedNibbleLookupLongMax(b *testing.B) {
-	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, runtime.NumCPU(), 249250621, 0, 50, b)
+func Benchmark_Memset8(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   memset8SimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   memset8StandardSubtask,
+			tag: "Standard",
+		},
+		{
+			f:   memset8RangeZeroSubtask,
+			tag: "RangeZero",
+		},
+	}
+	for _, f := range funcs {
+		// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
+		// size for the short-array benchmark.
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		// GRCh37 chromosome 1 length is 249250621, so that's a plausible
+		// long-array use case.
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+	}
 }
 
 // This only matches UnpackedNibbleLookupInplace when all bytes < 128; the test
@@ -300,37 +209,62 @@ func TestUnpackedNibbleLookup(t *testing.T) {
 	}
 }
 
-func packedNibbleLookupSubtask(args interface{}, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_UnpackedNibbleLookupInplace/SIMDShort1Cpu-8                 20         76720863 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SIMDShortHalfCpu-8              50         22968008 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SIMDShortAllCpu-8              100         18896633 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SIMDLong1Cpu-8                   1       1046243684 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SIMDLongHalfCpu-8                2        861622838 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SIMDLongAllCpu-8                 2        944384349 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SlowShort1Cpu-8                  2        532267799 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SlowShortHalfCpu-8              10        144993320 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SlowShortAllCpu-8               10        146218387 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SlowLong1Cpu-8                   1       7745668548 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SlowLongHalfCpu-8                1       2169127851 ns/op
+Benchmark_UnpackedNibbleLookupInplace/SlowLongAllCpu-8                 1       2164900359 ns/op
+*/
+
+func unpackedNibbleLookupInplaceSimdSubtask(args interface{}, nIter int) int {
 	a := args.(dstSrcArgs)
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		simd.PackedNibbleLookupUnsafe(a.dst, a.src, &table)
+		// Note that this uses the result of one lookup operation as the input to
+		// the next.
+		// (Given the current table, all values should be 1 or 0 after 3 or more
+		// iterations.)
+		simd.UnpackedNibbleLookupInplace(a.dst, &table)
 	}
 	return int(a.dst[0])
 }
 
-func Benchmark_PackedNibbleLookupShort1(b *testing.B) {
-	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 1, 75, 38, 9999999, b)
+func unpackedNibbleLookupInplaceSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
+	for iter := 0; iter < nIter; iter++ {
+		unpackedNibbleLookupInplaceSlow(a.dst, &table)
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_PackedNibbleLookupShort4(b *testing.B) {
-	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 4, 75, 38, 9999999, b)
-}
-
-func Benchmark_PackedNibbleLookupShortMax(b *testing.B) {
-	multiBenchmarkDstSrc(packedNibbleLookupSubtask, runtime.NumCPU(), 75, 38, 9999999, b)
-}
-
-func Benchmark_PackedNibbleLookupLong1(b *testing.B) {
-	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 1, 249250621, 249250622/2, 50, b)
-}
-
-func Benchmark_PackedNibbleLookupLong4(b *testing.B) {
-	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 4, 249250621, 249250622/2, 50, b)
-}
-
-func Benchmark_PackedNibbleLookupLongMax(b *testing.B) {
-	multiBenchmarkDstSrc(packedNibbleLookupSubtask, runtime.NumCPU(), 249250621, 249250622/2, 50, b)
+func Benchmark_UnpackedNibbleLookupInplace(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   unpackedNibbleLookupInplaceSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   unpackedNibbleLookupInplaceSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+	}
 }
 
 func packedNibbleLookupSlow(dst, src []byte, tablePtr *simd.NibbleLookupTable) {
@@ -388,36 +322,82 @@ func TestPackedNibbleLookup(t *testing.T) {
 	}
 }
 
-func interleaveSubtask(args interface{}, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_PackedNibbleLookup/UnsafeShort1Cpu-8                10         143501956 ns/op
+Benchmark_PackedNibbleLookup/UnsafeShortHalfCpu-8             30          38748958 ns/op
+Benchmark_PackedNibbleLookup/UnsafeShortAllCpu-8              50          31982398 ns/op
+Benchmark_PackedNibbleLookup/UnsafeLong1Cpu-8                  1        1372142640 ns/op
+Benchmark_PackedNibbleLookup/UnsafeLongHalfCpu-8               1        1236198290 ns/op
+Benchmark_PackedNibbleLookup/UnsafeLongAllCpu-8                1        1265315746 ns/op
+Benchmark_PackedNibbleLookup/SIMDShort1Cpu-8                  10         158155872 ns/op
+Benchmark_PackedNibbleLookup/SIMDShortHalfCpu-8               30          43098347 ns/op
+Benchmark_PackedNibbleLookup/SIMDShortAllCpu-8                30          37593692 ns/op
+Benchmark_PackedNibbleLookup/SIMDLong1Cpu-8                    1        1407559630 ns/op
+Benchmark_PackedNibbleLookup/SIMDLongHalfCpu-8                 1        1244569913 ns/op
+Benchmark_PackedNibbleLookup/SIMDLongAllCpu-8                  1        1245648867 ns/op
+Benchmark_PackedNibbleLookup/SlowShort1Cpu-8                   1        1322739228 ns/op
+Benchmark_PackedNibbleLookup/SlowShortHalfCpu-8                3         381551545 ns/op
+Benchmark_PackedNibbleLookup/SlowShortAllCpu-8                 3         361846656 ns/op
+Benchmark_PackedNibbleLookup/SlowLong1Cpu-8                    1        9990188206 ns/op
+Benchmark_PackedNibbleLookup/SlowLongHalfCpu-8                 1        2855687759 ns/op
+Benchmark_PackedNibbleLookup/SlowLongAllCpu-8                  1        2877628266 ns/op
+
+Notes: Unsafe version of this function is also benchmarked, since the
+short-array safety penalty is a bit high here.  This is mainly an indicator of
+room for improvement in the safe function; I think it's clear at this point
+that we'll probably never need to use the Unsafe interface.
+*/
+
+func packedNibbleLookupUnsafeSubtask(args interface{}, nIter int) int {
 	a := args.(dstSrcArgs)
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		simd.Interleave8Unsafe(a.dst, a.src, a.src)
+		simd.PackedNibbleLookupUnsafe(a.dst, a.src, &table)
 	}
 	return int(a.dst[0])
 }
 
-func Benchmark_InterleaveShort1(b *testing.B) {
-	multiBenchmarkDstSrc(interleaveSubtask, 1, 150, 75, 9999999, b)
+func packedNibbleLookupSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
+	for iter := 0; iter < nIter; iter++ {
+		simd.PackedNibbleLookup(a.dst, a.src, &table)
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_InterleaveShort4(b *testing.B) {
-	multiBenchmarkDstSrc(interleaveSubtask, 4, 150, 75, 9999999, b)
+func packedNibbleLookupSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
+	for iter := 0; iter < nIter; iter++ {
+		packedNibbleLookupSlow(a.dst, a.src, &table)
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_InterleaveShortMax(b *testing.B) {
-	multiBenchmarkDstSrc(interleaveSubtask, runtime.NumCPU(), 150, 75, 9999999, b)
-}
-
-func Benchmark_InterleaveLong1(b *testing.B) {
-	multiBenchmarkDstSrc(interleaveSubtask, 1, 124625311*2, 124625311, 50, b)
-}
-
-func Benchmark_InterleaveLong4(b *testing.B) {
-	multiBenchmarkDstSrc(interleaveSubtask, 4, 124625311*2, 124625311, 50, b)
-}
-
-func Benchmark_InterleaveLongMax(b *testing.B) {
-	multiBenchmarkDstSrc(interleaveSubtask, runtime.NumCPU(), 124625311*2, 124625311, 50, b)
+func Benchmark_PackedNibbleLookup(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   packedNibbleLookupUnsafeSubtask,
+			tag: "Unsafe",
+		},
+		{
+			f:   packedNibbleLookupSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   packedNibbleLookupSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 150, 75, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 249250622/2, 50, b)
+	}
 }
 
 func interleaveSlow(dst, even, odd []byte) {
@@ -474,36 +454,74 @@ func TestInterleave(t *testing.T) {
 	}
 }
 
-func reverse8Subtask(args interface{}, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Interleave/UnsafeShort1Cpu-8                10         124397567 ns/op
+Benchmark_Interleave/UnsafeShortHalfCpu-8             50          33427370 ns/op
+Benchmark_Interleave/UnsafeShortAllCpu-8              50          27522495 ns/op
+Benchmark_Interleave/UnsafeLong1Cpu-8                  1        1364788736 ns/op
+Benchmark_Interleave/UnsafeLongHalfCpu-8               1        1194034677 ns/op
+Benchmark_Interleave/UnsafeLongAllCpu-8                1        1240540994 ns/op
+Benchmark_Interleave/SIMDShort1Cpu-8                  10         143574503 ns/op
+Benchmark_Interleave/SIMDShortHalfCpu-8               30          40429942 ns/op
+Benchmark_Interleave/SIMDShortAllCpu-8                50          30500450 ns/op
+Benchmark_Interleave/SIMDLong1Cpu-8                    1        1281952758 ns/op
+Benchmark_Interleave/SIMDLongHalfCpu-8                 1        1210134670 ns/op
+Benchmark_Interleave/SIMDLongAllCpu-8                  1        1284786977 ns/op
+Benchmark_Interleave/SlowShort1Cpu-8                   2         880545817 ns/op
+Benchmark_Interleave/SlowShortHalfCpu-8                5         234673823 ns/op
+Benchmark_Interleave/SlowShortAllCpu-8                 5         230332535 ns/op
+Benchmark_Interleave/SlowLong1Cpu-8                    1        6669283712 ns/op
+Benchmark_Interleave/SlowLongHalfCpu-8                 1        1860713287 ns/op
+Benchmark_Interleave/SlowLongAllCpu-8                  1        1807886977 ns/op
+*/
+
+func interleaveUnsafeSubtask(args interface{}, nIter int) int {
 	a := args.(dstSrcArgs)
 	for iter := 0; iter < nIter; iter++ {
-		simd.Reverse8Inplace(a.dst)
+		simd.Interleave8Unsafe(a.dst, a.src, a.src)
 	}
 	return int(a.dst[0])
 }
 
-func Benchmark_Reverse8Short1(b *testing.B) {
-	multiBenchmarkDstSrc(reverse8Subtask, 1, 75, 0, 9999999, b)
+func interleaveSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		simd.Interleave8(a.dst, a.src, a.src)
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_Reverse8Short4(b *testing.B) {
-	multiBenchmarkDstSrc(reverse8Subtask, 4, 75, 0, 9999999, b)
+func interleaveSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		interleaveSlow(a.dst, a.src, a.src)
+	}
+	return int(a.dst[0])
 }
 
-func Benchmark_Reverse8ShortMax(b *testing.B) {
-	multiBenchmarkDstSrc(reverse8Subtask, runtime.NumCPU(), 75, 0, 9999999, b)
-}
-
-func Benchmark_Reverse8Long1(b *testing.B) {
-	multiBenchmarkDstSrc(reverse8Subtask, 1, 249250621, 0, 50, b)
-}
-
-func Benchmark_Reverse8Long4(b *testing.B) {
-	multiBenchmarkDstSrc(reverse8Subtask, 4, 249250621, 0, 50, b)
-}
-
-func Benchmark_Reverse8LongMax(b *testing.B) {
-	multiBenchmarkDstSrc(reverse8Subtask, runtime.NumCPU(), 249250621, 0, 50, b)
+func Benchmark_Interleave(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   interleaveUnsafeSubtask,
+			tag: "Unsafe",
+		},
+		{
+			f:   interleaveSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   interleaveSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 150, 75, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 124625311*2, 124625311, 50, b)
+	}
 }
 
 func reverse8Slow(main []byte) {
@@ -564,40 +582,56 @@ func TestReverse8(t *testing.T) {
 	}
 }
 
-func bitFromEveryByteSubtask(args interface{}, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Reverse8Inplace/SIMDShort1Cpu-8                     20          67121510 ns/op
+Benchmark_Reverse8Inplace/SIMDShortHalfCpu-8                 100          18891965 ns/op
+Benchmark_Reverse8Inplace/SIMDShortAllCpu-8                  100          16177224 ns/op
+Benchmark_Reverse8Inplace/SIMDLong1Cpu-8                       1        1115497033 ns/op
+Benchmark_Reverse8Inplace/SIMDLongHalfCpu-8                    2         885764257 ns/op
+Benchmark_Reverse8Inplace/SIMDLongAllCpu-8                     2         941948715 ns/op
+Benchmark_Reverse8Inplace/SlowShort1Cpu-8                      3         398662666 ns/op
+Benchmark_Reverse8Inplace/SlowShortHalfCpu-8                  10         105618119 ns/op
+Benchmark_Reverse8Inplace/SlowShortAllCpu-8                   10         184808267 ns/op
+Benchmark_Reverse8Inplace/SlowLong1Cpu-8                       1        5665556658 ns/op
+Benchmark_Reverse8Inplace/SlowLongHalfCpu-8                    1        1597487158 ns/op
+Benchmark_Reverse8Inplace/SlowLongAllCpu-8                     1        1616963854 ns/op
+*/
+
+func reverse8InplaceSimdSubtask(args interface{}, nIter int) int {
 	a := args.(dstSrcArgs)
 	for iter := 0; iter < nIter; iter++ {
-		simd.BitFromEveryByte(a.dst, a.src, 0)
+		simd.Reverse8Inplace(a.dst)
 	}
 	return int(a.dst[0])
 }
 
-func bitFromEveryByteFancyNoasmSubtask(args interface{}, nIter int) int {
+func reverse8InplaceSlowSubtask(args interface{}, nIter int) int {
 	a := args.(dstSrcArgs)
 	for iter := 0; iter < nIter; iter++ {
-		bitFromEveryByteFancyNoasm(a.dst, a.src, 0)
+		reverse8Slow(a.dst)
 	}
 	return int(a.dst[0])
 }
 
-func bitFromEveryByteSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
-	for iter := 0; iter < nIter; iter++ {
-		bitFromEveryByteSlow(a.dst, a.src, 0)
+func Benchmark_Reverse8Inplace(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   reverse8InplaceSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   reverse8InplaceSlowSubtask,
+			tag: "Slow",
+		},
 	}
-	return int(a.dst[0])
-}
-
-func Benchmark_BitFromEveryByte(b *testing.B) {
-	multiBenchmarkDstSrc(bitFromEveryByteSubtask, 1, 4091904/8, 4091904, 50, b)
-}
-
-func Benchmark_BitFromEveryByteFancyNoasm(b *testing.B) {
-	multiBenchmarkDstSrc(bitFromEveryByteFancyNoasmSubtask, 1, 4091904/8, 4091904, 50, b)
-}
-
-func Benchmark_BitFromEveryByteSlow(b *testing.B) {
-	multiBenchmarkDstSrc(bitFromEveryByteSlowSubtask, 1, 4091904/8, 4091904, 50, b)
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+	}
 }
 
 func bitFromEveryByteSlow(dst, src []byte, bitIdx int) {
@@ -717,5 +751,75 @@ func TestBitFromEveryByte(t *testing.T) {
 		bitFromEveryByteFancyNoasm(dstSlice3, srcSlice, bitIdx)
 		assert.EQ(t, dstSlice1, dstSlice3)
 		assert.EQ(t, sentinel, dstArr3[dstSliceEnd])
+	}
+}
+
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_BitFromEveryByte/SIMDLong1Cpu-8                    200           6861450 ns/op
+Benchmark_BitFromEveryByte/SIMDLongHalfCpu-8                 200           7360937 ns/op
+Benchmark_BitFromEveryByte/SIMDLongAllCpu-8                  200           8846261 ns/op
+Benchmark_BitFromEveryByte/FancyNoasmLong1Cpu-8               20          58756902 ns/op
+Benchmark_BitFromEveryByte/FancyNoasmLongHalfCpu-8                   100         17244847 ns/op
+Benchmark_BitFromEveryByte/FancyNoasmLongAllCpu-8                    100         16624282 ns/op
+Benchmark_BitFromEveryByte/SlowLong1Cpu-8                              3        422073091 ns/op
+Benchmark_BitFromEveryByte/SlowLongHalfCpu-8                          10        117732813 ns/op
+Benchmark_BitFromEveryByte/SlowLongAllCpu-8                           10        114903556 ns/op
+
+Notes: 1Cpu has higher throughput than HalfCpu/AllCpu on this test machine due
+to L3 cache saturation: multiBenchmarkDstSrc makes each goroutine process its
+own ~4 MB job, rather than splitting a single job into smaller pieces, and a
+15-inch 2016 MacBook Pro has a 8 MB L3 cache.  If you shrink the test size to
+len(src)=400000, HalfCpu outperforms 1Cpu by the expected amount.
+
+I'm leaving this unusual benchmark result here since (i) it corresponds to how
+we actually need to use the function, and (ii) this phenomenon is definitely
+worth knowing about.
+*/
+
+func bitFromEveryByteSimdSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		simd.BitFromEveryByte(a.dst, a.src, 0)
+	}
+	return int(a.dst[0])
+}
+
+func bitFromEveryByteFancyNoasmSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		bitFromEveryByteFancyNoasm(a.dst, a.src, 0)
+	}
+	return int(a.dst[0])
+}
+
+func bitFromEveryByteSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		bitFromEveryByteSlow(a.dst, a.src, 0)
+	}
+	return int(a.dst[0])
+}
+
+func Benchmark_BitFromEveryByte(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   bitFromEveryByteSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   bitFromEveryByteFancyNoasmSubtask,
+			tag: "FancyNoasm",
+		},
+		{
+			f:   bitFromEveryByteSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkDstSrc(f.f, f.tag+"Long", 4091904/8, 4091904, 50, b)
 	}
 }

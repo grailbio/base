@@ -16,121 +16,6 @@ import (
 	"github.com/grailbio/base/simd"
 )
 
-/*
-Initial benchmark results:
-  MacBook Pro (15-inch, 2016)
-  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
-
-Benchmark_Memset16Short1-8            20          79792679 ns/op
-Benchmark_Memset16Short4-8           100          21460685 ns/op
-Benchmark_Memset16ShortMax-8         100          19242532 ns/op
-Benchmark_Memset16Long1-8              1        1209730588 ns/op
-Benchmark_Memset16Long4-8              1        1630931319 ns/op
-Benchmark_Memset16LongMax-8            1        2098725129 ns/op
-
-Benchmark_Reverse16Short1-8                   20          86850717 ns/op
-Benchmark_Reverse16Short4-8                   50          26629273 ns/op
-Benchmark_Reverse16ShortMax-8                100          21015725 ns/op
-Benchmark_Reverse16Long1-8                     1        1241551853 ns/op
-Benchmark_Reverse16Long4-8                     1        1691636166 ns/op
-Benchmark_Reverse16LongMax-8                   1        2201613448 ns/op
-
-For comparison, memset16:
-Benchmark_Memset16Short1-8             5         254778732 ns/op
-Benchmark_Memset16Short4-8            20          68925278 ns/op
-Benchmark_Memset16ShortMax-8          20          60629923 ns/op
-Benchmark_Memset16Long1-8              1        1261998317 ns/op
-Benchmark_Memset16Long4-8              1        1684414682 ns/op
-Benchmark_Memset16LongMax-8            1        2203954500 ns/op
-
-reverseU16Slow:
-Benchmark_Reverse16Short1-8                   10         180262413 ns/op
-Benchmark_Reverse16Short4-8                   30          49862651 ns/op
-Benchmark_Reverse16ShortMax-8                 10         114370495 ns/op
-Benchmark_Reverse16Long1-8                     1        3367505528 ns/op
-Benchmark_Reverse16Long4-8                     1        1707333366 ns/op
-Benchmark_Reverse16LongMax-8                   1        2175367071 ns/op
-*/
-
-func memset16Subtask(dst []uint16, nIter int) int {
-	for iter := 0; iter < nIter; iter++ {
-		simd.RepeatU16(dst, 0x201)
-	}
-	return int(dst[0])
-}
-
-func memset16SubtaskFuture(dst []uint16, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- memset16Subtask(dst, nIter) }()
-	return future
-}
-
-func multiMemset16(dsts [][]uint16, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = memset16SubtaskFuture(dsts[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = memset16SubtaskFuture(dsts[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkMemset16(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	nU16 := (nByte + 1) >> 1
-	mainSlices := make([][]uint16, cpus)
-	for ii := range mainSlices {
-		// Add 31 to prevent false sharing.
-		newArr := make([]uint16, nU16, nU16+31)
-		for jj := 0; jj < nU16; jj++ {
-			newArr[jj] = uint16(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nU16]
-	}
-	for i := 0; i < b.N; i++ {
-		multiMemset16(mainSlices, cpus, nJob)
-	}
-}
-
-// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
-// size for the short-array benchmark.
-func Benchmark_Memset16Short1(b *testing.B) {
-	benchmarkMemset16(1, 75, 9999999, b)
-}
-
-func Benchmark_Memset16Short4(b *testing.B) {
-	benchmarkMemset16(4, 75, 9999999, b)
-}
-
-func Benchmark_Memset16ShortMax(b *testing.B) {
-	benchmarkMemset16(runtime.NumCPU(), 75, 9999999, b)
-}
-
-// GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
-// use case.
-func Benchmark_Memset16Long1(b *testing.B) {
-	benchmarkMemset16(1, 249250621, 50, b)
-}
-
-func Benchmark_Memset16Long4(b *testing.B) {
-	benchmarkMemset16(4, 249250621, 50, b)
-}
-
-func Benchmark_Memset16LongMax(b *testing.B) {
-	benchmarkMemset16(runtime.NumCPU(), 249250621, 50, b)
-}
-
 // The compiler clearly recognizes this; performance is almost
 // indistinguishable from handcoded assembly.
 func memset32Builtin(dst []uint32, val uint32) {
@@ -164,7 +49,7 @@ func TestMemset32(t *testing.T) {
 	}
 }
 
-func memset16(dst []uint16, val uint16) {
+func memset16Standard(dst []uint16, val uint16) {
 	// This tends to be better than the range-for loop, though it's less
 	// clear-cut than the memset case.
 	nDst := len(dst)
@@ -189,7 +74,7 @@ func TestMemset16(t *testing.T) {
 		main2Slice := main2Arr[sliceStart:sliceEnd]
 		sentinel := uint16(rand.Uint32())
 		main2Arr[sliceEnd] = sentinel
-		memset16(main1Slice, u16Val)
+		memset16Standard(main1Slice, u16Val)
 		simd.RepeatU16(main2Slice, u16Val)
 		if !reflect.DeepEqual(main1Slice, main2Slice) {
 			t.Fatal("Mismatched RepeatU16 result.")
@@ -200,79 +85,101 @@ func TestMemset16(t *testing.T) {
 	}
 }
 
-func reverse16Subtask(main []uint16, nIter int) int {
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_Memset16/SIMDShort1Cpu-8                    10         140130606 ns/op
+Benchmark_Memset16/SIMDShortHalfCpu-8                 50          37087600 ns/op
+Benchmark_Memset16/SIMDShortAllCpu-8                  50          35361817 ns/op
+Benchmark_Memset16/SIMDLong1Cpu-8                      1        1157494604 ns/op
+Benchmark_Memset16/SIMDLongHalfCpu-8                   2         921843584 ns/op
+Benchmark_Memset16/SIMDLongAllCpu-8                    2         960652822 ns/op
+Benchmark_Memset16/StandardShort1Cpu-8                 5         343877390 ns/op
+Benchmark_Memset16/StandardShortHalfCpu-8             20          88295789 ns/op
+Benchmark_Memset16/StandardShortAllCpu-8              20          86026817 ns/op
+Benchmark_Memset16/StandardLong1Cpu-8                  1        1038072481 ns/op
+Benchmark_Memset16/StandardLongHalfCpu-8               2         979292703 ns/op
+Benchmark_Memset16/StandardLongAllCpu-8                1        1052316741 ns/op
+*/
+
+type u16Args struct {
+	main []uint16
+}
+
+func memset16SimdSubtask(args interface{}, nIter int) int {
+	a := args.(u16Args)
 	for iter := 0; iter < nIter; iter++ {
-		simd.ReverseU16Inplace(main)
+		simd.RepeatU16(a.main, 0x201)
 	}
-	return int(main[0])
+	return int(a.main[0])
 }
 
-func reverse16SubtaskFuture(main []uint16, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- reverse16Subtask(main, nIter) }()
-	return future
+func memset16StandardSubtask(args interface{}, nIter int) int {
+	a := args.(u16Args)
+	for iter := 0; iter < nIter; iter++ {
+		memset16Standard(a.main, 0x201)
+	}
+	return int(a.main[0])
 }
 
-func multiReverse16(mains [][]uint16, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = reverse16SubtaskFuture(mains[taskIdx], shardSizeP1)
+func u16MultiBenchmark(bf multiBenchFunc, benchmarkSubtype string, nU16, nJob int, b *testing.B) {
+	totalCpu := runtime.NumCPU()
+	cases := []struct {
+		nCpu    int
+		descrip string
+	}{
+		{
+			nCpu:    1,
+			descrip: "1Cpu",
+		},
+		{
+			nCpu:    (totalCpu + 1) / 2,
+			descrip: "HalfCpu",
+		},
+		{
+			nCpu:    totalCpu,
+			descrip: "AllCpu",
+		},
 	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = reverse16SubtaskFuture(mains[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkReverse16(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	nU16 := (nByte + 1) >> 1
-	mainSlices := make([][]uint16, cpus)
-	for ii := range mainSlices {
-		// Add 31 to prevent false sharing.
-		newArr := make([]uint16, nU16, nU16+31)
-		for jj := 0; jj < nU16; jj++ {
-			newArr[jj] = uint16(jj * 3)
+	for _, c := range cases {
+		success := b.Run(benchmarkSubtype+c.descrip, func(b *testing.B) {
+			var argSlice []interface{}
+			for i := 0; i < c.nCpu; i++ {
+				// Add 31 to prevent false sharing.
+				newArr := make([]uint16, nU16, nU16+31)
+				newArgs := u16Args{
+					main: newArr[:nU16],
+				}
+				argSlice = append(argSlice, newArgs)
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				multiBenchmark(bf, argSlice, c.nCpu, nJob)
+			}
+		})
+		if !success {
+			panic("benchmark failed")
 		}
-		mainSlices[ii] = newArr[:nU16]
-	}
-	for i := 0; i < b.N; i++ {
-		multiReverse16(mainSlices, cpus, nJob)
 	}
 }
 
-func Benchmark_Reverse16Short1(b *testing.B) {
-	benchmarkReverse16(1, 75, 9999999, b)
-}
-
-func Benchmark_Reverse16Short4(b *testing.B) {
-	benchmarkReverse16(4, 75, 9999999, b)
-}
-
-func Benchmark_Reverse16ShortMax(b *testing.B) {
-	benchmarkReverse16(runtime.NumCPU(), 75, 9999999, b)
-}
-
-func Benchmark_Reverse16Long1(b *testing.B) {
-	benchmarkReverse16(1, 249250621, 50, b)
-}
-
-func Benchmark_Reverse16Long4(b *testing.B) {
-	benchmarkReverse16(4, 249250621, 50, b)
-}
-
-func Benchmark_Reverse16LongMax(b *testing.B) {
-	benchmarkReverse16(runtime.NumCPU(), 249250621, 50, b)
+func Benchmark_Memset16(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   memset16SimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   memset16StandardSubtask,
+			tag: "Standard",
+		},
+	}
+	for _, f := range funcs {
+		u16MultiBenchmark(f.f, f.tag+"Short", 75, 9999999, b)
+		u16MultiBenchmark(f.f, f.tag+"Long", 249250622/2, 50, b)
+	}
 }
 
 func reverseU16Slow(main []uint16) {
@@ -324,5 +231,57 @@ func TestReverse16(t *testing.T) {
 		if !reflect.DeepEqual(src2Slice, main2Slice) {
 			t.Fatal("ReverseU16Inplace didn't invert itself.")
 		}
+	}
+}
+
+/*
+Benchmark results:
+  MacBook Pro (15-inch, 2016)
+  2.7 GHz Intel Core i7, 16 GB 2133 MHz LPDDR3
+
+Benchmark_ReverseU16Inplace/SIMDShort1Cpu-8                   20         102899505 ns/op
+Benchmark_ReverseU16Inplace/SIMDShortHalfCpu-8                50          32918441 ns/op
+Benchmark_ReverseU16Inplace/SIMDShortAllCpu-8                 30          38848510 ns/op
+Benchmark_ReverseU16Inplace/SIMDLong1Cpu-8                     1        1116384992 ns/op
+Benchmark_ReverseU16Inplace/SIMDLongHalfCpu-8                  2         880730467 ns/op
+Benchmark_ReverseU16Inplace/SIMDLongAllCpu-8                   2         943204867 ns/op
+Benchmark_ReverseU16Inplace/SlowShort1Cpu-8                    3         443056373 ns/op
+Benchmark_ReverseU16Inplace/SlowShortHalfCpu-8                10         117142962 ns/op
+Benchmark_ReverseU16Inplace/SlowShortAllCpu-8                 10         159087579 ns/op
+Benchmark_ReverseU16Inplace/SlowLong1Cpu-8                     1        3158497662 ns/op
+Benchmark_ReverseU16Inplace/SlowLongHalfCpu-8                  2         967619258 ns/op
+Benchmark_ReverseU16Inplace/SlowLongAllCpu-8                   2         978231337 ns/op
+*/
+
+func reverseU16InplaceSimdSubtask(args interface{}, nIter int) int {
+	a := args.(u16Args)
+	for iter := 0; iter < nIter; iter++ {
+		simd.ReverseU16Inplace(a.main)
+	}
+	return int(a.main[0])
+}
+
+func reverseU16InplaceSlowSubtask(args interface{}, nIter int) int {
+	a := args.(u16Args)
+	for iter := 0; iter < nIter; iter++ {
+		reverseU16Slow(a.main)
+	}
+	return int(a.main[0])
+}
+
+func Benchmark_ReverseU16Inplace(b *testing.B) {
+	funcs := []taggedMultiBenchFunc{
+		{
+			f:   reverseU16InplaceSimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   reverseU16InplaceSlowSubtask,
+			tag: "Slow",
+		},
+	}
+	for _, f := range funcs {
+		u16MultiBenchmark(f.f, f.tag+"Short", 75, 9999999, b)
+		u16MultiBenchmark(f.f, f.tag+"Long", 249250622/2, 50, b)
 	}
 }
