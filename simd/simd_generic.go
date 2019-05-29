@@ -399,3 +399,29 @@ func Reverse8(dst, src []byte) {
 		dst[nByteMinus1-idx] = src[idx]
 	}
 }
+
+// BitFromEveryByte fills dst[] with a bitarray containing every 8th bit from
+// src[], starting with bitIdx, where bitIdx is in [0,7].  If len(src) is not
+// divisible by 8, extra bits in the last filled byte of dst are set to zero.
+// For example, if src[] is
+//   0x1f 0x33 0x0d 0x00 0x51 0xcc 0x34 0x59 0x44
+// and bitIdx is 2, bit 2 from every byte is
+//      1    0    1    0    0    1    1    0    1
+// so dst[] is filled with
+//   0x65 0x01.
+//
+// - It panics if len(dst) < (len(src) + 7) / 8, or bitIdx isn't in [0,7].
+// - If dst is larger than necessary, the extra bytes are not changed.
+func BitFromEveryByte(dst, src []byte, bitIdx int) {
+	requiredDstLen := (len(src) + 7) >> 3
+	if (len(dst) < requiredDstLen) || (uint(bitIdx) > 7) {
+		panic("BitFromEveryByte requires len(dst) >= (len(src) + 7) / 8 and 0 <= bitIdx < 8.")
+	}
+	dst = dst[:requiredDstLen]
+	for i := range dst {
+		dst[i] = 0
+	}
+	for i, b := range src {
+		dst[i>>3] |= ((b >> uint32(bitIdx)) & 1) << uint32(i&7)
+	}
+}

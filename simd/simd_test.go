@@ -6,11 +6,13 @@ package simd_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math/rand"
 	"runtime"
 	"testing"
 
 	"github.com/grailbio/base/simd"
+	"github.com/grailbio/testutil/assert"
 )
 
 /*
@@ -52,6 +54,11 @@ Benchmark_Reverse8ShortMax-8         100          17845626 ns/op
 Benchmark_Reverse8Long1-8              1        1274790843 ns/op
 Benchmark_Reverse8Long4-8              1        1962669700 ns/op
 Benchmark_Reverse8LongMax-8            1        2719838443 ns/op
+
+Benchmark_BitFromEveryByte-8                         200           7089305 ns/op
+Benchmark_BitFromEveryByteFancyNoasm-8                20          58323674 ns/op
+Benchmark_BitFromEveryByteSlow-8                       3         418394417 ns/op
+
 
 For comparison, memset8:
 Benchmark_Memset8Short1-8               5         270933107 ns/op
@@ -106,7 +113,8 @@ Benchmark_Reverse8Long4-8               1        3965932146 ns/op
 Benchmark_Reverse8LongMax-8             1        3349559784 ns/op
 */
 
-func memset8Subtask(dst []byte, nIter int) int {
+func memset8Subtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
 	for iter := 0; iter < nIter; iter++ {
 		// Compiler-recognized range-for loop, for comparison.
 		/*
@@ -114,80 +122,37 @@ func memset8Subtask(dst []byte, nIter int) int {
 				dst[pos] = 0
 			}
 		*/
-		simd.Memset8Unsafe(dst, 78)
+		simd.Memset8Unsafe(a.dst, 78)
 	}
-	return int(dst[0])
-}
-
-func memset8SubtaskFuture(dst []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- memset8Subtask(dst, nIter) }()
-	return future
-}
-
-func multiMemset8(dsts [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = memset8SubtaskFuture(dsts[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = memset8SubtaskFuture(dsts[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkMemset8(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiMemset8(mainSlices, cpus, nJob)
-	}
+	return int(a.dst[0])
 }
 
 // Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
 // size for the short-array benchmark.
 func Benchmark_Memset8Short1(b *testing.B) {
-	benchmarkMemset8(1, 75, 9999999, b)
+	multiBenchmarkDstSrc(memset8Subtask, 1, 75, 0, 9999999, b)
 }
 
 func Benchmark_Memset8Short4(b *testing.B) {
-	benchmarkMemset8(4, 75, 9999999, b)
+	multiBenchmarkDstSrc(memset8Subtask, 4, 75, 0, 9999999, b)
 }
 
 func Benchmark_Memset8ShortMax(b *testing.B) {
-	benchmarkMemset8(runtime.NumCPU(), 75, 9999999, b)
+	multiBenchmarkDstSrc(memset8Subtask, runtime.NumCPU(), 75, 0, 9999999, b)
 }
 
 // GRCh37 chromosome 1 length is 249250621, so that's a plausible long-array
 // use case.
 func Benchmark_Memset8Long1(b *testing.B) {
-	benchmarkMemset8(1, 249250621, 50, b)
+	multiBenchmarkDstSrc(memset8Subtask, 1, 249250621, 0, 50, b)
 }
 
 func Benchmark_Memset8Long4(b *testing.B) {
-	benchmarkMemset8(4, 249250621, 50, b)
+	multiBenchmarkDstSrc(memset8Subtask, 4, 249250621, 0, 50, b)
 }
 
 func Benchmark_Memset8LongMax(b *testing.B) {
-	benchmarkMemset8(runtime.NumCPU(), 249250621, 50, b)
+	multiBenchmarkDstSrc(memset8Subtask, runtime.NumCPU(), 249250621, 0, 50, b)
 }
 
 func memset8(dst []byte, val byte) {
@@ -233,83 +198,41 @@ func TestMemset8(t *testing.T) {
 	}
 }
 
-func unpackedNibbleLookupSubtask(main []byte, nIter int) int {
+func unpackedNibbleLookupSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
 		// Note that this uses the result of one lookup operation as the input to
 		// the next.
 		// (Given the current table, all values should be 1 or 0 after 3 or more
 		// iterations.)
-		simd.UnpackedNibbleLookupUnsafeInplace(main, &table)
+		simd.UnpackedNibbleLookupUnsafeInplace(a.dst, &table)
 	}
-	return int(main[0])
-}
-
-func unpackedNibbleLookupSubtaskFuture(main []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- unpackedNibbleLookupSubtask(main, nIter) }()
-	return future
-}
-
-func multiUnpackedNibbleLookup(mains [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = unpackedNibbleLookupSubtaskFuture(mains[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = unpackedNibbleLookupSubtaskFuture(mains[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkUnpackedNibbleLookup(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiUnpackedNibbleLookup(mainSlices, cpus, nJob)
-	}
+	return int(a.dst[0])
 }
 
 func Benchmark_UnpackedNibbleLookupShort1(b *testing.B) {
-	benchmarkUnpackedNibbleLookup(1, 75, 9999999, b)
+	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 1, 75, 0, 9999999, b)
 }
 
 func Benchmark_UnpackedNibbleLookupShort4(b *testing.B) {
-	benchmarkUnpackedNibbleLookup(4, 75, 9999999, b)
+	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 4, 75, 0, 9999999, b)
 }
 
 func Benchmark_UnpackedNibbleLookupShortMax(b *testing.B) {
-	benchmarkUnpackedNibbleLookup(runtime.NumCPU(), 75, 9999999, b)
+	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, runtime.NumCPU(), 75, 0, 9999999, b)
 }
 
 func Benchmark_UnpackedNibbleLookupLong1(b *testing.B) {
-	benchmarkUnpackedNibbleLookup(1, 249250621, 50, b)
+	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 1, 249250621, 0, 50, b)
 }
 
 func Benchmark_UnpackedNibbleLookupLong4(b *testing.B) {
-	benchmarkUnpackedNibbleLookup(4, 249250621, 50, b)
+	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, 4, 249250621, 0, 50, b)
 }
 
 func Benchmark_UnpackedNibbleLookupLongMax(b *testing.B) {
-	benchmarkUnpackedNibbleLookup(runtime.NumCPU(), 249250621, 50, b)
+	multiBenchmarkDstSrc(unpackedNibbleLookupSubtask, runtime.NumCPU(), 249250621, 0, 50, b)
 }
 
 // This only matches UnpackedNibbleLookupInplace when all bytes < 128; the test
@@ -377,83 +300,37 @@ func TestUnpackedNibbleLookup(t *testing.T) {
 	}
 }
 
-func packedNibbleLookupSubtask(dst, src []byte, nIter int) int {
+func packedNibbleLookupSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		simd.PackedNibbleLookupUnsafe(dst, src, &table)
+		simd.PackedNibbleLookupUnsafe(a.dst, a.src, &table)
 	}
-	return int(dst[0])
-}
-
-func packedNibbleLookupSubtaskFuture(dst, src []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- packedNibbleLookupSubtask(dst, src, nIter) }()
-	return future
-}
-
-func multiPackedNibbleLookup(dsts, srcs [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = packedNibbleLookupSubtaskFuture(dsts[taskIdx], srcs[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = packedNibbleLookupSubtaskFuture(dsts[taskIdx], srcs[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkPackedNibbleLookup(cpus int, nDstByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	srcSlices := make([][]byte, cpus)
-	dstSlices := make([][]byte, cpus)
-	nSrcByte := (nDstByte + 1) / 2
-	for ii := range srcSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nSrcByte + 63)
-		for jj := 0; jj < nSrcByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		srcSlices[ii] = newArr[:nSrcByte]
-		newArr = simd.MakeUnsafe(nDstByte + 63)
-		dstSlices[ii] = newArr[:nDstByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiPackedNibbleLookup(dstSlices, srcSlices, cpus, nJob)
-	}
+	return int(a.dst[0])
 }
 
 func Benchmark_PackedNibbleLookupShort1(b *testing.B) {
-	benchmarkPackedNibbleLookup(1, 75, 9999999, b)
+	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 1, 75, 38, 9999999, b)
 }
 
 func Benchmark_PackedNibbleLookupShort4(b *testing.B) {
-	benchmarkPackedNibbleLookup(4, 75, 9999999, b)
+	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 4, 75, 38, 9999999, b)
 }
 
 func Benchmark_PackedNibbleLookupShortMax(b *testing.B) {
-	benchmarkPackedNibbleLookup(runtime.NumCPU(), 75, 9999999, b)
+	multiBenchmarkDstSrc(packedNibbleLookupSubtask, runtime.NumCPU(), 75, 38, 9999999, b)
 }
 
 func Benchmark_PackedNibbleLookupLong1(b *testing.B) {
-	benchmarkPackedNibbleLookup(1, 249250621, 50, b)
+	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 1, 249250621, 249250622/2, 50, b)
 }
 
 func Benchmark_PackedNibbleLookupLong4(b *testing.B) {
-	benchmarkPackedNibbleLookup(4, 249250621, 50, b)
+	multiBenchmarkDstSrc(packedNibbleLookupSubtask, 4, 249250621, 249250622/2, 50, b)
 }
 
 func Benchmark_PackedNibbleLookupLongMax(b *testing.B) {
-	benchmarkPackedNibbleLookup(runtime.NumCPU(), 249250621, 50, b)
+	multiBenchmarkDstSrc(packedNibbleLookupSubtask, runtime.NumCPU(), 249250621, 249250622/2, 50, b)
 }
 
 func packedNibbleLookupSlow(dst, src []byte, tablePtr *simd.NibbleLookupTable) {
@@ -511,82 +388,36 @@ func TestPackedNibbleLookup(t *testing.T) {
 	}
 }
 
-func interleaveSubtask(dst, src []byte, nIter int) int {
+func interleaveSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
 	for iter := 0; iter < nIter; iter++ {
-		simd.Interleave8Unsafe(dst, src, src)
+		simd.Interleave8Unsafe(a.dst, a.src, a.src)
 	}
-	return int(dst[0])
-}
-
-func interleaveSubtaskFuture(dst, src []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- interleaveSubtask(dst, src, nIter) }()
-	return future
-}
-
-func multiInterleave(dsts, srcs [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = interleaveSubtaskFuture(dsts[taskIdx], srcs[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = interleaveSubtaskFuture(dsts[taskIdx], srcs[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkInterleave(cpus int, nSrcByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	srcSlices := make([][]byte, cpus)
-	dstSlices := make([][]byte, cpus)
-	nDstByte := nSrcByte * 2
-	for ii := range srcSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nSrcByte + 63)
-		for jj := 0; jj < nSrcByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		srcSlices[ii] = newArr[:nSrcByte]
-		newArr = simd.MakeUnsafe(nDstByte + 63)
-		dstSlices[ii] = newArr[:nDstByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiInterleave(dstSlices, srcSlices, cpus, nJob)
-	}
+	return int(a.dst[0])
 }
 
 func Benchmark_InterleaveShort1(b *testing.B) {
-	benchmarkInterleave(1, 75, 9999999, b)
+	multiBenchmarkDstSrc(interleaveSubtask, 1, 150, 75, 9999999, b)
 }
 
 func Benchmark_InterleaveShort4(b *testing.B) {
-	benchmarkInterleave(4, 75, 9999999, b)
+	multiBenchmarkDstSrc(interleaveSubtask, 4, 150, 75, 9999999, b)
 }
 
 func Benchmark_InterleaveShortMax(b *testing.B) {
-	benchmarkInterleave(runtime.NumCPU(), 75, 9999999, b)
+	multiBenchmarkDstSrc(interleaveSubtask, runtime.NumCPU(), 150, 75, 9999999, b)
 }
 
 func Benchmark_InterleaveLong1(b *testing.B) {
-	benchmarkInterleave(1, 124625311, 50, b)
+	multiBenchmarkDstSrc(interleaveSubtask, 1, 124625311*2, 124625311, 50, b)
 }
 
 func Benchmark_InterleaveLong4(b *testing.B) {
-	benchmarkInterleave(4, 124625311, 50, b)
+	multiBenchmarkDstSrc(interleaveSubtask, 4, 124625311*2, 124625311, 50, b)
 }
 
 func Benchmark_InterleaveLongMax(b *testing.B) {
-	benchmarkInterleave(runtime.NumCPU(), 124625311, 50, b)
+	multiBenchmarkDstSrc(interleaveSubtask, runtime.NumCPU(), 124625311*2, 124625311, 50, b)
 }
 
 func interleaveSlow(dst, even, odd []byte) {
@@ -643,78 +474,36 @@ func TestInterleave(t *testing.T) {
 	}
 }
 
-func reverse8Subtask(main []byte, nIter int) int {
+func reverse8Subtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
 	for iter := 0; iter < nIter; iter++ {
-		simd.Reverse8Inplace(main)
+		simd.Reverse8Inplace(a.dst)
 	}
-	return int(main[0])
-}
-
-func reverse8SubtaskFuture(main []byte, nIter int) chan int {
-	future := make(chan int)
-	go func() { future <- reverse8Subtask(main, nIter) }()
-	return future
-}
-
-func multiReverse8(mains [][]byte, cpus int, nJob int) {
-	sumFutures := make([]chan int, cpus)
-	shardSizeBase := nJob / cpus
-	shardRemainder := nJob - shardSizeBase*cpus
-	shardSizeP1 := shardSizeBase + 1
-	var taskIdx int
-	for ; taskIdx < shardRemainder; taskIdx++ {
-		sumFutures[taskIdx] = reverse8SubtaskFuture(mains[taskIdx], shardSizeP1)
-	}
-	for ; taskIdx < cpus; taskIdx++ {
-		sumFutures[taskIdx] = reverse8SubtaskFuture(mains[taskIdx], shardSizeBase)
-	}
-	var sum int
-	for taskIdx = 0; taskIdx < cpus; taskIdx++ {
-		sum += <-sumFutures[taskIdx]
-	}
-}
-
-func benchmarkReverse8(cpus int, nByte int, nJob int, b *testing.B) {
-	if cpus > runtime.NumCPU() {
-		b.Skipf("only have %v cpus", runtime.NumCPU())
-	}
-
-	mainSlices := make([][]byte, cpus)
-	for ii := range mainSlices {
-		// Add 63 to prevent false sharing.
-		newArr := simd.MakeUnsafe(nByte + 63)
-		for jj := 0; jj < nByte; jj++ {
-			newArr[jj] = byte(jj * 3)
-		}
-		mainSlices[ii] = newArr[:nByte]
-	}
-	for i := 0; i < b.N; i++ {
-		multiReverse8(mainSlices, cpus, nJob)
-	}
+	return int(a.dst[0])
 }
 
 func Benchmark_Reverse8Short1(b *testing.B) {
-	benchmarkReverse8(1, 75, 9999999, b)
+	multiBenchmarkDstSrc(reverse8Subtask, 1, 75, 0, 9999999, b)
 }
 
 func Benchmark_Reverse8Short4(b *testing.B) {
-	benchmarkReverse8(4, 75, 9999999, b)
+	multiBenchmarkDstSrc(reverse8Subtask, 4, 75, 0, 9999999, b)
 }
 
 func Benchmark_Reverse8ShortMax(b *testing.B) {
-	benchmarkReverse8(runtime.NumCPU(), 75, 9999999, b)
+	multiBenchmarkDstSrc(reverse8Subtask, runtime.NumCPU(), 75, 0, 9999999, b)
 }
 
 func Benchmark_Reverse8Long1(b *testing.B) {
-	benchmarkReverse8(1, 249250621, 50, b)
+	multiBenchmarkDstSrc(reverse8Subtask, 1, 249250621, 0, 50, b)
 }
 
 func Benchmark_Reverse8Long4(b *testing.B) {
-	benchmarkReverse8(4, 249250621, 50, b)
+	multiBenchmarkDstSrc(reverse8Subtask, 4, 249250621, 0, 50, b)
 }
 
 func Benchmark_Reverse8LongMax(b *testing.B) {
-	benchmarkReverse8(runtime.NumCPU(), 249250621, 50, b)
+	multiBenchmarkDstSrc(reverse8Subtask, runtime.NumCPU(), 249250621, 0, 50, b)
 }
 
 func reverse8Slow(main []byte) {
@@ -772,5 +561,161 @@ func TestReverse8(t *testing.T) {
 		if !bytes.Equal(src2Slice, main4Slice) {
 			t.Fatal("Reverse8Inplace didn't invert itself.")
 		}
+	}
+}
+
+func bitFromEveryByteSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		simd.BitFromEveryByte(a.dst, a.src, 0)
+	}
+	return int(a.dst[0])
+}
+
+func bitFromEveryByteFancyNoasmSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		bitFromEveryByteFancyNoasm(a.dst, a.src, 0)
+	}
+	return int(a.dst[0])
+}
+
+func bitFromEveryByteSlowSubtask(args interface{}, nIter int) int {
+	a := args.(dstSrcArgs)
+	for iter := 0; iter < nIter; iter++ {
+		bitFromEveryByteSlow(a.dst, a.src, 0)
+	}
+	return int(a.dst[0])
+}
+
+func Benchmark_BitFromEveryByte(b *testing.B) {
+	multiBenchmarkDstSrc(bitFromEveryByteSubtask, 1, 4091904/8, 4091904, 50, b)
+}
+
+func Benchmark_BitFromEveryByteFancyNoasm(b *testing.B) {
+	multiBenchmarkDstSrc(bitFromEveryByteFancyNoasmSubtask, 1, 4091904/8, 4091904, 50, b)
+}
+
+func Benchmark_BitFromEveryByteSlow(b *testing.B) {
+	multiBenchmarkDstSrc(bitFromEveryByteSlowSubtask, 1, 4091904/8, 4091904, 50, b)
+}
+
+func bitFromEveryByteSlow(dst, src []byte, bitIdx int) {
+	requiredDstLen := (len(src) + 7) >> 3
+	if (len(dst) < requiredDstLen) || (uint(bitIdx) > 7) {
+		panic("BitFromEveryByte requires len(dst) >= (len(src) + 7) / 8 and 0 <= bitIdx < 8.")
+	}
+	dst = dst[:requiredDstLen]
+	for i := range dst {
+		dst[i] = 0
+	}
+	for i, b := range src {
+		dst[i>>3] |= ((b >> uint32(bitIdx)) & 1) << uint32(i&7)
+	}
+}
+
+func bitFromEveryByteFancyNoasm(dst, src []byte, bitIdx int) {
+	requiredDstLen := (len(src) + 7) >> 3
+	if (len(dst) < requiredDstLen) || (uint(bitIdx) > 7) {
+		panic("BitFromEveryByte requires len(dst) >= (len(src) + 7) / 8 and 0 <= bitIdx < 8.")
+	}
+	nSrcFullWord := len(src) >> 3
+	for i := 0; i < nSrcFullWord; i++ {
+		// Tried using a unsafeBytesToWords function on src in place of
+		// binary.LittleEndian.Uint64, and it barely made any difference.
+		srcWord := binary.LittleEndian.Uint64(src[i*8:i*8+8]) >> uint32(bitIdx)
+
+		srcWord &= 0x101010101010101
+
+		// Before this operation, the bits of interest are at positions 0, 8, 16,
+		// 24, 32, 40, 48, and 56 in srcWord, and all other bits are guaranteed to
+		// be zero.
+		//
+		// Suppose the bit at position 16 is set, and no other bits are set.  What
+		// does multiplication by the magic number 0x102040810204080 accomplish?
+		// Well, the magic number has bits set at positions 7, 14, 21, 28, 35, 42,
+		// 49, and 56.  Multiplying by 2^16 is equivalent to left-shifting by 16,
+		// so the product has bits set at positions (7+16), (14+16), (21+16),
+		// (28+16), (35+16), (42+16), and the last two overflow off the top end.
+		//
+		// Now suppose the bits at position 0 and 16 are both set.  The result is
+		// then the sum of (2^0) * <magic number> + (2^16) * <magic number>.  The
+		// first term in this sum has bits set at positions 7, 14, ..., 56.
+		// Critically, *none of these bits overlap with the second term*, so there
+		// are no 'carries' when we add the two terms together.  So the final
+		// product has bits set at positions 7, 14, 21, 23, 28, 30, 35, 37, 42, 44,
+		// 49, 51, 56, and 58.
+		//
+		// It turns out that none of the bits in any of the 8 terms of this product
+		// have overlapping positions.  So the multiplication operation just makes
+		// a bunch of left-shifted copies of the original bits... and in
+		// particular, bits 56-63 of the product are:
+		//   56: original bit 0, left-shifted 56
+		//   57: original bit 8, left-shifted 49
+		//   58: original bit 16, left-shifted 42
+		//   59: original bit 24, left-shifted 35
+		//   60: original bit 32, left-shifted 28
+		//   61: original bit 40, left-shifted 21
+		//   62: original bit 48, left-shifted 14
+		//   63: original bit 56, left-shifted 7
+		// Thus, right-shifting the product by 56 gives us the byte we want.
+		//
+		// This is a very esoteric algorithm, and it doesn't have much direct
+		// application because all 64-bit x86 processors provide an assembly
+		// instruction which lets you do this >6 times as quickly.  Occasionally
+		// the idea of using multiplication to create staggered left-shifted copies
+		// of bits does genuinely come in handy, though.
+		dst[i] = byte((srcWord * 0x102040810204080) >> 56)
+	}
+	if nSrcFullWord != requiredDstLen {
+		srcLast := src[nSrcFullWord*8:]
+		dstLast := dst[nSrcFullWord:requiredDstLen]
+		for i := range dstLast {
+			dstLast[i] = 0
+		}
+		for i, b := range srcLast {
+			dstLast[i>>3] |= ((b >> uint32(bitIdx)) & 1) << uint32(i&7)
+		}
+	}
+}
+
+func TestBitFromEveryByte(t *testing.T) {
+	maxSize := 500
+	nIter := 200
+	rand.Seed(1)
+	srcArr := make([]byte, maxSize)
+	dstArr1 := make([]byte, maxSize)
+	dstArr2 := make([]byte, maxSize)
+	dstArr3 := make([]byte, maxSize)
+	for iter := 0; iter < nIter; iter++ {
+		sliceStart := rand.Intn(maxSize)
+		srcSize := rand.Intn(maxSize - sliceStart)
+		srcSliceEnd := sliceStart + srcSize
+		srcSlice := srcArr[sliceStart:srcSliceEnd]
+
+		minDstSize := (srcSize + 7) >> 3
+		dstSliceEnd := sliceStart + minDstSize
+		dstSlice1 := dstArr1[sliceStart:dstSliceEnd]
+		dstSlice2 := dstArr2[sliceStart:dstSliceEnd]
+		dstSlice3 := dstArr3[sliceStart:dstSliceEnd]
+
+		for ii := range srcSlice {
+			srcSlice[ii] = byte(rand.Intn(256))
+		}
+		sentinel := byte(rand.Intn(256))
+		dstArr2[dstSliceEnd] = sentinel
+
+		bitIdx := rand.Intn(8)
+		bitFromEveryByteSlow(dstSlice1, srcSlice, bitIdx)
+		simd.BitFromEveryByte(dstSlice2, srcSlice, bitIdx)
+		assert.EQ(t, dstSlice1, dstSlice2)
+		assert.EQ(t, sentinel, dstArr2[dstSliceEnd])
+
+		// Also validate the assembly-free multiplication-based algorithm.
+		sentinel = byte(rand.Intn(256))
+		dstArr3[dstSliceEnd] = sentinel
+		bitFromEveryByteFancyNoasm(dstSlice3, srcSlice, bitIdx)
+		assert.EQ(t, dstSlice1, dstSlice3)
+		assert.EQ(t, sentinel, dstArr3[dstSliceEnd])
 	}
 }

@@ -6,8 +6,9 @@
 
         DATA ·Mask0f0f<>+0x00(SB)/8, $0x0f0f0f0f0f0f0f0f
         DATA ·Mask0f0f<>+0x08(SB)/8, $0x0f0f0f0f0f0f0f0f
-        GLOBL ·Mask0f0f<>(SB), 24, $16
         // NOPTR = 16, RODATA = 8
+        GLOBL ·Mask0f0f<>(SB), 24, $16
+
         DATA ·Reverse8<>+0x00(SB)/8, $0x08090a0b0c0d0e0f
         DATA ·Reverse8<>+0x08(SB)/8, $0x0001020304050607
         GLOBL ·Reverse8<>(SB), 24, $16
@@ -388,4 +389,58 @@ reverse8SSSE3Loop:
         MOVOU   (SI), X1
         PSHUFB  X0, X1
         MOVOU   X1, (R9)
+        RET
+
+TEXT ·bitFromEveryByteSSE2Asm(SB),4,$0-32
+        // bitFromEveryByteSSE2Asm grabs a single bit from every src[] byte,
+        // and packs them into dst[].
+        // The implementation is based on the _mm_movemask_epi8() instruction,
+        // which grabs the *high* bit from each byte, so this function takes a
+        // 'lshift' argument instead of the wrapper's bitIdx.
+
+        // Register allocation:
+        //   AX: pointer to start of dst
+        //   BX: pointer to start of src
+        //   CX: nDstByte (must be even), minus 2 to support 2x unroll
+        //       (rule of thumb: if the loop is less than ~10 operations,
+        //       unrolling is likely to make a noticeable difference with
+        //       minimal effort; otherwise don't bother)
+        //   DX: loop counter
+        //   SI, DI: intermediate movemask results
+        //
+        //   X0: lshift
+        MOVQ    dst+0(FP), AX
+        MOVQ    src+8(FP), BX
+        MOVQ    lshift+16(FP), X0
+
+        MOVQ    nDstByte+24(FP), CX
+        SUBQ    $2, CX
+        XORQ    DX, DX
+
+        CMPQ    CX, DX
+        JLE     bitFromEveryByteSSE2AsmOdd
+
+bitFromEveryByteSSE2AsmLoop:
+        MOVOU   (BX)(DX*8), X1
+        MOVOU   16(BX)(DX*8), X2
+        PSLLQ   X0, X1
+        PSLLQ   X0, X2
+        PMOVMSKB        X1, SI
+        PMOVMSKB        X2, DI
+        MOVW    SI, (AX)(DX*1)
+        MOVW    DI, 2(AX)(DX*1)
+        ADDQ    $4, DX
+        CMPQ    CX, DX
+        JG      bitFromEveryByteSSE2AsmLoop
+
+        JL      bitFromEveryByteSSE2AsmFinish
+
+        // Move this label up one line if we ever need to accept nDstByte == 0.
+bitFromEveryByteSSE2AsmOdd:
+        MOVOU   (BX)(DX*8), X1
+        PSLLQ   X0, X1
+        PMOVMSKB        X1, SI
+        MOVW    SI, (AX)(DX*1)
+
+bitFromEveryByteSSE2AsmFinish:
         RET
