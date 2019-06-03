@@ -31,8 +31,8 @@ require (
 	google.golang.org/api v0.1.0
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
-	v.io v0.1.2
-	v.io/x/lib v0.1.2
+	v.io v0.1.3
+	v.io/x/lib v0.1.3
 )
 
 

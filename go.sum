@@ -230,7 +230,7 @@ honnef.co/go/tools v0.0.0-20180728063816-88497007e858/go.mod h1:rf3lG4BRIbNafJWh
 honnef.co/go/tools v0.0.0-20190106161140-3f1c8253044a/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 sourcegraph.com/sourcegraph/go-diff v0.5.0/go.mod h1:kuch7UrkMzY0X+p9CRK03kfuPQ2zzQcaEFbx8wA8rck=
 sourcegraph.com/sqs/pbtypes v0.0.0-20180604144634-d3ebe8f20ae4/go.mod h1:ketZ/q3QxT9HOBeFhu6RdvsftgpsbFHBF5Cas6cDKZ0=
-v.io v0.1.2 h1:SyOHdmbUTh8jeQBEx/wXMfoJr4Su9vNViVvHxnTBlRo=
-v.io v0.1.2/go.mod h1:4P2h3m+023Rz3Cc0GW/nkZPpOCQMuzdm2GaBdxpymxU=
-v.io/x/lib v0.1.2 h1:golW2m9zeDd31Ak4myOKpeQgTCnsHWmMIidwAkn+MFQ=
-v.io/x/lib v0.1.2/go.mod h1:chsCSU9AIZ8cs6dKh6tXfpq9SzhAVk2tAvHDaYteiV4=
+v.io v0.1.3 h1:CI/+g9nBPQ+//zAsqy9/kKVTN+EzaLuaIeD5S4NG/z8=
+v.io v0.1.3/go.mod h1:Gu/akP+7eoLIFqt+1kz4EvFl3A6M/TVPlKn4pKGPXyk=
+v.io/x/lib v0.1.3 h1:g0h5tHoflTzp3MI9xSG66B7WyHQ/2TYWXYLnup094is=
+v.io/x/lib v0.1.3/go.mod h1:chsCSU9AIZ8cs6dKh6tXfpq9SzhAVk2tAvHDaYteiV4=
