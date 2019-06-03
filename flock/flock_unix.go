@@ -6,6 +6,7 @@
 package flock
 
 import (
+	"context"
 	"sync"
 	"syscall"
 
@@ -25,7 +26,35 @@ func New(path string) *T {
 
 // Lock locks the file. Iff Lock() returns nil, the caller must call Unlock()
 // later.
-func (f *T) Lock() error {
+func (f *T) Lock(ctx context.Context) (err error) {
+	reqCh := make(chan func() error, 2)
+	doneCh := make(chan error)
+	go func() {
+		var err error
+		for req := range reqCh {
+			if err == nil {
+				err = req()
+			}
+			doneCh <- err
+		}
+	}()
+	reqCh <- f.doLock
+	select {
+	case <-ctx.Done():
+		reqCh <- f.doUnlock
+		err = ctx.Err()
+	case err = <-doneCh:
+	}
+	close(reqCh)
+	return err
+}
+
+// Unlock unlocks the file.
+func (f *T) Unlock() error {
+	return f.doUnlock()
+}
+
+func (f *T) doLock() error {
 	f.mu.Lock() // Serialize the lock within one process.
 
 	var err error
@@ -45,8 +74,7 @@ func (f *T) Lock() error {
 	return err
 }
 
-// Lock unlocks the file.
-func (f *T) Unlock() error {
+func (f *T) doUnlock() error {
 	err := syscall.Flock(f.fd, syscall.LOCK_UN)
 	if err := syscall.Close(f.fd); err != nil {
 		log.Error.Printf("close %s: %v", f.name, err)
