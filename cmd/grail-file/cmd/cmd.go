@@ -21,6 +21,7 @@ var commands = []struct {
 	help     string
 }{
 	{"cat", Cat, `Cat prints contents of the files to the stdout. It supports globs defined in https://github.com/gobwas/glob.`},
+	{"put", Put, `Put stores stdin to the provided path.`},
 	{"ls", Ls, `List files`},
 	{"rm", Rm, `Rm removes files. It supports globs defined in https://github.com/gobwas/glob.`},
 	{"cp", Cp, `Cp copies files. It can be invoked in three forms:
