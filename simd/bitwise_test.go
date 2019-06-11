@@ -95,20 +95,18 @@ Benchmark_AndInplace/SlowLongHalfCpu-8                 1        2144409827 ns/op
 Benchmark_AndInplace/SlowLongAllCpu-8                  1        2158206158 ns/op
 */
 
-func andSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func andSimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.AndInplace(a.dst, a.src)
+		simd.AndInplace(dst, src)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func andSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func andSlowSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		andInplaceSlow(a.dst, a.src)
+		andInplaceSlow(dst, src)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_AndInplace(b *testing.B) {
@@ -125,8 +123,8 @@ func Benchmark_AndInplace(b *testing.B) {
 	for _, f := range funcs {
 		// This is relevant to .bam reads in packed form, so 150/2=75 is a good
 		// size for the short-array benchmark.
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 75, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 75, 75, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 249250621, 50, b)
 	}
 }
 
@@ -513,20 +511,18 @@ Benchmark_XorConst8Inplace/SlowLongHalfCpu-8                   1        14809237
 Benchmark_XorConst8Inplace/SlowLongAllCpu-8                    1        1588216831 ns/op
 */
 
-func xorConst8InplaceSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func xorConst8InplaceSimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.XorConst8Inplace(a.dst, 3)
+		simd.XorConst8Inplace(dst, 3)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func xorConst8InplaceSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func xorConst8InplaceSlowSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		xorConst8InplaceSlow(a.dst, 3)
+		xorConst8InplaceSlow(dst, 3)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_XorConst8Inplace(b *testing.B) {
@@ -541,7 +537,7 @@ func Benchmark_XorConst8Inplace(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 0, 50, b)
 	}
 }

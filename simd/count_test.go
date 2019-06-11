@@ -129,29 +129,26 @@ underlying instruction.  AVX2/AVX-512 allow for faster bulk processing, though;
 see e.g. https://github.com/kimwalisch/libpopcnt .
 */
 
-func popcntSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func popcntSimdSubtask(dst, src []byte, nIter int) int {
 	sum := 0
 	for iter := 0; iter < nIter; iter++ {
-		sum += simd.Popcnt(a.src)
+		sum += simd.Popcnt(src)
 	}
 	return sum
 }
 
-func popcntNoasmSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func popcntNoasmSubtask(dst, src []byte, nIter int) int {
 	sum := 0
 	for iter := 0; iter < nIter; iter++ {
-		sum += popcntBytesNoasm(a.src)
+		sum += popcntBytesNoasm(src)
 	}
 	return sum
 }
 
-func popcntSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func popcntSlowSubtask(dst, src []byte, nIter int) int {
 	sum := 0
 	for iter := 0; iter < nIter; iter++ {
-		sum += popcntBytesSlow(a.src)
+		sum += popcntBytesSlow(src)
 	}
 	return sum
 }
@@ -172,8 +169,8 @@ func Benchmark_Popcnt(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 75, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 0, 75, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }
 
@@ -236,20 +233,18 @@ Benchmark_CountCG/StandardLongHalfCpu-8                2         931898463 ns/op
 Benchmark_CountCG/StandardLongAllCpu-8                 2         980615182 ns/op
 */
 
-func countCGSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func countCGSimdSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += simd.MaskThenCountByte(a.src, 0xfb, 'C')
+		tot += simd.MaskThenCountByte(src, 0xfb, 'C')
 	}
 	return tot
 }
 
-func countCGStandardSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func countCGStandardSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += countCGStandard(a.src)
+		tot += countCGStandard(src)
 	}
 	return tot
 }
@@ -266,8 +261,8 @@ func Benchmark_CountCG(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }
 
@@ -350,21 +345,19 @@ Benchmark_Count3Bytes/StandardLongHalfCpu-8            1        1518757560 ns/op
 Benchmark_Count3Bytes/StandardLongAllCpu-8             1        1468352229 ns/op
 */
 
-func count3BytesSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func count3BytesSimdSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += simd.Count3Bytes(a.src, 'A', 'T', 'N')
+		tot += simd.Count3Bytes(src, 'A', 'T', 'N')
 	}
 	return tot
 }
 
-func count3BytesStandardSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func count3BytesStandardSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	vals := []byte{'A', 'T', 'N'}
 	for iter := 0; iter < nIter; iter++ {
-		tot += count3BytesStandard(a.src, vals)
+		tot += count3BytesStandard(src, vals)
 	}
 	return tot
 }
@@ -381,8 +374,8 @@ func Benchmark_Count3Bytes(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }
 
@@ -579,20 +572,18 @@ Benchmark_Accumulate8/SlowLongHalfCpu-8                1        1473946277 ns/op
 Benchmark_Accumulate8/SlowLongAllCpu-8                 1        1118962315 ns/op
 */
 
-func accumulate8SimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func accumulate8SimdSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += simd.Accumulate8(a.src)
+		tot += simd.Accumulate8(src)
 	}
 	return tot
 }
 
-func accumulate8SlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func accumulate8SlowSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += accumulate8Slow(a.src)
+		tot += accumulate8Slow(src)
 	}
 	return tot
 }
@@ -609,8 +600,8 @@ func Benchmark_Accumulate8(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }
 
@@ -665,20 +656,18 @@ Benchmark_Accumulate8Greater/SlowLongHalfCpu-8                 1        21132214
 Benchmark_Accumulate8Greater/SlowLongAllCpu-8                  1        2047822921 ns/op
 */
 
-func accumulate8GreaterSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func accumulate8GreaterSimdSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += simd.Accumulate8Greater(a.src, 14)
+		tot += simd.Accumulate8Greater(src, 14)
 	}
 	return tot
 }
 
-func accumulate8GreaterSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func accumulate8GreaterSlowSubtask(dst, src []byte, nIter int) int {
 	tot := 0
 	for iter := 0; iter < nIter; iter++ {
-		tot += accumulate8GreaterSlow(a.src, 14)
+		tot += accumulate8GreaterSlow(src, 14)
 	}
 	return tot
 }
@@ -695,7 +684,7 @@ func Benchmark_Accumulate8Greater(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 0, 150, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 0, 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 0, 150, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 0, 249250621, 50, b)
 	}
 }

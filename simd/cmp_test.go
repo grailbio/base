@@ -6,7 +6,6 @@ package simd_test
 
 import (
 	"math/rand"
-	"runtime"
 	"testing"
 
 	"github.com/grailbio/base/simd"
@@ -95,103 +94,43 @@ Benchmark_FirstUnequal8/SlowLongAllCpu-8                       1        10467948
 Notes: There is practically no speed penalty relative to bytes.Compare().
 */
 
-type cmpArgs struct {
-	arg1 []byte
-	arg2 []byte
-}
-
-func firstUnequal8UnsafeSubtask(args interface{}, nIter int) int {
-	a := args.(cmpArgs)
+func firstUnequal8UnsafeSubtask(dst, src []byte, nIter int) int {
 	curPos := 0
-	endPos := len(a.arg1)
+	endPos := len(dst)
 	for iter := 0; iter < nIter; iter++ {
 		if curPos >= endPos {
 			curPos = 0
 		}
-		curPos = simd.FirstUnequal8Unsafe(a.arg1, a.arg2, curPos)
+		curPos = simd.FirstUnequal8Unsafe(dst, src, curPos)
 		curPos++
 	}
 	return curPos
 }
 
-func firstUnequal8SimdSubtask(args interface{}, nIter int) int {
-	a := args.(cmpArgs)
+func firstUnequal8SimdSubtask(dst, src []byte, nIter int) int {
 	curPos := 0
-	endPos := len(a.arg1)
+	endPos := len(dst)
 	for iter := 0; iter < nIter; iter++ {
 		if curPos >= endPos {
 			curPos = 0
 		}
-		curPos = simd.FirstUnequal8(a.arg1, a.arg2, curPos)
+		curPos = simd.FirstUnequal8(dst, src, curPos)
 		curPos++
 	}
 	return curPos
 }
 
-func firstUnequal8SlowSubtask(args interface{}, nIter int) int {
-	a := args.(cmpArgs)
+func firstUnequal8SlowSubtask(dst, src []byte, nIter int) int {
 	curPos := 0
-	endPos := len(a.arg1)
+	endPos := len(dst)
 	for iter := 0; iter < nIter; iter++ {
 		if curPos >= endPos {
 			curPos = 0
 		}
-		curPos = firstUnequal8Slow(a.arg1, a.arg2, curPos)
+		curPos = firstUnequal8Slow(dst, src, curPos)
 		curPos++
 	}
 	return curPos
-}
-
-// Necessary to customize the initialization function; the default setting of
-// src = {0, 3, 6, 9, ...} and dst = {0, 0, 0, 0, ...} results in too many
-// mismatches for a realistic benchmark.
-// (We'll want to remove some overlap with multiBenchmarkDstSrc later, but
-// let's first see what other ways we need to customize these benchmarks.)
-func firstUnequal8MultiBenchmark(bf multiBenchFunc, benchmarkSubtype string, nByte, nJob int, b *testing.B) {
-	totalCpu := runtime.NumCPU()
-	cases := []struct {
-		nCpu    int
-		descrip string
-	}{
-		{
-			nCpu:    1,
-			descrip: "1Cpu",
-		},
-		{
-			nCpu:    (totalCpu + 1) / 2,
-			descrip: "HalfCpu",
-		},
-		{
-			nCpu:    totalCpu,
-			descrip: "AllCpu",
-		},
-	}
-	for _, c := range cases {
-		success := b.Run(benchmarkSubtype+c.descrip, func(b *testing.B) {
-			var argSlice []interface{}
-			for i := 0; i < c.nCpu; i++ {
-				// Previously, we only allocated these once, and all elements of
-				// argSlice referred to the same two arrays.  Don't see a reason to
-				// preserve that behavior when all the other benchmarks work
-				// differently.
-				newArrArg1 := simd.MakeUnsafe(nByte + 63)
-				newArrArg2 := simd.MakeUnsafe(nByte + 63)
-				newArrArg2[nByte/2] = 128
-				newArgs := cmpArgs{
-					arg1: newArrArg1[:nByte],
-					arg2: newArrArg2[:nByte],
-				}
-				argSlice = append(argSlice, newArgs)
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				multiBenchmark(bf, argSlice, c.nCpu, nJob)
-			}
-		})
-		if !success {
-			panic("benchmark failed")
-		}
-	}
 }
 
 func Benchmark_FirstUnequal8(b *testing.B) {
@@ -209,9 +148,18 @@ func Benchmark_FirstUnequal8(b *testing.B) {
 			tag: "Slow",
 		},
 	}
+	// Necessary to customize the initialization functions; the default setting
+	// of src = {0, 3, 6, 9, ...} and dst = {0, 0, 0, 0, ...} results in too many
+	// mismatches for a realistic benchmark.
+	opts := multiBenchmarkOpts{
+		dstInit: func(src []byte) {
+			src[len(src)/2] = 128
+		},
+		srcInit: bytesInit0,
+	}
 	for _, f := range funcs {
-		firstUnequal8MultiBenchmark(f.f, f.tag+"Short", 150, 9999999, b)
-		firstUnequal8MultiBenchmark(f.f, f.tag+"Long", 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 150, 150, 9999999, b, opts)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 249250621, 50, b, opts)
 	}
 }
 
@@ -326,75 +274,30 @@ Benchmark_FirstLeq8/SlowLongHalfCpu-8                  1        1030280464 ns/op
 Benchmark_FirstLeq8/SlowLongAllCpu-8                   1        1019364554 ns/op
 */
 
-func firstLeq8SimdSubtask(args interface{}, nIter int) int {
-	a := args.(cmpArgs)
+func firstLeq8SimdSubtask(dst, src []byte, nIter int) int {
 	curPos := 0
-	endPos := len(a.arg1)
+	endPos := len(src)
 	for iter := 0; iter < nIter; iter++ {
 		if curPos >= endPos {
 			curPos = 0
 		}
-		curPos = simd.FirstLeq8(a.arg1, 0, curPos)
+		curPos = simd.FirstLeq8(src, 0, curPos)
 		curPos++
 	}
 	return curPos
 }
 
-func firstLeq8SlowSubtask(args interface{}, nIter int) int {
-	a := args.(cmpArgs)
+func firstLeq8SlowSubtask(dst, src []byte, nIter int) int {
 	curPos := 0
-	endPos := len(a.arg1)
+	endPos := len(src)
 	for iter := 0; iter < nIter; iter++ {
 		if curPos >= endPos {
 			curPos = 0
 		}
-		curPos = firstLeq8Slow(a.arg1, 0, curPos)
+		curPos = firstLeq8Slow(src, 0, curPos)
 		curPos++
 	}
 	return curPos
-}
-
-func firstLeq8MultiBenchmark(bf multiBenchFunc, benchmarkSubtype string, nByte, nJob int, b *testing.B) {
-	totalCpu := runtime.NumCPU()
-	cases := []struct {
-		nCpu    int
-		descrip string
-	}{
-		{
-			nCpu:    1,
-			descrip: "1Cpu",
-		},
-		{
-			nCpu:    (totalCpu + 1) / 2,
-			descrip: "HalfCpu",
-		},
-		{
-			nCpu:    totalCpu,
-			descrip: "AllCpu",
-		},
-	}
-	for _, c := range cases {
-		success := b.Run(benchmarkSubtype+c.descrip, func(b *testing.B) {
-			var argSlice []interface{}
-			for i := 0; i < c.nCpu; i++ {
-				newArr := simd.MakeUnsafe(nByte + 63)
-				simd.Memset8(newArr, 255)
-				// Just change one byte in the middle.
-				newArr[nByte/2] = 0
-				newArgs := cmpArgs{
-					arg1: newArr[:nByte],
-				}
-				argSlice = append(argSlice, newArgs)
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				multiBenchmark(bf, argSlice, c.nCpu, nJob)
-			}
-		})
-		if !success {
-			panic("benchmark failed")
-		}
-	}
 }
 
 func Benchmark_FirstLeq8(b *testing.B) {
@@ -408,8 +311,15 @@ func Benchmark_FirstLeq8(b *testing.B) {
 			tag: "Slow",
 		},
 	}
+	opts := multiBenchmarkOpts{
+		srcInit: func(src []byte) {
+			simd.Memset8(src, 255)
+			// Just change one byte in the middle.
+			src[len(src)/2] = 128
+		},
+	}
 	for _, f := range funcs {
-		firstLeq8MultiBenchmark(f.f, f.tag+"Short", 150, 9999999, b)
-		firstLeq8MultiBenchmark(f.f, f.tag+"Long", 249250621, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 0, 150, 9999999, b, opts)
+		multiBenchmark(f.f, f.tag+"Long", 0, 249250621, 50, b, opts)
 	}
 }

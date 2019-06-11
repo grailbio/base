@@ -9,7 +9,6 @@ package simd_test
 import (
 	"math/rand"
 	"reflect"
-	"runtime"
 	"testing"
 	"unsafe"
 
@@ -124,49 +123,8 @@ func memset16StandardSubtask(args interface{}, nIter int) int {
 	return int(a.main[0])
 }
 
-func u16MultiBenchmark(bf multiBenchFunc, benchmarkSubtype string, nU16, nJob int, b *testing.B) {
-	totalCpu := runtime.NumCPU()
-	cases := []struct {
-		nCpu    int
-		descrip string
-	}{
-		{
-			nCpu:    1,
-			descrip: "1Cpu",
-		},
-		{
-			nCpu:    (totalCpu + 1) / 2,
-			descrip: "HalfCpu",
-		},
-		{
-			nCpu:    totalCpu,
-			descrip: "AllCpu",
-		},
-	}
-	for _, c := range cases {
-		success := b.Run(benchmarkSubtype+c.descrip, func(b *testing.B) {
-			var argSlice []interface{}
-			for i := 0; i < c.nCpu; i++ {
-				// Add 31 to prevent false sharing.
-				newArr := make([]uint16, nU16, nU16+31)
-				newArgs := u16Args{
-					main: newArr[:nU16],
-				}
-				argSlice = append(argSlice, newArgs)
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				multiBenchmark(bf, argSlice, c.nCpu, nJob)
-			}
-		})
-		if !success {
-			panic("benchmark failed")
-		}
-	}
-}
-
 func Benchmark_Memset16(b *testing.B) {
-	funcs := []taggedMultiBenchFunc{
+	funcs := []taggedMultiBenchVarargsFunc{
 		{
 			f:   memset16SimdSubtask,
 			tag: "SIMD",
@@ -177,8 +135,16 @@ func Benchmark_Memset16(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		u16MultiBenchmark(f.f, f.tag+"Short", 75, 9999999, b)
-		u16MultiBenchmark(f.f, f.tag+"Long", 249250622/2, 50, b)
+		multiBenchmarkVarargs(f.f, f.tag+"Short", 9999999, func() interface{} {
+			return u16Args{
+				main: make([]uint16, 75, 75+31),
+			}
+		}, b)
+		multiBenchmarkVarargs(f.f, f.tag+"Long", 50, func() interface{} {
+			return u16Args{
+				main: make([]uint16, 249250622/2, 249250622/2+31),
+			}
+		}, b)
 	}
 }
 
@@ -270,7 +236,7 @@ func reverseU16InplaceSlowSubtask(args interface{}, nIter int) int {
 }
 
 func Benchmark_ReverseU16Inplace(b *testing.B) {
-	funcs := []taggedMultiBenchFunc{
+	funcs := []taggedMultiBenchVarargsFunc{
 		{
 			f:   reverseU16InplaceSimdSubtask,
 			tag: "SIMD",
@@ -281,7 +247,15 @@ func Benchmark_ReverseU16Inplace(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		u16MultiBenchmark(f.f, f.tag+"Short", 75, 9999999, b)
-		u16MultiBenchmark(f.f, f.tag+"Long", 249250622/2, 50, b)
+		multiBenchmarkVarargs(f.f, f.tag+"Short", 9999999, func() interface{} {
+			return u16Args{
+				main: make([]uint16, 75, 75+31),
+			}
+		}, b)
+		multiBenchmarkVarargs(f.f, f.tag+"Long", 50, func() interface{} {
+			return u16Args{
+				main: make([]uint16, 249250622/2, 249250622/2+31),
+			}
+		}, b)
 	}
 }

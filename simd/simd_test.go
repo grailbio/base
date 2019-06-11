@@ -91,32 +91,29 @@ When the simd.Memset8 AVX2 implementation is written, it should obviously
 imitate what memclr is doing.
 */
 
-func memset8SimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func memset8SimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.Memset8(a.dst, 78)
+		simd.Memset8(dst, 78)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func memset8StandardSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func memset8StandardSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		memset8Standard(a.dst, 78)
+		memset8Standard(dst, 78)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func memset8RangeZeroSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func memset8RangeZeroSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
 		// Compiler-recognized loop, which gets converted to a memclr call with
 		// fancier optimizations than simd.Memset8.
-		for pos := range a.dst {
-			a.dst[pos] = 0
+		for pos := range dst {
+			dst[pos] = 0
 		}
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_Memset8(b *testing.B) {
@@ -137,10 +134,10 @@ func Benchmark_Memset8(b *testing.B) {
 	for _, f := range funcs {
 		// Base sequence in length-150 .bam read occupies 75 bytes, so 75 is a good
 		// size for the short-array benchmark.
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Short", 75, 0, 9999999, b)
 		// GRCh37 chromosome 1 length is 249250621, so that's a plausible
 		// long-array use case.
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 0, 50, b)
 	}
 }
 
@@ -228,26 +225,24 @@ Benchmark_UnpackedNibbleLookupInplace/SlowLongHalfCpu-8                1       2
 Benchmark_UnpackedNibbleLookupInplace/SlowLongAllCpu-8                 1       2164900359 ns/op
 */
 
-func unpackedNibbleLookupInplaceSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func unpackedNibbleLookupInplaceSimdSubtask(dst, src []byte, nIter int) int {
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
 		// Note that this uses the result of one lookup operation as the input to
 		// the next.
 		// (Given the current table, all values should be 1 or 0 after 3 or more
 		// iterations.)
-		simd.UnpackedNibbleLookupInplace(a.dst, &table)
+		simd.UnpackedNibbleLookupInplace(dst, &table)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func unpackedNibbleLookupInplaceSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func unpackedNibbleLookupInplaceSlowSubtask(dst, src []byte, nIter int) int {
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		unpackedNibbleLookupInplaceSlow(a.dst, &table)
+		unpackedNibbleLookupInplaceSlow(dst, &table)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_UnpackedNibbleLookupInplace(b *testing.B) {
@@ -262,8 +257,8 @@ func Benchmark_UnpackedNibbleLookupInplace(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 0, 50, b)
 	}
 }
 
@@ -352,31 +347,28 @@ room for improvement in the safe function; I think it's clear at this point
 that we'll probably never need to use the Unsafe interface.
 */
 
-func packedNibbleLookupUnsafeSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func packedNibbleLookupUnsafeSubtask(dst, src []byte, nIter int) int {
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		simd.PackedNibbleLookupUnsafe(a.dst, a.src, &table)
+		simd.PackedNibbleLookupUnsafe(dst, src, &table)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func packedNibbleLookupSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func packedNibbleLookupSimdSubtask(dst, src []byte, nIter int) int {
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		simd.PackedNibbleLookup(a.dst, a.src, &table)
+		simd.PackedNibbleLookup(dst, src, &table)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func packedNibbleLookupSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func packedNibbleLookupSlowSubtask(dst, src []byte, nIter int) int {
 	table := simd.MakeNibbleLookupTable([16]byte{0, 1, 0, 2, 8, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0})
 	for iter := 0; iter < nIter; iter++ {
-		packedNibbleLookupSlow(a.dst, a.src, &table)
+		packedNibbleLookupSlow(dst, src, &table)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_PackedNibbleLookup(b *testing.B) {
@@ -395,8 +387,8 @@ func Benchmark_PackedNibbleLookup(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 150, 75, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 249250622/2, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 150, 75, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 249250622/2, 50, b)
 	}
 }
 
@@ -479,28 +471,25 @@ Benchmark_Interleave/SlowLongHalfCpu-8                 1        1860713287 ns/op
 Benchmark_Interleave/SlowLongAllCpu-8                  1        1807886977 ns/op
 */
 
-func interleaveUnsafeSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func interleaveUnsafeSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.Interleave8Unsafe(a.dst, a.src, a.src)
+		simd.Interleave8Unsafe(dst, src, src)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func interleaveSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func interleaveSimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.Interleave8(a.dst, a.src, a.src)
+		simd.Interleave8(dst, src, src)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func interleaveSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func interleaveSlowSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		interleaveSlow(a.dst, a.src, a.src)
+		interleaveSlow(dst, src, src)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_Interleave(b *testing.B) {
@@ -519,8 +508,8 @@ func Benchmark_Interleave(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 150, 75, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 124625311*2, 124625311, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 150, 75, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 124625311*2, 124625311, 50, b)
 	}
 }
 
@@ -601,20 +590,18 @@ Benchmark_Reverse8Inplace/SlowLongHalfCpu-8                    1        15974871
 Benchmark_Reverse8Inplace/SlowLongAllCpu-8                     1        1616963854 ns/op
 */
 
-func reverse8InplaceSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func reverse8InplaceSimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.Reverse8Inplace(a.dst)
+		simd.Reverse8Inplace(dst)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func reverse8InplaceSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func reverse8InplaceSlowSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		reverse8Slow(a.dst)
+		reverse8Slow(dst)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_Reverse8Inplace(b *testing.B) {
@@ -629,8 +616,8 @@ func Benchmark_Reverse8Inplace(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 75, 0, 9999999, b)
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+		multiBenchmark(f.f, f.tag+"Short", 75, 0, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 0, 50, b)
 	}
 }
 
@@ -780,28 +767,25 @@ we actually need to use the function, and (ii) this phenomenon is definitely
 worth knowing about.
 */
 
-func bitFromEveryByteSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func bitFromEveryByteSimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.BitFromEveryByte(a.dst, a.src, 0)
+		simd.BitFromEveryByte(dst, src, 0)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func bitFromEveryByteFancyNoasmSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func bitFromEveryByteFancyNoasmSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		bitFromEveryByteFancyNoasm(a.dst, a.src, 0)
+		bitFromEveryByteFancyNoasm(dst, src, 0)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func bitFromEveryByteSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func bitFromEveryByteSlowSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		bitFromEveryByteSlow(a.dst, a.src, 0)
+		bitFromEveryByteSlow(dst, src, 0)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_BitFromEveryByte(b *testing.B) {
@@ -820,6 +804,6 @@ func Benchmark_BitFromEveryByte(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 4091904/8, 4091904, 50, b)
+		multiBenchmark(f.f, f.tag+"Long", 4091904/8, 4091904, 50, b)
 	}
 }

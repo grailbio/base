@@ -99,20 +99,18 @@ Benchmark_AddConst8Inplace/SlowLongHalfCpu-8                   1        14674240
 Benchmark_AddConst8Inplace/SlowLongAllCpu-8                    1        1554565031 ns/op
 */
 
-func addConst8InplaceSimdSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func addConst8InplaceSimdSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		simd.AddConst8Inplace(a.dst, 33)
+		simd.AddConst8Inplace(dst, 33)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
-func addConst8InplaceSlowSubtask(args interface{}, nIter int) int {
-	a := args.(dstSrcArgs)
+func addConst8InplaceSlowSubtask(dst, src []byte, nIter int) int {
 	for iter := 0; iter < nIter; iter++ {
-		addConst8Slow(a.dst, 33)
+		addConst8Slow(dst, 33)
 	}
-	return int(a.dst[0])
+	return int(dst[0])
 }
 
 func Benchmark_AddConst8Inplace(b *testing.B) {
@@ -127,10 +125,10 @@ func Benchmark_AddConst8Inplace(b *testing.B) {
 		},
 	}
 	for _, f := range funcs {
-		multiBenchmarkDstSrc(f.f, f.tag+"Short", 150, 0, 9999999, b)
+		multiBenchmark(f.f, f.tag+"Short", 150, 0, 9999999, b)
 		// GRCh37 chromosome 1 length is 249250621, so that's a plausible
 		// long-array use case.
-		multiBenchmarkDstSrc(f.f, f.tag+"Long", 249250621, 0, 50, b)
+		multiBenchmark(f.f, f.tag+"Long", 249250621, 0, 50, b)
 	}
 }
 
