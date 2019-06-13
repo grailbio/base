@@ -226,9 +226,25 @@ func (ids s3RequestIDs) String() string {
 	return fmt.Sprintf("x-amz-request-id: %s, x-amz-id-2: %s", ids.amzRequestID, ids.amzID2)
 }
 
+// This is the same as awsrequest.WithGetResponseHeader, except that it doesn't
+// crash when the request fails w/o receiving an HTTP response.
+//
+// TODO(saito) Revert once awsrequest.WithGetResponseHeaders starts acting more
+// gracefully.
+func withGetResponseHeaderWithNilCheck(key string, val *string) awsrequest.Option {
+	return func(r *awsrequest.Request) {
+		r.Handlers.Complete.PushBack(func(req *awsrequest.Request) {
+			*val = "(no HTTP response)"
+			if req.HTTPResponse != nil && req.HTTPResponse.Header != nil {
+				*val = req.HTTPResponse.Header.Get(key)
+			}
+		})
+	}
+}
+
 func captureRequestIDs(ptr *s3RequestIDs) awsrequest.Option {
-	h0 := awsrequest.WithGetResponseHeader("x-amz-request-id", &ptr.amzRequestID)
-	h1 := awsrequest.WithGetResponseHeader("x-amz-id-2", &ptr.amzID2)
+	h0 := withGetResponseHeaderWithNilCheck("x-amz-request-id", &ptr.amzRequestID)
+	h1 := withGetResponseHeaderWithNilCheck("x-amz-id-2", &ptr.amzID2)
 	return func(r *awsrequest.Request) {
 		h0(r)
 		h1(r)
