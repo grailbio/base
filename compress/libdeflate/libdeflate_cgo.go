@@ -58,7 +58,25 @@ func (dd *Decompressor) Decompress(outData, inData []byte) (int, error) {
 		dd.cobj, unsafe.Pointer(&inData[0]), C.size_t(len(inData)),
 		unsafe.Pointer(&outData[0]), C.size_t(len(outData)), &outLen)
 	if errcode != C.LIBDEFLATE_SUCCESS {
-		return 0, fmt.Errorf("libdeflate: deflate_decompress() error code %d", errcode)
+		return 0, fmt.Errorf("libdeflate: libdeflate_deflate_decompress() error code %d", errcode)
+	}
+	return int(outLen), nil
+}
+
+// GzipDecompress performs gzip decompression on a byte slice.  outData[] must
+// be large enough to fit the decompressed data.  Byte count of the
+// decompressed data is returned on success (it may be smaller than
+// len(outData)).
+func (dd *Decompressor) GzipDecompress(outData, inData []byte) (int, error) {
+	if len(inData) == 0 {
+		return 0, nil
+	}
+	var outLen C.size_t
+	errcode := C.libdeflate_gzip_decompress(
+		dd.cobj, unsafe.Pointer(&inData[0]), C.size_t(len(inData)),
+		unsafe.Pointer(&outData[0]), C.size_t(len(outData)), &outLen)
+	if errcode != C.LIBDEFLATE_SUCCESS {
+		return 0, fmt.Errorf("libdeflate: libdeflate_gzip_decompress() error code %d", errcode)
 	}
 	return int(outLen), nil
 }

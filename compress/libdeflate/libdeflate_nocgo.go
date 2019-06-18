@@ -12,6 +12,7 @@ package libdeflate
 import (
 	"bytes"
 	"compress/flate"
+	"compress/gzip"
 	"io"
 )
 
@@ -28,6 +29,38 @@ func (dd *Decompressor) Init() error {
 func (dd *Decompressor) Decompress(outData, inData []byte) (int, error) {
 	dataReader := bytes.NewReader(inData)
 	actualDecompressor := flate.NewReader(dataReader)
+	// Copy of readToEOF() in github.com/biogo/hts/bgzf/cache.go.
+	n := 0
+	outDataMax := len(outData)
+	var err error
+	for err == nil && n < outDataMax {
+		var nn int
+		nn, err = actualDecompressor.Read(outData[n:])
+		n += nn
+	}
+	switch {
+	case err == io.EOF:
+		return n, nil
+	case n == outDataMax && err == nil:
+		var dummy [1]byte
+		_, err = actualDecompressor.Read(dummy[:])
+		if err == nil {
+			return 0, io.ErrShortBuffer
+		}
+		if err == io.EOF {
+			err = nil
+		}
+	}
+	return n, err
+}
+
+// GzipDecompress performs gzip decompression on a byte slice.  outData[] must
+// be large enough to fit the decompressed data.  Byte count of the
+// decompressed data is returned on success (it may be smaller than
+// len(outData)).
+func (dd *Decompressor) GzipDecompress(outData, inData []byte) (int, error) {
+	dataReader := bytes.NewReader(inData)
+	actualDecompressor := gzip.NewReader(dataReader)
 	// Copy of readToEOF() in github.com/biogo/hts/bgzf/cache.go.
 	n := 0
 	outDataMax := len(outData)
