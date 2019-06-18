@@ -50,6 +50,11 @@ func SetOutputter(newOut Outputter) Outputter {
 	return old
 }
 
+// GetOutputter returns the current outputter used by the log package.
+func GetOutputter() Outputter {
+	return out
+}
+
 // At returns whether the logger is currently logging at the provided level.
 func At(level Level) bool {
 	return level <= out.Level()
@@ -169,4 +174,10 @@ func Panicf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
 	out.Output(2, Error, s)
 	panic(s)
+}
+
+// Outputf is formats a message using fmt.Sprintf and outputs it
+// to the provided logger at the provided level.
+func Outputf(out Outputter, level Level, format string, v ...interface{}) {
+	out.Output(2, level, fmt.Sprintf(format, v...))
 }
