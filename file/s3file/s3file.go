@@ -192,28 +192,37 @@ type s3Writer struct {
 }
 
 type retryPolicy struct {
-	clients               []s3iface.S3API
-	policy                retry.Policy
-	opts                  file.Opts // passed to Open() or Stat request.
-	notFoundRetryDeadline time.Time // when to give up retrying after KeyNotFound.
-	retries               int
+	clients       []s3iface.S3API
+	policy        retry.Policy
+	opts          file.Opts // passed to Open() or Stat request.
+	retryDeadline time.Time // when to give up retrying.
+	retries       int
 }
 
 // BackoffPolicy defines backoff timing parameters. It is exposed publicly only
 // for unittests.
 var BackoffPolicy = retry.Backoff(500*time.Millisecond, time.Minute, 1.2)
 
-// MaxRetryDuration defines the max amount of time Open can spend retrying on
-// errors, in case file.Opts.RetryWhenNotFound=true.  The current value of 6min
-// is chosen because S3 negative-cache TTL seems to be around 5min.
-var MaxRetryDuration = 6 * time.Minute
+var (
+	// MaxRetryDuration defines the max amount of time a request can spend
+	// retrying on errors.
+	//
+	// Requirements:
+	//
+	// - The value must be >5 minutes. 5 min is the S3 negative-cache TTL.  If
+	//   less than 5 minutes, an Open() call w/ RetryWhenNotFound may fail.
+	//
+	// - It must be long enough to allow CompleteMultiPartUpload to finish after a
+	//   retry. The doc says it may take a few minutes even in a successful case.
+	MaxRetryDuration = 15 * time.Minute
+)
 
 func newRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
 	return retryPolicy{
-		clients:               clients,
-		policy:                BackoffPolicy,
-		opts:                  opts,
-		notFoundRetryDeadline: time.Now().Add(MaxRetryDuration),
+		clients:       clients,
+		policy:        BackoffPolicy,
+		opts:          opts,
+		retryDeadline: time.Now().Add(MaxRetryDuration),
 	}
 }
 
@@ -273,6 +282,45 @@ func otherRetriableError(err error) bool {
 		aerr.Code() == "InternalError") {
 		return true
 	}
+	if ok && aerr.Code() == "XAmzContentSHA256Mismatch" {
+		// Example:
+		//
+		// XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header
+		// does not match what was computed.
+		//
+		// Happens sporadically for no discernible reason.  Just retry.
+		return true
+	}
+
+	if ok && aerr.Code() == "NoSuchUpload" {
+		// Example:
+		//
+		// NoSuchUpload: The specified upload does not exist. The upload ID may be
+		// invalid, or the upload may have been aborted or completed.
+		//
+		// This error happens in CompleteMultipartUpload. According to support case
+		// 6189452181, this could happen due to network flakiness. I don't entirely
+		// believe that explanation, but empirically a blind retry fixes the
+		// problem.
+		return true
+	}
+
+	if ok {
+		msg := strings.TrimSpace(aerr.Message())
+		if strings.HasSuffix(msg, "amazonaws.com: no such host") {
+			// Example:
+			//
+			// RequestError: send request failed caused by: Get
+			// https://grail-patchcnn.s3.us-west-2.amazonaws.com/key: dial tcp: lookup
+			// grail-patchcnn.s3.us-west-2.amazonaws.com: no such host
+			//
+			// This a DNS lookup error on the client side. This may be
+			// grail-specific. This error happens after S3 server resolves the bucket
+			// successfully, and redirects the client to a backend to fetch data. So
+			// accessing a non-existent bucket will not hit this path.
+			return true
+		}
+	}
 	return false
 }
 
@@ -283,12 +331,11 @@ func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 // error.  It will modify r.clients if it thinks the caller should retry with a
 // different client.
 func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
-	if err == nil {
-		return false
-	}
-	if awsrequest.IsErrorRetryable(err) || awsrequest.IsErrorThrottle(err) || otherRetriableError(err) {
-		// Transient errors. Retry with the same client.
-		if retry.Wait(ctx, r.policy, r.retries) != nil {
+	wait := func() bool {
+		ctx2, cancel := context.WithDeadline(ctx, r.retryDeadline)
+		waitErr := retry.Wait(ctx2, r.policy, r.retries)
+		cancel()
+		if waitErr != nil {
 			// Context timeout or cancellation
 			r.clients = nil
 			return false
@@ -296,17 +343,18 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 		r.retries++
 		return true
 	}
+
+	if err == nil {
+		return false
+	}
+	if awsrequest.IsErrorRetryable(err) || awsrequest.IsErrorThrottle(err) || otherRetriableError(err) {
+		// Transient errors. Retry with the same client.
+		return wait()
+	}
 	aerr, ok := getAWSError(err)
 	if ok {
 		if r.opts.RetryWhenNotFound && aerr.Code() == s3.ErrCodeNoSuchKey {
-			ctx2, cancel := context.WithDeadline(ctx, r.notFoundRetryDeadline)
-			waitErr := retry.Wait(ctx2, r.policy, r.retries)
-			cancel()
-			if waitErr != nil {
-				r.clients = nil
-				return false
-			}
-			return true
+			return wait()
 		}
 
 		switch aerr.Code() {
