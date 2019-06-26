@@ -91,7 +91,8 @@ func GetIamInstanceProfileARN(output *ec2.DescribeInstancesOutput) (string, erro
 }
 
 // GetPublicIPAddress extracts the public IP address from the output of a call
-// to DescribeInstances. The response is expected to be non-empty.
+// to DescribeInstances. The response is expected to be non-empty if the
+// instance has a public IP and empty ("") if the instance is private.
 func GetPublicIPAddress(output *ec2.DescribeInstancesOutput) (string, error) {
 	instance, err := getInstance(output)
 	if err != nil {
@@ -99,11 +100,11 @@ func GetPublicIPAddress(output *ec2.DescribeInstancesOutput) (string, error) {
 	}
 
 	if instance.PublicIpAddress == nil {
-		return "", fmt.Errorf("non-nil PublicIpAddress is required: %+v", output)
+		return "", nil
 	}
 
 	if len(*instance.PublicIpAddress) == 0 {
-		return "", fmt.Errorf("non-empty PublicIpAddress is required: %+v", output)
+		return "", nil
 	}
 
 	return *instance.PublicIpAddress, nil
@@ -116,11 +117,17 @@ func GetPublicIPAddress(output *ec2.DescribeInstancesOutput) (string, error) {
 func ValidateInstance(output *ec2.DescribeInstancesOutput, doc IdentityDocument, remoteAddr string) (role string, err error) {
 	vlog.Infof("reservations:\n%+v", output.Reservations)
 
-	if remoteAddr != "" {
-		publicIP, err := GetPublicIPAddress(output)
-		if err != nil {
-			return "", err
-		}
+	publicIP, err := GetPublicIPAddress(output)
+	if err != nil {
+		return "", err
+	}
+
+	// Instances that do not have a public IP should be able to authenticate
+	// with ticket server. Connections from such instances are routed through a
+	// NAT gateway with an Elastic IP. The following check which ensures the
+	// remoteAddr from which the connection originates is same as the public IP
+	// of the instance is skipped for private instances.
+	if remoteAddr != "" && publicIP != "" {
 		if !strings.HasPrefix(remoteAddr, publicIP+":") {
 			return "", fmt.Errorf("mismatch between the real peer address (%s) and public IP of the instance (%s)", remoteAddr, publicIP)
 		}

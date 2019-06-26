@@ -104,6 +104,14 @@ func TestValidateInstance(t *testing.T) {
 			"dummyRole",
 			"",
 		},
+		//Instance that does not have a public IP
+		{
+			newDescribeInstancesOutput("arn:aws:iam::987654321012:instance-profile/dummyRole", ""),
+			ec2util.IdentityDocument{AccountID: "987654321012"},
+			"52.215.119.108:",
+			"dummyRole",
+			"",
+		},
 	}
 
 	for _, c := range cases {
