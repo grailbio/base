@@ -170,6 +170,11 @@ func TestReads(
 	doSeek(t, r, 0, io.SeekStart)
 	assert.EQ(t, expected, doReadAll(t, r))
 
+	// Seek twice to the same offset
+	doSeek(t, r, 1, io.SeekStart)
+	doSeek(t, r, 1, io.SeekStart)
+	assert.EQ(t, expected[1:], doReadAll(t, r))
+
 	doSeek(t, r, 8, io.SeekStart)
 	doSeek(t, r, -6, io.SeekCurrent)
 	assert.EQ(t, "purple", doRead(t, r, 6))

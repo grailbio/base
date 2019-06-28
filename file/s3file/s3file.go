@@ -726,6 +726,7 @@ func (f *s3File) handleSeek(req request) {
 	}
 	if newPosition == f.position {
 		req.ch <- response{off: f.position}
+		return
 	}
 	f.position = newPosition
 	if f.bodyReader != nil {
