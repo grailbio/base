@@ -8,6 +8,7 @@ package traverse
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -33,6 +34,9 @@ type T struct {
 
 // Limit returns a traverser with limit n.
 func Limit(n int) T {
+	if n <= 0 {
+		log.Panicf("traverse.Limit: invalid limit: %d", n)
+	}
 	return T{Limit: n}
 }
 
