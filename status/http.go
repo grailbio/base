@@ -5,10 +5,7 @@
 package status
 
 import (
-	"fmt"
 	"net/http"
-	"text/tabwriter"
-	"time"
 )
 
 type statusHandler struct{ *Status }
@@ -21,17 +18,6 @@ func Handler(s *Status) http.Handler {
 
 func (h statusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	now := time.Now()
-	for _, group := range h.Status.Groups() {
-		v := group.Value()
-		tw := tabwriter.NewWriter(w, 2, 4, 2, ' ', 0)
-		fmt.Fprintf(tw, "%s: %s\n", v.Title, v.Status)
-		for _, task := range group.Tasks() {
-			v := task.Value()
-			elapsed := now.Sub(v.Begin)
-			elapsed -= elapsed % time.Second
-			fmt.Fprintf(tw, "\t%s:\t%s\t%s\n", v.Title, v.Status, elapsed)
-		}
-		tw.Flush()
-	}
+	// If writing fails, there's not much we can do.
+	_ = h.Status.Marshal(w)
 }
