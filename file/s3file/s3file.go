@@ -195,13 +195,15 @@ type retryPolicy struct {
 	clients       []s3iface.S3API
 	policy        retry.Policy
 	opts          file.Opts // passed to Open() or Stat request.
+	startTime     time.Time // the time requested started.
 	retryDeadline time.Time // when to give up retrying.
 	retries       int
+	waitErr       error // error happened during wait, typically deadline or cancellation.
 }
 
 // BackoffPolicy defines backoff timing parameters. It is exposed publicly only
 // for unittests.
-var BackoffPolicy = retry.Backoff(500*time.Millisecond, time.Minute, 1.2)
+var BackoffPolicy = retry.Jitter(retry.Backoff(500*time.Millisecond, time.Minute, 1.2), 0.2)
 
 var (
 	// MaxRetryDuration defines the max amount of time a request can spend
@@ -214,15 +216,17 @@ var (
 	//
 	// - It must be long enough to allow CompleteMultiPartUpload to finish after a
 	//   retry. The doc says it may take a few minutes even in a successful case.
-	MaxRetryDuration = 15 * time.Minute
+	MaxRetryDuration = 60 * time.Minute
 )
 
 func newRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
+	now := time.Now()
 	return retryPolicy{
 		clients:       clients,
 		policy:        BackoffPolicy,
 		opts:          opts,
-		retryDeadline: time.Now().Add(MaxRetryDuration),
+		startTime:     now,
+		retryDeadline: now.Add(MaxRetryDuration),
 	}
 }
 
@@ -321,6 +325,9 @@ func otherRetriableError(err error) bool {
 			return true
 		}
 	}
+	if strings.Contains(err.Error(), "resource unavailable") {
+		return true
+	}
 	return false
 }
 
@@ -333,9 +340,9 @@ func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 	wait := func() bool {
 		ctx2, cancel := context.WithDeadline(ctx, r.retryDeadline)
-		waitErr := retry.Wait(ctx2, r.policy, r.retries)
+		r.waitErr = retry.Wait(ctx2, r.policy, r.retries)
 		cancel()
-		if waitErr != nil {
+		if r.waitErr != nil {
 			// Context timeout or cancellation
 			r.clients = nil
 			return false
@@ -503,7 +510,7 @@ func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (f
 				continue
 			}
 			if err != nil {
-				return response{err: annotate(err, ids, fmt.Sprintf("s3file.stat %s", path))}
+				return response{err: annotate(err, ids, &policy, fmt.Sprintf("s3file.stat %s", path))}
 			}
 			if *resp.ETag == "" {
 				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
@@ -544,7 +551,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 				continue
 			}
 			if err != nil {
-				err = annotate(err, ids, "s3file.remove", path)
+				err = annotate(err, ids, &policy, "s3file.remove", path)
 			}
 			return response{err: err}
 		}
@@ -662,7 +669,7 @@ func (f *s3File) handleStat(req request) {
 			continue
 		}
 		if err != nil {
-			req.ch <- response{err: errors.E(annotate(err, ids), fmt.Sprintf("s3file.stat %v", f.name))}
+			req.ch <- response{err: annotate(err, ids, &policy, "s3file.stat", f.name)}
 			return
 		}
 		if output.Body == nil {
@@ -746,45 +753,50 @@ func (r *s3Reader) Read(p []byte) (n int, err error) {
 	return res.n, res.err
 }
 
-func (f *s3File) startGetObjectRequest(ctx context.Context, client s3iface.S3API) error {
-	if f.bodyReader != nil {
-		panic("get request still active")
-	}
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(f.bucket),
-		Key:    aws.String(f.key),
-	}
-	if f.position > 0 {
-		// We either seeked or read before. So f.info must have been set.
+func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy) error {
+	for {
+		if f.bodyReader != nil {
+			panic("get request still active")
+		}
+		input := &s3.GetObjectInput{
+			Bucket: aws.String(f.bucket),
+			Key:    aws.String(f.key),
+		}
+		if f.position > 0 {
+			// We either seeked or read before. So f.info must have been set.
+			if f.info == nil {
+				panic(fmt.Sprintf("read %v: nil info: %+v", f.name, f))
+			}
+			if f.position >= f.info.size {
+				return io.EOF
+			}
+			input.Range = aws.String(fmt.Sprintf("bytes=%d-", f.position))
+		}
+		var ids s3RequestIDs
+		output, err := policy.client().GetObjectWithContext(ctx, input, captureRequestIDs(&ids))
+		if policy.shouldRetry(ctx, err) {
+			continue
+		}
+		if err != nil {
+			return annotate(err, ids, policy)
+		}
+		if *output.ETag == "" {
+			output.Body.Close() // nolint: errcheck
+			return fmt.Errorf("read %v: File does not exist, awsrequestID: %v", f.name, ids)
+		}
+		if f.info != nil && f.info.etag != *output.ETag {
+			output.Body.Close() // nolint: errcheck
+			return errors.E(
+				errors.Precondition,
+				fmt.Sprintf("read %v: ETag changed from %v to %v, awsrequestID: %v", f.name, f.info.etag, *output.ETag, ids))
+		}
+		f.bodyReader = output.Body // take ownership
+		f.bodyReaderRequestIDs = ids
 		if f.info == nil {
-			panic(fmt.Sprintf("read %v: nil info: %+v", f.name, f))
+			f.info = newInfo(f.name, output)
 		}
-		if f.position >= f.info.size {
-			return io.EOF
-		}
-		input.Range = aws.String(fmt.Sprintf("bytes=%d-", f.position))
+		return nil
 	}
-	var ids s3RequestIDs
-	output, err := client.GetObjectWithContext(ctx, input, captureRequestIDs(&ids))
-	if err != nil {
-		return annotate(err, ids)
-	}
-	if *output.ETag == "" {
-		output.Body.Close() // nolint: errcheck
-		return fmt.Errorf("read %v: File does not exist, awsrequestID: %v", f.name, ids)
-	}
-	if f.info != nil && f.info.etag != *output.ETag {
-		output.Body.Close() // nolint: errcheck
-		return errors.E(
-			errors.Precondition,
-			fmt.Sprintf("read %v: ETag changed from %v to %v, awsrequestID: %v", f.name, f.info.etag, *output.ETag, ids))
-	}
-	f.bodyReader = output.Body // take ownership
-	f.bodyReaderRequestIDs = ids
-	if f.info == nil {
-		f.info = newInfo(f.name, output)
-	}
-	return nil
 }
 
 // Read implements io.Reader
@@ -797,14 +809,10 @@ func (f *s3File) handleRead(req request) {
 	}
 	maxRetries := maxRetries(clients)
 	policy := newRetryPolicy(clients, f.opts)
-	retries := 0
+	retries := 0 // TODO(saito) use retryPolicy instead
 	for len(buf) > 0 {
 		if f.bodyReader == nil {
-			err = f.startGetObjectRequest(req.ctx, policy.client())
-			if policy.shouldRetry(req.ctx, err) {
-				continue
-			}
-			if err != nil {
+			if err = f.startGetObjectRequest(req.ctx, &policy); err != nil {
 				break
 			}
 		}
@@ -906,7 +914,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 			continue
 		}
 		if err != nil {
-			return nil, annotate(err, ids, "s3file.CreateMultipartUploadWithContext", path)
+			return nil, annotate(err, ids, &policy, "s3file.CreateMultipartUploadWithContext", path)
 		}
 		u.client = policy.client()
 		u.uploadID = *resp.UploadId
@@ -943,7 +951,7 @@ func (u *s3Uploader) uploadThread() {
 		}
 		u.bufPool.Put(chunk.buf)
 		if err != nil {
-			u.err.Set(annotate(err, ids, fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
+			u.err.Set(annotate(err, ids, &policy, fmt.Sprintf("s3file.UploadPartWithContext s3://%s/%s", u.bucket, u.key)))
 			continue
 		}
 		partNum := chunk.partNum
@@ -995,7 +1003,7 @@ func (u *s3Uploader) abort() error {
 		}, captureRequestIDs(&ids))
 		if !policy.shouldRetry(u.ctx, err) {
 			if err != nil {
-				err = annotate(err, ids, fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
+				err = annotate(err, ids, &policy, fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
 			}
 			return err
 		}
@@ -1025,7 +1033,7 @@ func (u *s3Uploader) finish() error {
 				}, captureRequestIDs(&ids))
 				if !policy.shouldRetry(u.ctx, err) {
 					if err != nil {
-						err = annotate(err, ids, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
+						err = annotate(err, ids, &policy, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
 					}
 					u.err.Set(err)
 					break
@@ -1047,7 +1055,7 @@ func (u *s3Uploader) finish() error {
 				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params, captureRequestIDs(&ids))
 				if !policy.shouldRetry(u.ctx, err) {
 					if err != nil {
-						err = annotate(err, ids, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
+						err = annotate(err, ids, &policy, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
 					}
 					u.err.Set(err)
 					break
@@ -1149,7 +1157,7 @@ func (l *s3Lister) Scan() bool {
 			continue
 		}
 		if err != nil {
-			l.err = annotate(err, ids, fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
+			l.err = annotate(err, ids, &l.policy, fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
 			return false
 		}
 		l.token = res.NextContinuationToken
@@ -1246,36 +1254,42 @@ func ParseURL(url string) (scheme, bucket, key string, err error) {
 // Annotate interprets err as an AWS request error and returns a version of it
 // annotated with severity and kind from the errors package. The optional args
 // are passed to errors.E.
-func annotate(err error, ids s3RequestIDs, args ...interface{}) error {
+func annotate(err error, ids s3RequestIDs, retry *retryPolicy, args ...interface{}) error {
 	e := func(prefixArgs ...interface{}) error {
-		return errors.E(append(prefixArgs, args...)...)
+		msgs := append(prefixArgs, args...)
+		msgs = append(msgs, "awsrequestID:", ids.String())
+		if retry.waitErr != nil {
+			msgs = append(msgs, fmt.Sprintf("[waitErr=%v]", retry.waitErr))
+		}
+		msgs = append(msgs, fmt.Sprintf("[retries=%d, start=%v]", retry.retries, retry.startTime))
+		return errors.E(msgs...)
 	}
 	aerr, ok := getAWSError(err)
 	if !ok {
-		return e(err, "awsrequestID:", ids.String())
+		return e(err)
 	}
 	if awsrequest.IsErrorThrottle(err) {
-		return e(err, errors.Temporary, errors.Unavailable, "awsrequestID:", ids.String())
+		return e(err, errors.Temporary, errors.Unavailable)
 	}
 	if awsrequest.IsErrorRetryable(err) {
-		return e(err, errors.Temporary, "awsrequestID:", ids.String())
+		return e(err, errors.Temporary)
 	}
 	// The underlying error was an S3 error. Try to classify it.
 	// Best guess based on Amazon's descriptions:
 	switch aerr.Code() {
 	// Code NotFound is not documented, but it's what the API actually returns.
 	case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NoSuchVersion", "NotFound":
-		return e(err, errors.NotExist, "awsrequestID:", ids.String())
+		return e(err, errors.NotExist)
 	case "AccessDenied":
-		return e(err, errors.NotAllowed, "awsrequestID:", ids.String())
+		return e(err, errors.NotAllowed)
 	case "InvalidRequest", "InvalidArgument", "EntityTooSmall", "EntityTooLarge", "KeyTooLong", "MethodNotAllowed":
-		return e(err, errors.Fatal, "awsrequestID:", ids.String())
+		return e(err, errors.Fatal)
 	case "ExpiredToken", "AccountProblem", "ServiceUnavailable", "TokenRefreshRequired", "OperationAborted":
-		return e(err, errors.Unavailable, "awsrequestID:", ids.String())
+		return e(err, errors.Unavailable)
 	case "PreconditionFailed":
-		return e(err, errors.Precondition, "awsrequestID:", ids.String())
+		return e(err, errors.Precondition)
 	case "SlowDown":
-		return e(errors.Temporary, errors.Unavailable, "awsrequestID:", ids.String())
+		return e(errors.Temporary, errors.Unavailable)
 	}
 	return e(err)
 }
