@@ -300,9 +300,19 @@ func (r Reporter) displaySimple(w io.Writer, status *Status) {
 			nextReport = time.After(minSimpleReportingPeriod - elapsed)
 			continue
 		}
-		// If writing fails, there's not much we can do besides try again next
-		// time.
-		_ = status.Marshal(w)
+		now := time.Now()
+		for _, group := range status.Groups() {
+			v := group.Value()
+			tw := tabwriter.NewWriter(w, 2, 4, 2, ' ', 0)
+			fmt.Fprintf(tw, "%s: %s\n", v.Title, v.Status)
+			for _, task := range group.Tasks() {
+				v := task.Value()
+				elapsed := now.Sub(v.Begin)
+				elapsed -= elapsed % time.Second
+				fmt.Fprintf(tw, "\t%s:\t%s\t%s\n", v.Title, v.Status, elapsed)
+			}
+			tw.Flush()
+		}
 		lastReport = time.Now()
 	}
 }

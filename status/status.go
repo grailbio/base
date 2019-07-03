@@ -17,10 +17,8 @@ package status
 
 import (
 	"fmt"
-	"io"
 	"sort"
 	"sync"
-	"text/tabwriter"
 	"time"
 )
 
@@ -301,30 +299,6 @@ func (s *Status) Groups() []*Group {
 	}
 	s.mu.Unlock()
 	return groups
-}
-
-// Marshal writes s in a human-readable format to w.
-func (s *Status) Marshal(w io.Writer) error {
-	now := time.Now()
-	for _, group := range s.Groups() {
-		v := group.Value()
-		tw := tabwriter.NewWriter(w, 2, 4, 2, ' ', 0)
-		if _, err := fmt.Fprintf(tw, "%s: %s\n", v.Title, v.Status); err != nil {
-			return err
-		}
-		for _, task := range group.Tasks() {
-			v := task.Value()
-			elapsed := now.Sub(v.Begin)
-			elapsed -= elapsed % time.Second
-			if _, err := fmt.Fprintf(tw, "\t%s:\t%s\t%s\n", v.Title, v.Status, elapsed); err != nil {
-				return err
-			}
-		}
-		if err := tw.Flush(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *Status) notify() {
