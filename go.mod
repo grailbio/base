@@ -14,13 +14,11 @@ require (
 	github.com/golang/protobuf v1.3.1
 	github.com/google/gofuzz v1.0.0
 	github.com/google/gops v0.3.6
-	github.com/grailbio/testutil v0.0.0-20190703174854-d9797572c8d2
+	github.com/grailbio/testutil v0.0.0-20190706081934-3a0f7ba48ec9
 	github.com/grailbio/v23/factories/grail v0.0.0-20190703174257-dea14edab192
 	github.com/keybase/go-keychain v0.0.0-20190604185112-cc436cc9fe98
 	github.com/klauspost/compress v1.7.1
-	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/stretchr/testify v1.3.0
 	github.com/willf/bitset v1.1.10
 	github.com/yasushi-saito/zlibng v0.0.0-20190131163602-2bcf20dde99d
@@ -30,8 +28,6 @@ require (
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb
 	google.golang.org/api v0.7.0
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
-	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
 	v.io v0.1.3
 	v.io/x/lib v0.1.3
 )
