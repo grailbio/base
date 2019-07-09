@@ -23,8 +23,8 @@ func transformerTest(t *testing.T, name string) float64 {
 		Transformers: []string{name},
 	})
 	// Write lots of compressible data.
-	const itemSize = 16 << 10
-	const nRecs = 1000
+	const itemSize = 16 << 8
+	const nRecs = 300
 	for i := 0; i < nRecs; i++ {
 		data := make([]byte, itemSize)
 		for j := range data {

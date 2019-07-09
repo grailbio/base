@@ -15,9 +15,12 @@ import (
 	"github.com/grailbio/base/recordio"
 	"github.com/grailbio/base/recordio/deprecated"
 	"github.com/grailbio/base/recordio/recordioiov"
+	"github.com/grailbio/base/recordio/recordiozstd"
 	"github.com/grailbio/testutil/assert"
 	"github.com/grailbio/testutil/expect"
 )
+
+func init() { recordiozstd.Init() }
 
 // The recordio chunk size
 const chunkSize = 32 << 10
@@ -371,26 +374,29 @@ func doRandomTest(
 	maxrecords int,
 	datasize int,
 	wopts recordio.WriterOpts) {
-	t.Logf("Start test with wopt %+v, nshards %d, maxrecords %d, datasize %d", wopts, nshard, maxrecords, datasize)
+	t.Run("r", func(t *testing.T) {
+		t.Parallel()
+		t.Logf("Start test with wopt %+v, nshards %d, maxrecords %d, datasize %d", wopts, nshard, maxrecords, datasize)
 
-	rnd := rand.New(rand.NewSource(seed))
-	var nRecords int
-	if maxrecords > 0 {
-		nRecords = rnd.Intn(maxrecords) + 1
-	}
-	data, items, index := generateRandomRecordio(t, rnd, flushProbability, nRecords, datasize, wopts)
+		rnd := rand.New(rand.NewSource(seed))
+		var nRecords int
+		if maxrecords > 0 {
+			nRecords = rnd.Intn(maxrecords) + 1
+		}
+		data, items, index := generateRandomRecordio(t, rnd, flushProbability, nRecords, datasize, wopts)
 
-	doShardedReads(t, data, 1, nshard, items)
+		doShardedReads(t, data, 1, nshard, items)
 
-	ropts := recordio.ScannerOpts{Unmarshal: unmarshalString}
-	sc := recordio.NewScanner(bytes.NewReader(data), ropts)
-	for _, value := range items {
-		loc := index[value]
-		sc.Seek(loc)
-		expect.NoError(t, sc.Err())
-		expect.True(t, sc.Scan())
-		expect.EQ(t, value, sc.Get().(string))
-	}
+		ropts := recordio.ScannerOpts{Unmarshal: unmarshalString}
+		sc := recordio.NewScanner(bytes.NewReader(data), ropts)
+		for _, value := range items {
+			loc := index[value]
+			sc.Seek(loc)
+			expect.NoError(t, sc.Err())
+			expect.True(t, sc.Scan())
+			expect.EQ(t, value, sc.Get().(string))
+		}
+	})
 }
 
 func TestV2Random(t *testing.T) {
@@ -398,23 +404,29 @@ func TestV2Random(t *testing.T) {
 		maxrecords = 2000
 		datasize   = 30
 	)
-	doRandomTest(t, 0, 0.001, 2000, maxrecords, 40<<10, recordio.WriterOpts{})
+	for wo := 0; wo < 2; wo++ {
+		opts := recordio.WriterOpts{}
+		if wo == 1 {
+			opts.Transformers = []string{"zstd"}
+		}
+		doRandomTest(t, 0, 0.001, 2000, maxrecords, 10<<10, opts)
+		doRandomTest(t, 0, 0.1, 1, maxrecords, datasize, opts)
+		doRandomTest(t, 0, 1.0, 1, maxrecords, datasize, opts)
+		doRandomTest(t, 0, 0.0, 1, maxrecords, datasize, opts)
 
-	doRandomTest(t, 0, 0.1, 1, maxrecords, datasize, recordio.WriterOpts{})
-	doRandomTest(t, 0, 1.0, 1, maxrecords, datasize, recordio.WriterOpts{})
-	doRandomTest(t, 0, 0.0, 1, maxrecords, datasize, recordio.WriterOpts{})
-	doRandomTest(t, 0, 0.1, 1, maxrecords, datasize, recordio.WriterOpts{
-		MaxFlushParallelism: 1,
-	})
-	doRandomTest(t, 0, 0.1, 1000, maxrecords, datasize, recordio.WriterOpts{})
-	doRandomTest(t, 0, 1.0, 3, maxrecords, 30, recordio.WriterOpts{})
-	doRandomTest(t, 0, 0.0, 2, maxrecords, 30, recordio.WriterOpts{})
-	// Make sure we generate blocks big enough so that
-	// shards have to straddle block boundaries.
-	// Make sure that lots of shards with a single record reads correctly.
-	doRandomTest(t, 0, 0.001, 2000, 1, datasize, recordio.WriterOpts{})
-	// Same with an empty recordio file.
-	doRandomTest(t, 0, 0.001, 2000, 0, datasize, recordio.WriterOpts{})
+		opts.MaxFlushParallelism = 1
+		doRandomTest(t, 0, 0.1, 1, maxrecords, datasize, opts)
+		opts.MaxFlushParallelism = 0
+		doRandomTest(t, 0, 0.1, 1000, maxrecords, datasize, opts)
+		doRandomTest(t, 0, 1.0, 3, maxrecords, 30, opts)
+		doRandomTest(t, 0, 0.0, 2, maxrecords, 30, opts)
+		// Make sure we generate blocks big enough so that
+		// shards have to straddle block boundaries.
+		// Make sure that lots of shards with a single record reads correctly.
+		doRandomTest(t, 0, 0.001, 2000, 1, datasize, opts)
+		// Same with an empty recordio file.
+		doRandomTest(t, 0, 0.001, 2000, 0, datasize, opts)
+	}
 }
 
 func TestRandomLargeWrites(t *testing.T) {
