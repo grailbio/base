@@ -29,3 +29,16 @@ func CloseAndReport(f io.Closer, err *error) {
 	}
 	*err = err2
 }
+
+// CloseOrPanic is a defer-able function that calls f.Close and panics on error.
+//
+// Example:
+//   f, err := os.Open(filename)
+//   if err != nil { panic(err) }
+//   defer fileio.CloseOrPanic(f)
+//   ...
+func CloseOrPanic(f io.Closer) {
+	if err := f.Close(); err != nil {
+		panic(err)
+	}
+}
