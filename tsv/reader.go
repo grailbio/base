@@ -75,7 +75,7 @@ func NewReader(in io.Reader) *Reader {
 
 func (r *Reader) validateRowFormat(format rowFormat) error {
 	if r.RequireParseAllColumns && len(format) != len(r.columnIndex) {
-		return fmt.Errorf("extra columns found in %+v", r.columnIndex)
+		return fmt.Errorf("extra columns found in %+v does not match format %v", r.columnIndex, format)
 	}
 	for i := range format {
 		col := &format[i]
