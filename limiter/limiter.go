@@ -76,3 +76,8 @@ func (l *Limiter) Release(n int) {
 		}
 	}
 }
+
+type LimiterIfc interface {
+	Release(n int)
+	Acquire(ctx context.Context, need int) error
+}
