@@ -337,7 +337,7 @@ func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 // shouldRetry determines if the caller should retry after seeing the given
 // error.  It will modify r.clients if it thinks the caller should retry with a
 // different client.
-func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
+func (r *retryPolicy) shouldRetry(ctx context.Context, err error, message string) bool {
 	wait := func() bool {
 		ctx2, cancel := context.WithDeadline(ctx, r.retryDeadline)
 		r.waitErr = retry.Wait(ctx2, r.policy, r.retries)
@@ -356,11 +356,13 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error) bool {
 	}
 	if awsrequest.IsErrorRetryable(err) || awsrequest.IsErrorThrottle(err) || otherRetriableError(err) {
 		// Transient errors. Retry with the same client.
+		log.Printf("retry %s: %v", message, err)
 		return wait()
 	}
 	aerr, ok := getAWSError(err)
 	if ok {
 		if r.opts.RetryWhenNotFound && aerr.Code() == s3.ErrCodeNoSuchKey {
+			log.Printf("retry %s (not found): %v", message, err)
 			return wait()
 		}
 
@@ -506,7 +508,7 @@ func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (f
 				Bucket: aws.String(bucket),
 				Key:    aws.String(key),
 			}, captureRequestIDs(&ids))
-			if policy.shouldRetry(ctx, err) {
+			if policy.shouldRetry(ctx, err, path) {
 				continue
 			}
 			if err != nil {
@@ -547,7 +549,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 			var ids s3RequestIDs
 			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)},
 				captureRequestIDs(&ids))
-			if policy.shouldRetry(ctx, err) {
+			if policy.shouldRetry(ctx, err, path) {
 				continue
 			}
 			if err != nil {
@@ -665,7 +667,7 @@ func (f *s3File) handleStat(req request) {
 			Bucket: aws.String(f.bucket),
 			Key:    aws.String(f.key)},
 			captureRequestIDs(&ids))
-		if policy.shouldRetry(req.ctx, err) {
+		if policy.shouldRetry(req.ctx, err, f.name) {
 			continue
 		}
 		if err != nil {
@@ -774,7 +776,7 @@ func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy)
 		}
 		var ids s3RequestIDs
 		output, err := policy.client().GetObjectWithContext(ctx, input, captureRequestIDs(&ids))
-		if policy.shouldRetry(ctx, err) {
+		if policy.shouldRetry(ctx, err, f.name) {
 			continue
 		}
 		if err != nil {
@@ -868,10 +870,10 @@ type uploadChunk struct {
 // interface. Its write() method will feed data incrementally to the uploader,
 // and finish() will wait for all the uploads to finish.
 type s3Uploader struct {
-	ctx         context.Context
-	client      s3iface.S3API
-	bucket, key string
-	uploadID    string
+	ctx               context.Context
+	client            s3iface.S3API
+	path, bucket, key string
+	uploadID          string
 
 	// curBuf is only accessed by the handleRequests thread.
 	curBuf      *[]byte
@@ -901,6 +903,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 
 	u := &s3Uploader{
 		ctx:         ctx,
+		path:        path,
 		bucket:      bucket,
 		key:         key,
 		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
@@ -910,7 +913,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 	for {
 		var ids s3RequestIDs
 		resp, err := policy.client().CreateMultipartUploadWithContext(ctx, params, captureRequestIDs(&ids))
-		if policy.shouldRetry(ctx, err) {
+		if policy.shouldRetry(ctx, err, path) {
 			continue
 		}
 		if err != nil {
@@ -946,7 +949,7 @@ func (u *s3Uploader) uploadThread() {
 		}
 		var ids s3RequestIDs
 		resp, err := chunk.client.UploadPartWithContext(u.ctx, params, captureRequestIDs(&ids))
-		if policy.shouldRetry(u.ctx, err) {
+		if policy.shouldRetry(u.ctx, err, u.path) {
 			goto retry
 		}
 		u.bufPool.Put(chunk.buf)
@@ -1001,7 +1004,7 @@ func (u *s3Uploader) abort() error {
 			Key:      aws.String(u.key),
 			UploadId: aws.String(u.uploadID),
 		}, captureRequestIDs(&ids))
-		if !policy.shouldRetry(u.ctx, err) {
+		if !policy.shouldRetry(u.ctx, err, u.path) {
 			if err != nil {
 				err = annotate(err, ids, &policy, fmt.Sprintf("s3file.AbortMultiPartUploadWithContext s3://%s/%s", u.bucket, u.key))
 			}
@@ -1031,7 +1034,7 @@ func (u *s3Uploader) finish() error {
 					Key:    aws.String(u.key),
 					Body:   bytes.NewReader(nil),
 				}, captureRequestIDs(&ids))
-				if !policy.shouldRetry(u.ctx, err) {
+				if !policy.shouldRetry(u.ctx, err, u.path) {
 					if err != nil {
 						err = annotate(err, ids, &policy, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
 					}
@@ -1053,7 +1056,7 @@ func (u *s3Uploader) finish() error {
 			for {
 				var ids s3RequestIDs
 				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params, captureRequestIDs(&ids))
-				if !policy.shouldRetry(u.ctx, err) {
+				if !policy.shouldRetry(u.ctx, err, u.path) {
 					if err != nil {
 						err = annotate(err, ids, &policy, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
 					}
@@ -1153,7 +1156,7 @@ func (l *s3Lister) Scan() bool {
 		}
 		var ids s3RequestIDs
 		res, err := l.policy.client().ListObjectsV2WithContext(l.ctx, req, captureRequestIDs(&ids))
-		if l.policy.shouldRetry(l.ctx, err) {
+		if l.policy.shouldRetry(l.ctx, err, l.dir) {
 			continue
 		}
 		if err != nil {
