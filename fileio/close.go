@@ -7,6 +7,11 @@ import (
 	"github.com/grailbio/base/errors"
 )
 
+type named interface {
+	// Name returns the path name.
+	Name() string
+}
+
 // CloseAndReport returns a defer-able helper that calls f.Close and reports errors, if any,
 // to *err. Pass your function's named return error. Example usage:
 //
@@ -24,21 +29,30 @@ func CloseAndReport(f io.Closer, err *error) {
 		return
 	}
 	if *err != nil {
-		*err = errors.E(*err, fmt.Sprintf("second error in Close: %v", err2))
+		var message string
+		if namer, ok := f.(named); ok {
+			message = fmt.Sprintf("second error on Close %s: %v", namer.Name(), err2)
+		} else {
+			message = fmt.Sprintf("second error on Close: %v", err2)
+		}
+		*err = errors.E(*err, message)
 		return
 	}
 	*err = err2
 }
 
-// CloseOrPanic is a defer-able function that calls f.Close and panics on error.
+// MustClose is a defer-able function that calls f.Close and panics on error.
 //
 // Example:
 //   f, err := os.Open(filename)
 //   if err != nil { panic(err) }
-//   defer fileio.CloseOrPanic(f)
+//   defer fileio.MustClose(f)
 //   ...
-func CloseOrPanic(f io.Closer) {
+func MustClose(f io.Closer) {
 	if err := f.Close(); err != nil {
+		if n, ok := f.(named); ok {
+			panic(fmt.Sprintf("close %s: %v", n.Name(), err))
+		}
 		panic(err)
 	}
 }

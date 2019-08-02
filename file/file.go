@@ -86,16 +86,25 @@ func CloseAndReport(ctx context.Context, f Closer, err *error) {
 	*err = err2
 }
 
-// CloseOrPanic is a defer-able function that calls f.Close and panics on error.
+type named interface {
+	// Name returns the path name given to file.Open or file.Create when this
+	// object was created.
+	Name() string
+}
+
+// MustClose is a defer-able function that calls f.Close and panics on error.
 //
 // Example:
 //   ctx := context.Background()
 //   f, err := file.Open(ctx, filename)
 //   if err != nil { panic(err) }
-//   defer file.CloseOrPanic(ctx, f)
+//   defer file.MustClose(ctx, f)
 //   ...
-func CloseOrPanic(ctx context.Context, f Closer) {
+func MustClose(ctx context.Context, f Closer) {
 	if err := f.Close(ctx); err != nil {
+		if n, ok := f.(named); ok {
+			panic(fmt.Sprintf("close %s: %v", n.Name(), err))
+		}
 		panic(err)
 	}
 }
