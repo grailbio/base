@@ -31,6 +31,10 @@ const (
 	GrailRIOPackedCompressedAndEncrypted
 	// JSON text file
 	JSON
+	// Zstd format.
+	// https://facebook.github.io/zstd/
+	// https://tools.ietf.org/html/rfc8478
+	Zstd
 )
 
 var lookup = map[string]FileType{
@@ -42,6 +46,7 @@ var lookup = map[string]FileType{
 	".grail-rpk-gz":    GrailRIOPackedCompressed,
 	".grail-rpk-gz-kd": GrailRIOPackedCompressedAndEncrypted,
 	".json":            JSON,
+	".zst":             Zstd,
 }
 
 // StorageAPI represents the Storage API required to access a file.
@@ -53,8 +58,6 @@ const (
 	LocalAPI StorageAPI = iota
 	// S3API represents an Amazon S3 API.
 	S3API
-
-	s3Separator = '/'
 )
 
 // DetermineAPI determines the Storage API that stores the file
