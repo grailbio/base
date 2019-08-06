@@ -13,9 +13,9 @@ import (
 )
 
 // ReadFile reads the given file and returns the contents. A successful call
-// returns err == nil, not err == EOF.
-func ReadFile(ctx context.Context, path string) ([]byte, error) {
-	in, err := Open(ctx, path)
+// returns err == nil, not err == EOF. Arg opts is passed to file.Open.
+func ReadFile(ctx context.Context, path string, opts ...Opts) ([]byte, error) {
+	in, err := Open(ctx, path, opts...)
 	if err != nil {
 		return nil, err
 	}
