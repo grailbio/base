@@ -9,7 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/DataDog/zstd"
+	"github.com/grailbio/base/compress/zstd"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/fileio"
 	"github.com/klauspost/compress/gzip"
@@ -107,9 +107,11 @@ func NewReader(r io.Reader) (io.ReadCloser, bool) {
 		return z, true
 	}
 	if isZstdHeader(buf.Bytes()) {
-		// TODO(saito) Support cross compilation. Perhaps add a wrapper that
-		// switches between cgo and klauspost.
-		return zstd.NewReader(m), true
+		zr, err := zstd.NewReader(m)
+		if err != nil {
+			return &errorReader{err}, false
+		}
+		return zr, true
 	}
 	if isBzip2Header(buf.Bytes()) {
 		return ioutil.NopCloser(bzip2.NewReader(m)), true
@@ -139,7 +141,11 @@ func NewReaderPath(r io.Reader, path string) (io.ReadCloser, bool) {
 		}
 		return gz, true
 	case fileio.Zstd:
-		return zstd.NewReader(r), true
+		zr, err := zstd.NewReader(r)
+		if err != nil {
+			return file.NewError(err), false
+		}
+		return zr, true
 	case fileio.Bzip2:
 		return ioutil.NopCloser(bzip2.NewReader(r)), true
 	}
@@ -161,7 +167,11 @@ func NewWriterPath(w io.Writer, path string) (io.WriteCloser, bool) {
 	case fileio.Gzip:
 		return gzip.NewWriter(w), true
 	case fileio.Zstd:
-		return zstd.NewWriter(w), true
+		zw, err := zstd.NewWriter(w)
+		if err != nil {
+			return file.NewError(err), false
+		}
+		return zw, true
 	case fileio.Bzip2:
 		return file.NewError(fmt.Errorf("%s: bzip2 writer not supported", path)), false
 	}
