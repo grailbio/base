@@ -295,20 +295,6 @@ func otherRetriableError(err error) bool {
 		// Happens sporadically for no discernible reason.  Just retry.
 		return true
 	}
-
-	if ok && aerr.Code() == "NoSuchUpload" {
-		// Example:
-		//
-		// NoSuchUpload: The specified upload does not exist. The upload ID may be
-		// invalid, or the upload may have been aborted or completed.
-		//
-		// This error happens in CompleteMultipartUpload. According to support case
-		// 6189452181, this could happen due to network flakiness. I don't entirely
-		// believe that explanation, but empirically a blind retry fixes the
-		// problem.
-		return true
-	}
-
 	if ok {
 		msg := strings.TrimSpace(aerr.Message())
 		if strings.HasSuffix(msg, "amazonaws.com: no such host") {
@@ -326,6 +312,9 @@ func otherRetriableError(err error) bool {
 		}
 	}
 	if strings.Contains(err.Error(), "resource unavailable") {
+		return true
+	}
+	if strings.Contains(err.Error(), "Service Unavailable") {
 		return true
 	}
 	return false
@@ -874,7 +863,7 @@ type s3Uploader struct {
 	client            s3iface.S3API
 	path, bucket, key string
 	uploadID          string
-
+	createTime        time.Time // time of file.Create() call
 	// curBuf is only accessed by the handleRequests thread.
 	curBuf      *[]byte
 	nextPartNum int64
@@ -906,6 +895,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		path:        path,
 		bucket:      bucket,
 		key:         key,
+		createTime:  time.Now(),
 		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
 		nextPartNum: 1,
 	}
@@ -1022,48 +1012,54 @@ func (u *s3Uploader) finish() error {
 	close(u.reqCh)
 	u.sg.Wait()
 	policy := newRetryPolicy([]s3iface.S3API{u.client}, file.Opts{})
-	if u.err.Err() == nil {
-		if len(u.parts) == 0 {
-			// Special case: an empty file. CompleteMultiPartUpload with empty parts causes an error,
-			// so work around the bug by issuing a separate PutObject request.
-			u.abort() // nolint: errcheck
-			for {
-				var ids s3RequestIDs
-				_, err := u.client.PutObjectWithContext(u.ctx, &s3.PutObjectInput{
-					Bucket: aws.String(u.bucket),
-					Key:    aws.String(u.key),
-					Body:   bytes.NewReader(nil),
-				}, captureRequestIDs(&ids))
-				if !policy.shouldRetry(u.ctx, err, u.path) {
-					if err != nil {
-						err = annotate(err, ids, &policy, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
-					}
-					u.err.Set(err)
-					break
+	if err := u.err.Err(); err != nil {
+		u.abort() // nolint: errcheck
+		return err
+	}
+	if len(u.parts) == 0 {
+		// Special case: an empty file. CompleteMultiPartUpload with empty parts causes an error,
+		// so work around the bug by issuing a separate PutObject request.
+		u.abort() // nolint: errcheck
+		for {
+			var ids s3RequestIDs
+			_, err := u.client.PutObjectWithContext(u.ctx, &s3.PutObjectInput{
+				Bucket: aws.String(u.bucket),
+				Key:    aws.String(u.key),
+				Body:   bytes.NewReader(nil),
+			}, captureRequestIDs(&ids))
+			if !policy.shouldRetry(u.ctx, err, u.path) {
+				if err != nil {
+					err = annotate(err, ids, &policy, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
 				}
+				u.err.Set(err)
+				break
 			}
-		} else {
-			// Parts must be sorted in PartNumber order.
-			sort.Slice(u.parts, func(i, j int) bool {
-				return *u.parts[i].PartNumber < *u.parts[j].PartNumber
-			})
-			params := &s3.CompleteMultipartUploadInput{
-				Bucket:          aws.String(u.bucket),
-				Key:             aws.String(u.key),
-				UploadId:        aws.String(u.uploadID),
-				MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
+		}
+		return u.err.Err()
+	}
+	// Common case. Complete the multi-part upload.
+	closeStartTime := time.Now()
+	sort.Slice(u.parts, func(i, j int) bool { // Parts must be sorted in PartNumber order.
+		return *u.parts[i].PartNumber < *u.parts[j].PartNumber
+	})
+	params := &s3.CompleteMultipartUploadInput{
+		Bucket:          aws.String(u.bucket),
+		Key:             aws.String(u.key),
+		UploadId:        aws.String(u.uploadID),
+		MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
+	}
+	for {
+		var ids s3RequestIDs
+		_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params, captureRequestIDs(&ids))
+		if !policy.shouldRetry(u.ctx, err, u.path) {
+			if err != nil {
+				err = annotate(err, ids, &policy,
+					fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s, "+
+						"created at %v, started closing at %v, failed at %v",
+						u.bucket, u.key, u.createTime, closeStartTime, time.Now()))
 			}
-			for {
-				var ids s3RequestIDs
-				_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params, captureRequestIDs(&ids))
-				if !policy.shouldRetry(u.ctx, err, u.path) {
-					if err != nil {
-						err = annotate(err, ids, &policy, fmt.Sprintf("s3file.CompleteMultipartUploadWithContext s3://%s/%s", u.bucket, u.key))
-					}
-					u.err.Set(err)
-					break
-				}
-			}
+			u.err.Set(err)
+			break
 		}
 	}
 	if u.err.Err() != nil {
