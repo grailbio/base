@@ -16,6 +16,8 @@ import (
 	"math/rand"
 	"runtime/debug"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/base/file/s3file"
+	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/retry"
 	"github.com/grailbio/testutil/assert"
 	"github.com/grailbio/testutil/s3test"
@@ -34,6 +37,7 @@ import (
 
 var (
 	s3BucketFlag = flag.String("s3-bucket", "", "If set, run a unittest against a real S3 bucket named in this flag")
+	s3DirFlag    = flag.String("s3-dir", "", "S3 directory under -s3-bucket used by some unittests")
 	profileFlag  = flag.String("profile", "default", "If set, use the named profile in ~/.aws")
 )
 
@@ -439,6 +443,45 @@ func TestAWS(t *testing.T) {
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testutil.TestAll(ctx, t, impl, "s3://"+*s3BucketFlag+"/tmp")
+}
+
+func TestConcurrentUploads(t *testing.T) {
+	if *s3BucketFlag == "" || *s3DirFlag == "" {
+		t.Skip("Skipping. Set -s3-bucket and -s3-dir to run the test.")
+	}
+	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+
+	path := fmt.Sprintf("s3://%s/%s/test.txt", *s3BucketFlag, *s3DirFlag)
+	ctx := context.Background()
+
+	upload := func() {
+		f, err := impl.Create(ctx, path, file.Opts{IgnoreNoSuchUpload: true})
+		if err != nil {
+			log.Panic(err)
+		}
+		_, err = f.Writer(ctx).Write([]byte("hello"))
+		if err != nil {
+			log.Panic(err)
+		}
+		if err := f.Close(ctx); err != nil {
+			log.Panic(err)
+		}
+	}
+
+	wg := sync.WaitGroup{}
+	n := uint64(0)
+	for i := 0; i < 4000; i++ {
+		wg.Add(1)
+		go func() {
+			upload()
+			if x := atomic.AddUint64(&n, 1); x%100 == 0 {
+				log.Printf("%d done", x)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
 
 func ExampleParseURL() {

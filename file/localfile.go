@@ -68,7 +68,7 @@ func (impl *localImpl) Open(ctx context.Context, path string, _ ...Opts) (File, 
 // Create implements file.Implementation.  To make writes appear linearizable,
 // it creates a temporary file with name <path>.tmp, then renames the temp file
 // to <path> on Close.
-func (*localImpl) Create(ctx context.Context, path string) (File, error) {
+func (*localImpl) Create(ctx context.Context, path string, _ ...Opts) (File, error) {
 	if path == "" { // Detect common errors quickly.
 		return nil, fmt.Errorf("file.Create: empty pathname")
 	}

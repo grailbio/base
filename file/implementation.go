@@ -28,7 +28,7 @@ type Implementation interface {
 	// created.  If the directory part of the path does not exist already, it will
 	// be created. The pathname given to file.Open() is passed here unchanged.
 	// Thus, it contains the URL prefix such as "s3://".
-	Create(ctx context.Context, path string) (File, error)
+	Create(ctx context.Context, path string, opts ...Opts) (File, error)
 
 	// List finds files and directories. If "path" points to a regular file, the
 	// lister will return information about the file itself and finishes.
@@ -269,4 +269,25 @@ type Opts struct {
 	//   name (to find if the object exists) before creating the object, Amazon S3
 	//   provides eventual consistency for read-after-write.
 	RetryWhenNotFound bool
+
+	// When set, Close will ignore NoSuchUpload error from S3
+	// CompleteMultiPartUpload and silently returns OK.
+	//
+	// This is to work around a bug where concurrent uploads to one file sometimes
+	// causes an upload request to be lost on the server side.
+	// https://console.aws.amazon.com/support/cases?region=us-west-2#/6299905521/en
+	// https://github.com/yasushi-saito/s3uploaderror
+	//
+	// Set this flag only if:
+	//
+	//  1. you are writing to a file on S3, and
+	//
+	//  2. possible concurrent writes to the same file produce the same
+	//  contents, so you are ok with taking any of them.
+	//
+	// If you don't set this flag, then concurrent writes to the same file may
+	// fail with a NoSuchUpload error, and it is up to you to retry.
+	//
+	// On non-S3 file systems, this flag is ignored.
+	IgnoreNoSuchUpload bool
 }

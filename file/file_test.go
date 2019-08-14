@@ -32,7 +32,7 @@ func (f *errFile) Open(ctx context.Context, path string, opts ...file.Opts) (fil
 	return nil, f.err
 }
 
-func (f *errFile) Create(ctx context.Context, path string) (file.File, error) {
+func (f *errFile) Create(ctx context.Context, path string, opts ...file.Opts) (file.File, error) {
 	return nil, f.err
 }
 

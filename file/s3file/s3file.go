@@ -409,7 +409,8 @@ func runRequest(ctx context.Context, handler func() response) response {
 	}
 }
 
-func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMode, opts ...file.Opts) (*s3File, error) {
+func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMode, optsList ...file.Opts) (*s3File, error) {
+	opts := mergeFileOpts(optsList)
 	_, bucket, key, err := ParseURL(path)
 	if err != nil {
 		return nil, err
@@ -417,7 +418,7 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 	var uploader *s3Uploader
 	if mode == writeonly {
 		resp := runRequest(ctx, func() response {
-			u, err := newUploader(ctx, impl.provider, impl.options, path, bucket, key)
+			u, err := newUploader(ctx, impl.provider, impl.options, path, bucket, key, opts)
 			return response{uploader: u, err: err}
 		})
 		if resp.err != nil {
@@ -428,7 +429,7 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 	f := &s3File{
 		name:     path,
 		mode:     mode,
-		opts:     mergeFileOpts(opts),
+		opts:     opts,
 		provider: impl.provider,
 		bucket:   bucket,
 		key:      key,
@@ -451,8 +452,8 @@ func (impl *s3Impl) Open(ctx context.Context, path string, opts ...file.Opts) (f
 }
 
 // Create opens a file for writing.
-func (impl *s3Impl) Create(ctx context.Context, path string) (file.File, error) {
-	return impl.internalOpen(ctx, path, writeonly)
+func (impl *s3Impl) Create(ctx context.Context, path string, opts ...file.Opts) (file.File, error) {
+	return impl.internalOpen(ctx, path, writeonly, opts...)
 }
 
 // String implements a human-readable description.
@@ -862,6 +863,7 @@ type s3Uploader struct {
 	ctx               context.Context
 	client            s3iface.S3API
 	path, bucket, key string
+	opts              file.Opts
 	uploadID          string
 	createTime        time.Time // time of file.Create() call
 	// curBuf is only accessed by the handleRequests thread.
@@ -876,7 +878,7 @@ type s3Uploader struct {
 	parts   []*s3.CompletedPart
 }
 
-func newUploader(ctx context.Context, provider ClientProvider, opts Options, path, bucket, key string) (*s3Uploader, error) {
+func newUploader(ctx context.Context, provider ClientProvider, opts Options, path, bucket, key string, fileOpts file.Opts) (*s3Uploader, error) {
 	clients, err := provider.Get(ctx, "PutObject", path)
 	if err != nil {
 		return nil, errors.E(err, "s3file.write", path)
@@ -895,6 +897,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		path:        path,
 		bucket:      bucket,
 		key:         key,
+		opts:        fileOpts,
 		createTime:  time.Now(),
 		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
 		nextPartNum: 1,
@@ -1051,6 +1054,17 @@ func (u *s3Uploader) finish() error {
 	for {
 		var ids s3RequestIDs
 		_, err := u.client.CompleteMultipartUploadWithContext(u.ctx, params, captureRequestIDs(&ids))
+		if aerr, ok := getAWSError(err); ok && aerr.Code() == "NoSuchUpload" {
+			if u.opts.IgnoreNoSuchUpload {
+				// Here we managed to upload >=1 part, so the uploadID must have been
+				// valid some point in the past.
+				//
+				// TODO(saito) we could check that upload isn't too old (say <= 7 days),
+				// or that the file actually exists.
+				log.Error.Printf("close %s: IgnoreNoSuchUpload is set; ignoring %v %+v", u.path, err, ids)
+				err = nil
+			}
+		}
 		if !policy.shouldRetry(u.ctx, err, u.path) {
 			if err != nil {
 				err = annotate(err, ids, &policy,
