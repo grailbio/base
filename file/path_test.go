@@ -1,7 +1,11 @@
-package file
+package file_test
 
 import (
+	"fmt"
 	"testing"
+
+	"github.com/grailbio/base/file"
+	"github.com/grailbio/testutil/expect"
 )
 
 func TestJoin(t *testing.T) {
@@ -45,11 +49,18 @@ func TestJoin(t *testing.T) {
 			[]string{"http://foo/", "/bar"}, // separators inside the element are retained.
 			"http://foo/bar",
 		},
+		{
+			[]string{"s3://", "bar"},
+			"s3://bar",
+		},
+		{
+			[]string{"s3://", "/bar"},
+			"s3://bar",
+		},
 	}
-
 	for i, test := range tests {
-		if got, want := Join(test.elems...), test.want; got != want {
-			t.Errorf("test %d: got %q, want %q", i, got, want)
-		}
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			expect.EQ(t, file.Join(test.elems...), test.want)
+		})
 	}
 }

@@ -179,6 +179,16 @@ type s3Lister struct {
 	consecutiveEmptyResponses int
 }
 
+type s3BucketLister struct {
+	ctx     context.Context
+	policy  retryPolicy
+	scheme  string
+	err     error
+	listed  bool
+	bucket  string
+	buckets []string
+}
+
 // s3Reader implements io.ReadSeeker for S3.
 type s3Reader struct {
 	ctx context.Context
@@ -464,6 +474,21 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 	scheme, bucket, key, err := ParseURL(dir)
 	if err != nil {
 		return &s3Lister{ctx: ctx, dir: dir, err: err}
+	}
+	if bucket == "" {
+		if recurse {
+			return &s3Lister{ctx: ctx, dir: dir,
+				err: fmt.Errorf("list %s: ListBuckets cannot be combined with recurse option", dir)}
+		}
+		clients, err := impl.provider.Get(ctx, "ListAllMyBuckets", dir)
+		if err != nil {
+			return &s3Lister{ctx: ctx, dir: dir, err: err}
+		}
+		return &s3BucketLister{
+			ctx:    ctx,
+			scheme: scheme,
+			policy: newRetryPolicy(clients, file.Opts{}),
+		}
 	}
 	clients, err := impl.provider.Get(ctx, "ListBucket", dir)
 	if err != nil {
@@ -1116,6 +1141,48 @@ func (f *s3File) handleAbort(req request) {
 	req.ch <- response{err: err}
 }
 
+func (l *s3BucketLister) Scan() bool {
+	if !l.listed {
+		for {
+			var ids s3RequestIDs
+			res, err := l.policy.client().ListBucketsWithContext(l.ctx, &s3.ListBucketsInput{},
+				captureRequestIDs(&ids))
+			if l.policy.shouldRetry(l.ctx, err, "listbuckets") {
+				continue
+			}
+			if err != nil {
+				l.err = annotate(err, ids, &l.policy, "s3file.listbuckets")
+				return false
+			}
+			for _, bucket := range res.Buckets {
+				l.buckets = append(l.buckets, *bucket.Name)
+			}
+			break
+		}
+		l.listed = true
+	}
+	if len(l.buckets) == 0 {
+		return false
+	}
+	l.bucket, l.buckets = l.buckets[0], l.buckets[1:]
+	return true
+}
+
+func (l *s3BucketLister) Path() string {
+	return fmt.Sprintf("%s://%s", l.scheme, l.bucket)
+}
+
+func (l *s3BucketLister) Info() file.Info { return nil }
+
+func (l *s3BucketLister) IsDir() bool {
+	return true
+}
+
+// Err returns an error, if any.
+func (l *s3BucketLister) Err() error {
+	return l.err
+}
+
 // Scan implements Lister.Scan
 func (l *s3Lister) Scan() bool {
 	for {
@@ -1215,7 +1282,6 @@ func (l *s3Lister) Path() string {
 // Info implements Lister.Info
 func (l *s3Lister) Info() file.Info {
 	if obj := l.object.obj; obj != nil {
-
 		return &s3Info{
 			size:    *obj.Size,
 			modTime: *obj.LastModified,
@@ -1233,11 +1299,6 @@ func (l *s3Lister) IsDir() bool {
 // Err returns an error, if any.
 func (l *s3Lister) Err() error {
 	return l.err
-}
-
-// Object returns the last object that was scanned.
-func (l *s3Lister) Object() s3Obj {
-	return l.object
 }
 
 // showDirs controls whether CommonPrefixes are returned during a scan
