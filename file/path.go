@@ -118,11 +118,6 @@ func Join(elems ...string) string {
 	if len(elems) == 0 {
 		return filepath.Join(elems...)
 	}
-
-	// Prefix is a part of elems[0] that must be preserved in the final result.
-	// - if elems[0] == "s3://foo/hah", then prefix=="s3://".
-	// - if elems[0] == "/foo/hah", then prefix=="/".
-	// - if elems[0] == "foo/hah", then prefix=="".
 	var prefix string
 	n, err := getURLScheme(elems[0])
 	if err == nil && n > 0 {
