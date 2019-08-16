@@ -889,6 +889,7 @@ type s3Uploader struct {
 	client            s3iface.S3API
 	path, bucket, key string
 	opts              file.Opts
+	s3opts            Options
 	uploadID          string
 	createTime        time.Time // time of file.Create() call
 	// curBuf is only accessed by the handleRequests thread.
@@ -923,6 +924,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		bucket:      bucket,
 		key:         key,
 		opts:        fileOpts,
+		s3opts:      opts,
 		createTime:  time.Now(),
 		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
 		nextPartNum: 1,
@@ -930,7 +932,8 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 	policy := newRetryPolicy(clients, file.Opts{})
 	for {
 		var ids s3RequestIDs
-		resp, err := policy.client().CreateMultipartUploadWithContext(ctx, params, captureRequestIDs(&ids))
+		resp, err := policy.client().CreateMultipartUploadWithContext(ctx,
+			params, captureRequestIDs(&ids))
 		if policy.shouldRetry(ctx, err, path) {
 			continue
 		}
@@ -1049,12 +1052,17 @@ func (u *s3Uploader) finish() error {
 		// so work around the bug by issuing a separate PutObject request.
 		u.abort() // nolint: errcheck
 		for {
-			var ids s3RequestIDs
-			_, err := u.client.PutObjectWithContext(u.ctx, &s3.PutObjectInput{
+			input := &s3.PutObjectInput{
 				Bucket: aws.String(u.bucket),
 				Key:    aws.String(u.key),
 				Body:   bytes.NewReader(nil),
-			}, captureRequestIDs(&ids))
+			}
+			if u.s3opts.ServerSideEncryption != "" {
+				input.SetServerSideEncryption(u.s3opts.ServerSideEncryption)
+			}
+
+			var ids s3RequestIDs
+			_, err := u.client.PutObjectWithContext(u.ctx, input, captureRequestIDs(&ids))
 			if !policy.shouldRetry(u.ctx, err, u.path) {
 				if err != nil {
 					err = annotate(err, ids, &policy, fmt.Sprintf("s3file.PutObjectWithContext s3://%s/%s", u.bucket, u.key))
