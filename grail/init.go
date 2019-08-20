@@ -9,9 +9,11 @@ package grail
 import (
 	"flag"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/google/gops/agent"
+	"github.com/grailbio/base/config"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/pprof"
 	"v.io/x/lib/vlog"
@@ -32,6 +34,10 @@ var (
 // use the github.com/grailbio/base/cmdutil. The Shutdown function should be called to
 // perform the final cleanup (closing logs for example).
 //
+// Init also applies a default configuration profile (see package
+// github.com/grailbio/base/config), and adds profile flags to the
+// default flag set. The default profile path used is $HOME/grail/profile.
+//
 // Note that this function will call flag.Parse().
 //
 // Suggested use:
@@ -45,6 +51,7 @@ func Init() Shutdown {
 	}
 	initialized = true
 	mu.Unlock()
+	config.RegisterFlags("", os.ExpandEnv("$HOME/grail/profile"))
 	flag.CommandLine.Init(os.Args[0], flag.ContinueOnError)
 	err := flag.CommandLine.Parse(os.Args[1:])
 	if err == flag.ErrHelp {
@@ -56,6 +63,12 @@ func Init() Shutdown {
 		vlog.Error(err)
 	}
 	log.SetOutputter(vlogOutputter{})
+	if err := config.Parse(strings.NewReader(defaultProfile)); err != nil {
+		panic("grail: error in default profile: " + err.Error())
+	}
+	if err := config.ProcessFlags(); err != nil {
+		log.Fatal(err)
+	}
 	pprof.Start()
 	_, ok := os.LookupEnv("GOPS")
 	if ok || *gopsFlag {

@@ -1,0 +1,14 @@
+param app/auth/login (
+	user = "marius"
+	password = "supersecret"
+)
+
+param app/database (
+	credentials = app/auth/login
+)
+
+param app/frontend (
+	database = app/database
+	credentials = app/auth/login
+)
+
