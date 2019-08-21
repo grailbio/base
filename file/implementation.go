@@ -188,12 +188,12 @@ func Open(ctx context.Context, path string, opts ...Opts) (File, error) {
 
 // Create opens the given file writeonly. It is a shortcut for calling
 // ParsePath(), then FindImplementation, then Implementation.Create.
-func Create(ctx context.Context, path string) (File, error) {
+func Create(ctx context.Context, path string, opts ...Opts) (File, error) {
 	impl, err := findImpl(path)
 	if err != nil {
 		return nil, err
 	}
-	return impl.Create(ctx, path)
+	return impl.Create(ctx, path, opts...)
 }
 
 // Stat returns the give file's metadata. Is a shortcut for calling ParsePath(),
