@@ -12,10 +12,19 @@ import (
 )
 
 func TestCompress(t *testing.T) {
-	z, err := zstd.Compress(nil, []byte("hello"))
+	z, err := zstd.CompressLevel(nil, []byte("hello"), -1)
 	assert.NoError(t, err)
 	assert.GT(t, len(z), 0)
 	d, err := zstd.Decompress(nil, z)
+	assert.NoError(t, err)
+	assert.EQ(t, d, []byte("hello"))
+}
+
+func TestCompressScratch(t *testing.T) {
+	z, err := zstd.CompressLevel(make([]byte, 3), []byte("hello"), -1)
+	assert.NoError(t, err)
+	assert.GT(t, len(z), 0)
+	d, err := zstd.Decompress(make([]byte, 3), z)
 	assert.NoError(t, err)
 	assert.EQ(t, d, []byte("hello"))
 }

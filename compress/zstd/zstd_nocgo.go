@@ -9,9 +9,13 @@ import (
 	nocgozstd "github.com/klauspost/compress/zstd"
 )
 
-func Compress(scratch []byte, in []byte) ([]byte, error) {
+func CompressLevel(scratch []byte, in []byte, level int) ([]byte, error) {
+	if level < 0 {
+		level = 5 // 5 is the default compression const in cgo zstd
+	}
 	wBuf := bytes.NewBuffer(scratch[:0])
-	w, err := nocgozstd.NewWriter(wBuf)
+	w, err := nocgozstd.NewWriter(wBuf,
+		nocgozstd.WithEncoderLevel(nocgozstd.EncoderLevelFromZstd(level)))
 	if err != nil {
 		return nil, err
 	}

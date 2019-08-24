@@ -14,15 +14,29 @@ import (
 
 // Compress compresses the given source data.  Scratch can be passed to prevent
 // prevent allocation.  If it is too small, or if nil is passed, a new buffer
-// will be allocated and returned.
-func Compress(scratch []byte, in []byte) ([]byte, error) {
-	return cgozstd.Compress(scratch, in)
+// will be allocated and returned.  Arg level specifies the compression
+// level. level < 0 means the default compression level.
+func CompressLevel(scratch []byte, in []byte, level int) ([]byte, error) {
+	if level < 0 {
+		level = cgozstd.DefaultCompression
+	}
+	if cap(scratch) == 0 {
+		scratch = nil
+	} else {
+		scratch = scratch[:cap(scratch)]
+	}
+	return cgozstd.CompressLevel(scratch, in, level)
 }
 
 // Decompress uncompresses the given source data.  Scratch can be passed to
 // prevent allocation.  If it is too small, or if nil is passed, a new buffer
 // will be allocated and returned.
 func Decompress(scratch []byte, in []byte) ([]byte, error) {
+	if cap(scratch) == 0 {
+		scratch = nil
+	} else {
+		scratch = scratch[:cap(scratch)]
+	}
 	return cgozstd.Decompress(scratch, in)
 }
 
