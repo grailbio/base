@@ -1,7 +1,9 @@
 package zstd_test
 
 import (
+	"flag"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"bytes"
@@ -42,4 +44,52 @@ func TestReadWrite(t *testing.T) {
 	d, err := ioutil.ReadAll(r)
 	assert.NoError(t, err)
 	assert.EQ(t, d, []byte("hello2"))
+}
+
+var plaintextFlag = flag.String("plaintext", "", "plaintext file used in compression test")
+
+func BenchmarkCompress(b *testing.B) {
+	if *plaintextFlag == "" {
+		b.Skip("--plaintext not set")
+	}
+
+	for i := 0; i < b.N; i++ {
+		buf := bytes.Buffer{}
+		w, err := zstd.NewWriter(&buf)
+		assert.NoError(b, err)
+		r, err := os.Open(*plaintextFlag)
+		assert.NoError(b, err)
+		_, err = io.Copy(w, r)
+		assert.NoError(b, err)
+		assert.NoError(b, w.Close())
+		assert.NoError(b, r.Close())
+	}
+}
+
+func BenchmarkUncompress(b *testing.B) {
+	if *plaintextFlag == "" {
+		b.Skip("--plaintext not set")
+	}
+
+	b.StopTimer()
+	buf := bytes.Buffer{}
+	w, err := zstd.NewWriter(&buf)
+	assert.NoError(b, err)
+	r, err := os.Open(*plaintextFlag)
+	assert.NoError(b, err)
+	_, err = io.Copy(w, r)
+	assert.NoError(b, err)
+	assert.NoError(b, w.Close())
+	assert.NoError(b, r.Close())
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		zr, err := zstd.NewReader(bytes.NewReader(buf.Bytes()))
+		assert.NoError(b, err)
+
+		w := bytes.Buffer{}
+		_, err = io.Copy(&w, zr)
+		assert.NoError(b, err)
+		assert.NoError(b, zr.Close())
+	}
 }
