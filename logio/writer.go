@@ -81,8 +81,8 @@ type Writer struct {
 // NewWriter returns a new writer that appends log entries to the
 // provided io.Writer. The offset given must be the offset into the
 // underlying IO stream represented by wr.
-func NewWriter(wr io.Writer, offset int64) (*Writer, error) {
-	return &Writer{wr: wr, off: offset, scratch: make([]byte, Blocksz)}, nil
+func NewWriter(wr io.Writer, offset int64) *Writer {
+	return &Writer{wr: wr, off: offset, scratch: make([]byte, Blocksz)}
 }
 
 // Append appends a new entry to the log file. Appending an empty

@@ -24,8 +24,7 @@ func TestLogIO(t *testing.T) {
 		buf     bytes.Buffer
 		scratch []byte
 	)
-	w, err := NewWriter(&buf, 0)
-	must(t, err)
+	w := NewWriter(&buf, 0)
 	for _, sz := range sizes {
 		scratch = data(scratch, sz)
 		must(t, w.Append(scratch))
@@ -50,8 +49,7 @@ func TestResync(t *testing.T) {
 		scratch []byte
 		buf     bytes.Buffer
 	)
-	w, err := NewWriter(&buf, 0)
-	must(t, err)
+	w := NewWriter(&buf, 0)
 	for _, sz := range sizes {
 		scratch = data(scratch, sz)
 		must(t, w.Append(scratch))
@@ -101,8 +99,7 @@ func TestRewind(t *testing.T) {
 		buf     bytes.Buffer
 		scratch []byte
 	)
-	w, err := NewWriter(&buf, 0)
-	must(t, err)
+	w := NewWriter(&buf, 0)
 	for _, sz := range sizes {
 		scratch = data(scratch, sz)
 		must(t, w.Append(scratch))

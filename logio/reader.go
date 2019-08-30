@@ -74,6 +74,12 @@ func (r *Reader) Read() (data []byte, err error) {
 	}
 }
 
+// Reset resets the reader's state; subsequent entries are
+// read from the provided reader at the provided offset.
+func (r *Reader) Reset(rd io.Reader, offset int64) {
+	*r = Reader{rd: rd, off: offset}
+}
+
 func (r *Reader) resync() error {
 	for {
 		if err := r.block.read(r.rd, &r.off); err != nil {
