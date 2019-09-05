@@ -69,6 +69,8 @@ const (
 	TooManyTries
 	// Precondition indicates that a precondition was not met.
 	Precondition
+	// OOM indicates that an OOM condition was encountered.
+	OOM
 
 	maxKind
 )
@@ -87,6 +89,7 @@ var kinds = map[Kind]string{
 	Net:          "network error",
 	TooManyTries: "too many tries",
 	Precondition: "precondition failed",
+	OOM:          "out of memory",
 }
 
 // String returns a human-readable explanation of the error kind k.
