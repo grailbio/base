@@ -108,13 +108,13 @@ github.com/gorilla/websocket v1.4.1 h1:q7AeDBpnBk8AogcD4DSag/Ukw/KV+YhzLj2bP5HvK
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/grailbio/base v0.0.0-20190122231653-4b9820296093/go.mod h1:MHck6f+5aF9BgV3JKYeXrjVFfMLNmE2LPEPvKVK5kis=
 github.com/grailbio/base v0.0.0-20190706080809-60af822b89e5/go.mod h1:TlZqDhsSO4kvsXUdL5YUQhW1KvlsyfwMQh3SSrUB5bs=
-github.com/grailbio/base v0.0.0-20190706083030-a4fd972101e2/go.mod h1:xtVkHCo4A1CC5ce/oXEKsCFsnryIR4ERIylVADc2wis=
+github.com/grailbio/base v0.0.0-20190904041759-47ceb38f89b2/go.mod h1:fuAE4PirnL/5FGjIq5jpiCnrqPKVmrWE02oozOT1lIQ=
 github.com/grailbio/testutil v0.0.0-20190109212408-dbe52faee1b0/go.mod h1:eufccQYHRmdAUarmhHgulqZUFWQ7YhHohLFQ/cLRSUY=
 github.com/grailbio/testutil v0.0.0-20190127023142-d3ae812e9a0e/go.mod h1:2qNoyDzypzYqR8rwIQFnqcL7tZM9iGck0oN9+T1jzbE=
 github.com/grailbio/testutil v0.0.0-20190703174854-d9797572c8d2/go.mod h1:i+zjObs7WShJsMQUmHJUQWPsTZXrBzQuR+1+Jj/JP1Y=
 github.com/grailbio/testutil v0.0.0-20190706081934-3a0f7ba48ec9/go.mod h1:nCCl4+jfrIeIIQwI5A+dDlcqCgLYGHzGwqNRWkWYe3E=
-github.com/grailbio/testutil v0.0.0-20190904041824-a3d1c783dd48 h1:ikfzuT6gWViABbOzZVZHbgblsDxSZ6JGx55aCnvmi4k=
-github.com/grailbio/testutil v0.0.0-20190904041824-a3d1c783dd48/go.mod h1:waIeKAXQy9zLJbaTgyILouNigWUP7KSbwQWksZ7wBHY=
+github.com/grailbio/testutil v0.0.1 h1:EKtdqnM1YwOOVEPbhHoRPCfd7jKnw8N/2viBFX+a6p8=
+github.com/grailbio/testutil v0.0.1/go.mod h1:l2XwP1zZwe9MVBdADph0UbEgAi4bdOyyi43qDtrBYuw=
 github.com/grailbio/v23/factories/grail v0.0.0-20190119012339-40e7f427c0fd/go.mod h1:9cQ/mFcQkU4yvvfM7Zmzy/cGu7gINSfbF8I3dNKOPS4=
 github.com/grailbio/v23/factories/grail v0.0.0-20190703174257-dea14edab192/go.mod h1:M4kMYbDAQCWDJUaLiDUO44JShT4Efc4Tngwm/tCzqjU=
 github.com/grailbio/v23/factories/grail v0.0.0-20190904050408-8a555d238e9a h1:kAl1x1ErQgs55bcm/WdoKCPny/kIF7COmC+UGQ9GKcM=
@@ -220,6 +220,8 @@ github.com/xlab/treeprint v0.0.0-20180616005107-d6fb6747feb6/go.mod h1:ce1O1j6Ut
 github.com/yasushi-saito/zlibng v0.0.0-20190115171811-c03a07c2e582/go.mod h1:vmwEC04UXVYghiFfPI67zgDiv7EPU0Bsq/H4SdKSuhM=
 github.com/yasushi-saito/zlibng v0.0.0-20190131163602-2bcf20dde99d h1:nAnPOWi4X/eDjcwp0J1sftNQWK9qtp/3N/CotVkiGRQ=
 github.com/yasushi-saito/zlibng v0.0.0-20190131163602-2bcf20dde99d/go.mod h1:LVGtG4aGUJbs2gbEJDoe92medRzq6X5scmvR1PrA3SU=
+github.com/yasushi-saito/zlibng v0.0.0-20190905015749-ec536402779e h1:XU6fizPzGaWue0GpiVRuWvn/ptrJ+MDMmk/MA0JWXNU=
+github.com/yasushi-saito/zlibng v0.0.0-20190905015749-ec536402779e/go.mod h1:qD8maXXiM82RPOfKUGWetL74si8WnsRS7LNPDWK7byI=
 github.com/youtube/vitess v2.1.1+incompatible h1:SE+P7DNX/jw5RHFs5CHRhZQjq402EJFCD33JhzQMdDw=
 github.com/youtube/vitess v2.1.1+incompatible/go.mod h1:hpMim5/30F1r+0P8GGtB29d0gWHr0IZ5unS+CG0zMx8=
 go.opencensus.io v0.18.0/go.mod h1:vKdFvxhtzZ9onBp9VKHK8z/sRpBMnKAsufL7wlDrCOA=
