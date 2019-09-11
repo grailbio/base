@@ -187,7 +187,6 @@ func newAttr(ino uint64, mode uint32, size uint64, optionalMtime time.Time) (att
 	attr.Ino = ino
 	attr.Mode = mode
 	attr.Nlink = 1
-	attr.Blksize = blockSize
 	attr.Size = size
 	attr.Blocks = (attr.Size-1)/blockSize + 1
 	if !optionalMtime.IsZero() {
@@ -248,7 +247,7 @@ func errToErrno(err error) syscall.Errno {
 	case errors.Is(errors.Precondition, err), errors.Is(errors.Unavailable, err):
 		return syscall.EAGAIN
 	case errors.Is(errors.Net, err):
-		return syscall.ECOMM
+		return syscall.ENETUNREACH
 	case errors.Is(errors.TooManyTries, err):
 		log.Error.Print(err)
 		return syscall.EINVAL
