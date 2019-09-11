@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"net/http"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -433,6 +434,68 @@ func TestOverwriteWhileReadingAWS(t *testing.T) {
 	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testOverwriteWhileReading(t, impl, fmt.Sprintf("s3://%s/tmp/testoverwrite", *s3BucketFlag))
+}
+
+func TestPresignRequestsAWS(t *testing.T) {
+	if *s3BucketFlag == "" {
+		t.Skip("Skipping. Set -s3-bucket to run the test.")
+	}
+	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	ctx := context.Background()
+	const content = "file for testing presigned URLs\n"
+	path := fmt.Sprintf("s3://%s/tmp/testpresigned", *s3BucketFlag)
+
+	// Write the dummy file.
+	url, err := impl.Presign(ctx, path, "PUT", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPut, url, strings.NewReader(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	// Read the dummy file.
+	url, err = impl.Presign(ctx, path, "GET", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	respBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != string(respBytes) {
+		t.Errorf("got: %q, want: %q", string(respBytes), content)
+	}
+
+	// Delete the dummy file.
+	url, err = impl.Presign(ctx, path, "DELETE", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err = http.NewRequest(http.MethodDelete, url, strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if _, err := impl.Stat(ctx, path); !errors.Is(errors.NotExist, err) {
+		t.Errorf("got: %v\nwant an error of kind NotExist", err)
+	}
 }
 
 func TestAWS(t *testing.T) {

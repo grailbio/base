@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Implementation implements operations for a file-system type.
@@ -61,6 +62,17 @@ type Implementation interface {
 	// Remove removes the file. The path passed to file.Remove() is passed here
 	// unchanged.
 	Remove(ctx context.Context, path string) error
+
+	// Presign returns a URL that can be used to perform the given HTTP method,
+	// usually one of "GET", "PUT" or "DELETE", on the path for the duration
+	// specified in expiry.
+	//
+	// It returns an error of kind errors.NotSupported for implementations that
+	// do not support signed URLs, or that do not support the given HTTP method.
+	//
+	// Unlike Open and Stat, this method does not return an error of kind
+	// errors.NotExist if there is no file at the provided path.
+	Presign(ctx context.Context, path, method string, expiry time.Duration) (url string, err error)
 }
 
 // Lister lists files in a directory tree. Not thread safe.
@@ -247,6 +259,16 @@ func Remove(ctx context.Context, path string) error {
 		return err
 	}
 	return impl.Remove(ctx, path)
+}
+
+// Presign is a shortcut for calling ParsePath(), then calling
+// Implementation.Presign method.
+func Presign(ctx context.Context, path, method string, expiry time.Duration) (string, error) {
+	impl, err := findImpl(path)
+	if err != nil {
+		return "", err
+	}
+	return impl.Presign(ctx, path, method, expiry)
 }
 
 // Opts controls the file access requests, such as Open and Stat.

@@ -186,6 +186,11 @@ func (*localImpl) Remove(ctx context.Context, path string) error {
 	return os.Remove(path)
 }
 
+func (*localImpl) Presign(_ context.Context, path, _ string, _ time.Duration) (string, error) {
+	return "", errors.E(errors.NotSupported,
+		fmt.Sprintf("presign %v: local files not supported", path))
+}
+
 // Stat implements file.Implementation
 func (impl *localImpl) Stat(ctx context.Context, path string, _ ...Opts) (Info, error) {
 	info, err := os.Stat(path)

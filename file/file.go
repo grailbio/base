@@ -86,12 +86,6 @@ func CloseAndReport(ctx context.Context, f Closer, err *error) {
 	*err = err2
 }
 
-type named interface {
-	// Name returns the path name given to file.Open or file.Create when this
-	// object was created.
-	Name() string
-}
-
 // MustClose is a defer-able function that calls f.Close and panics on error.
 //
 // Example:
@@ -107,6 +101,12 @@ func MustClose(ctx context.Context, f Closer) {
 		}
 		panic(err)
 	}
+}
+
+type named interface {
+	// Name returns the path name given to file.Open or file.Create when this
+	// object was created.
+	Name() string
 }
 
 // Error implements io.{Reader,Writer,Seeker,Closer}. It returns the given error

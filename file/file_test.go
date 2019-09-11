@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/grailbio/base/file"
@@ -46,6 +47,10 @@ func (f *errFile) Stat(ctx context.Context, path string, opts ...file.Opts) (fil
 
 func (f *errFile) Remove(ctx context.Context, path string) error {
 	return f.err
+}
+
+func (f *errFile) Presign(ctx context.Context, path, method string, expiry time.Duration) (string, error) {
+	return "", f.err
 }
 
 func (f *errFile) Close(ctx context.Context) error {

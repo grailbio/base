@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -125,11 +126,12 @@ type request struct {
 }
 
 type response struct {
-	n        int     // # of bytes read. Set only by Read.
-	off      int64   // Seek location. Set only by Seek.
-	info     *s3Info // Set only by Stat.
-	err      error   // Any error
-	uploader *s3Uploader
+	n         int     // # of bytes read. Set only by Read.
+	off       int64   // Seek location. Set only by Seek.
+	info      *s3Info // Set only by Stat.
+	signedURL string  // Set only by Presign.
+	err       error   // Any error
+	uploader  *s3Uploader
 }
 
 // s3File implements file.File interface.
@@ -574,6 +576,59 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		}
 	})
 	return resp.err
+}
+
+// Presign implements file.Implementation interface.
+func (impl *s3Impl) Presign(ctx context.Context, path, method string, expiry time.Duration) (string, error) {
+	resp := runRequest(ctx, func() response {
+		_, bucket, key, err := ParseURL(path)
+		if err != nil {
+			return response{err: err}
+		}
+		var op string
+		var getRequestFn func(client s3iface.S3API) *awsrequest.Request
+		switch method {
+		case http.MethodGet:
+			op = "GetObject"
+			getRequestFn = func(client s3iface.S3API) *awsrequest.Request {
+				req, _ := client.GetObjectRequest(&s3.GetObjectInput{Bucket: &bucket, Key: &key})
+				return req
+			}
+		case http.MethodPut:
+			op = "PutObject"
+			getRequestFn = func(client s3iface.S3API) *awsrequest.Request {
+				req, _ := client.PutObjectRequest(&s3.PutObjectInput{Bucket: &bucket, Key: &key})
+				return req
+			}
+		case http.MethodDelete:
+			op = "DeleteObject"
+			getRequestFn = func(client s3iface.S3API) *awsrequest.Request {
+				req, _ := client.DeleteObjectRequest(&s3.DeleteObjectInput{Bucket: &bucket, Key: &key})
+				return req
+			}
+		default:
+			return response{err: errors.E(errors.NotSupported, "s3file.presign: unsupported http method", method)}
+		}
+		clients, err := impl.provider.Get(ctx, op, path)
+		if err != nil {
+			return response{err: err}
+		}
+		policy := newRetryPolicy(clients, file.Opts{})
+		for {
+			var ids s3RequestIDs
+			req := getRequestFn(policy.client())
+			req.ApplyOptions(captureRequestIDs(&ids))
+			url, err := req.Presign(expiry)
+			if policy.shouldRetry(ctx, err, path) {
+				continue
+			}
+			if err != nil {
+				return response{err: annotate(err, ids, &policy, fmt.Sprintf("s3file.presign %s", path))}
+			}
+			return response{signedURL: url}
+		}
+	})
+	return resp.signedURL, resp.err
 }
 
 func maxRetries(clients []s3iface.S3API) int {
