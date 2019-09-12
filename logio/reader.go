@@ -5,7 +5,6 @@
 package logio
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -283,19 +282,19 @@ func (b *block) uint8() uint8 {
 }
 
 func (b *block) uint16() uint16 {
-	v := binary.LittleEndian.Uint16(b.buf[b.off:])
+	v := byteOrder.Uint16(b.buf[b.off:])
 	b.off += 2
 	return v
 }
 
 func (b *block) uint32() uint32 {
-	v := binary.LittleEndian.Uint32(b.buf[b.off:])
+	v := byteOrder.Uint32(b.buf[b.off:])
 	b.off += 4
 	return v
 }
 
 func (b *block) uint64() uint64 {
-	v := binary.LittleEndian.Uint64(b.buf[b.off:])
+	v := byteOrder.Uint64(b.buf[b.off:])
 	b.off += 8
 	return v
 }

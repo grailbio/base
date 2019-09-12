@@ -10,10 +10,10 @@ import (
 	xxhash "github.com/cespare/xxhash/v2"
 )
 
-// Append writes an entry to the io.Writer w. The writer should be
+// Append writes an entry to the io.Writer w. The writer must be
 // positioned at the provided offset. If non-nil, Append will use the
 // scratch buffer for working space, avoiding additional allocation.
-// The scratch buffer should be at least Blocksz.
+// The scratch buffer must be at least Blocksz.
 func Append(w io.Writer, off int64, data, scratch []byte) (nwrite int, err error) {
 	if n := off % Blocksz; n > 0 && n < headersz {
 		// Corrupted file: skip to the next block boundary.
@@ -100,6 +100,19 @@ func (w *Writer) Append(data []byte) error {
 // This may be used to index into the log file.
 func (w *Writer) Tell() int64 {
 	return Aligned(w.off)
+}
+
+// appendRecord appends a record, specified by typ, offset, and data, to p. p
+// must have enough capacity for the record.
+func appendRecord(p []byte, typ uint8, offset uint64, data []byte) []byte {
+	off := len(p)
+	p = p[:off+headersz+len(data)]
+	p[off+4] = typ
+	byteOrder.PutUint16(p[off+5:], uint16(len(data)))
+	byteOrder.PutUint64(p[off+7:], offset)
+	copy(p[off+15:], data)
+	byteOrder.PutUint32(p[off:], checksum(p[off+4:]))
+	return p
 }
 
 func (w *Writer) write(p []byte) error {

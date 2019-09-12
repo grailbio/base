@@ -52,12 +52,18 @@
 // [2] http://cyan4973.github.io/xxHash/
 package logio
 
+import (
+	"encoding/binary"
+)
+
 // Blocksz is the size of the blocks written to the log files
 // produced by this package. See package docs for a detailed
 // description.
 const Blocksz = 32 << 10
 
 const headersz = 4 + 1 + 2 + 8
+
+var byteOrder = binary.LittleEndian
 
 var zeros = make([]byte, Blocksz)
 
