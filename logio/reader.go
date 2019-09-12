@@ -114,7 +114,7 @@ func (r *Reader) resync() error {
 //		if err == io.EOF {
 //			break
 //		}
-//		file.Seek(off, io.SeekCurrent)
+//		file.Seek(off, io.SeekStart)
 //		record, err := logio.NewReader(file, off).Read()
 // 	}
 //
