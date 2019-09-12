@@ -19,11 +19,15 @@ import (
 	"debug/macho"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
+
+	"github.com/grailbio/base/log"
 )
 
 var (
@@ -40,6 +44,16 @@ var (
 	// as a fatbin.
 	ErrUnknownImageFormat = errors.New("unknown image format")
 )
+
+// Info provides information for an embedded binary.
+type Info struct {
+	Goos, Goarch string
+	Size         int64
+}
+
+func (info Info) String() string {
+	return fmt.Sprintf("%s/%s: %d", info.Goos, info.Goarch, info.Size)
+}
 
 // Reader reads images from a fatbin.
 type Reader struct {
@@ -108,6 +122,30 @@ func NewReader(r io.ReaderAt, offset, size int64, goos, goarch string) (*Reader,
 		return nil, err
 	}
 	return rd, nil
+}
+
+// GOOS returns the base binary GOOS.
+func (r *Reader) GOOS() string { return r.goos }
+
+// GOARCH returns the base binary GOARCH.
+func (r *Reader) GOARCH() string { return r.goarch }
+
+// List returns information about embedded binary images.
+func (r *Reader) List() []Info {
+	infos := make([]Info, len(r.z.File))
+	for i, f := range r.z.File {
+		elems := strings.SplitN(f.Name, "/", 2)
+		if len(elems) != 2 {
+			log.Error.Printf("invalid fatbin: found name %s", f.Name)
+			continue
+		}
+		infos[i] = Info{
+			Goos:   elems[0],
+			Goarch: elems[1],
+			Size:   int64(f.UncompressedSize64),
+		}
+	}
+	return infos
 }
 
 // Open returns a ReadCloser from which the binary with the provided
