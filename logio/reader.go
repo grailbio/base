@@ -34,6 +34,8 @@ func NewReader(r io.Reader, offset int64) *Reader {
 // Read returns the next log entry. It returns ErrCorrupted if a
 // corrupted log entry was encountered, in which case the next call
 // to Read will re-sync the log file, potentially skipping entries.
+// The returned slice should not be modified and is only valid until
+// the next call to Read or Rewind.
 func (r *Reader) Read() (data []byte, err error) {
 	if r.needResync {
 		if err := r.resync(); err != nil {
