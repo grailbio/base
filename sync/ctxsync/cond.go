@@ -31,7 +31,7 @@ func (c *Cond) Broadcast() {
 }
 
 // Done returns a channel that is closed after the next broadcast of
-// this Cond. Done mus tbe called with the Cond's lock held; the lock
+// this Cond. Done must be called with the Cond's lock held; the lock
 // is released before Done returns.
 func (c *Cond) Done() <-chan struct{} {
 	if c.waitc == nil {
