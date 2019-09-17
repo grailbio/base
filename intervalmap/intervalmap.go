@@ -178,6 +178,17 @@ func (t *T) Get(interval Interval, ents *[]*Entry) {
 	}
 }
 
+// Any checks if any of the entries intersect the given interval.
+func (t *T) Any(interval Interval) bool {
+	s := t.pool.Get()
+	s.searchID++
+	found := t.root.any(interval, s)
+	if s.searchID < math.MaxUint32 {
+		t.pool.Put(s)
+	}
+	return found
+}
+
 func keyRange(ents []*entry) Interval {
 	i := emptyInterval
 	for _, e := range ents {
@@ -364,4 +375,24 @@ func (n *node) get(interval Interval, ents *[]*Entry, s *searcher) {
 	}
 	n.left.get(interval, ents, s)
 	n.right.get(interval, ents, s)
+}
+
+func (n *node) any(interval Interval, s *searcher) bool {
+	interval = interval.Intersect(n.bounds)
+	if interval.Empty() {
+		return false
+	}
+	if len(n.ents) > 0 { // Leaf node
+		for _, e := range n.ents {
+			if interval.Intersects(e.Interval) {
+				return true
+			}
+		}
+		return false
+	}
+	found := n.left.any(interval, s)
+	if !found {
+		found = n.right.any(interval, s)
+	}
+	return found
 }
