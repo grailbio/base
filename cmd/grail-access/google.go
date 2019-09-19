@@ -21,15 +21,14 @@ import (
 	"github.com/grailbio/base/web/webutil"
 	"golang.org/x/oauth2"
 	goauth2 "google.golang.org/api/oauth2/v1"
-	"v.io/v23"
+	v23 "v.io/v23"
 	v23context "v.io/v23/context"
 	"v.io/v23/security"
-	"v.io/x/lib/cmdline"
 	"v.io/x/lib/vlog"
 	libsecurity "v.io/x/ref/lib/security"
 )
 
-func runGoogle(ctx *v23context.T, env *cmdline.Env, args []string) error {
+func runGoogle(ctx *v23context.T) error {
 	// TODO(razvanm): do we need to kill the v23agentd?
 
 	// Best-effort cleanup.
@@ -73,7 +72,7 @@ func runGoogle(ctx *v23context.T, env *cmdline.Env, args []string) error {
 		return errors.E(err, "failed to add blessings to recognized roots: %v")
 	}
 
-	dump(ctx, env)
+	dump(ctx)
 
 	return nil
 }
@@ -101,7 +100,7 @@ func fetchIDToken() (string, error) {
 		w.Header().Set("Content-Type", "text/html")
 		// JavaScript only allows closing windows/tab that were open via
 		// JavaScript.
-		fmt.Fprintf(w, `<html><body>Code received. Please close this tab/window.</body></html>`)
+		_, _ = fmt.Fprintf(w, `<html><body>Code received. Please close this tab/window.</body></html>`)
 		wg.Done()
 	})
 

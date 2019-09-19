@@ -13,17 +13,16 @@ import (
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/security/identity"
-	"v.io/v23"
+	v23 "v.io/v23"
 	"v.io/v23/context"
 	"v.io/v23/security"
-	"v.io/x/lib/cmdline"
 	"v.io/x/lib/vlog"
 	libsecurity "v.io/x/ref/lib/security"
 )
 
 const instanceIdentityURL = "http://169.254.169.254/latest/dynamic/instance-identity/pkcs7"
 
-func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
+func runEc2(ctx *context.T) error {
 	// TODO(razvanm): do we need to kill the v23agentd?
 
 	// Best-effort cleanup.
@@ -87,7 +86,7 @@ func runEc2(ctx *context.T, env *cmdline.Env, args []string) error {
 		return errors.E(err, "add blessings to recognized root")
 	}
 
-	dump(ctx, env)
+	dump(ctx)
 
 	return nil
 }

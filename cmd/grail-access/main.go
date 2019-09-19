@@ -41,6 +41,8 @@ var (
 
 	blesserEc2Flag       string
 	identityDocumentFlag string
+
+	dumpFlag bool
 )
 
 func newCmdRoot() *cmdline.Command {
@@ -72,6 +74,7 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	cmd.Flags.StringVar(&credentialsDirFlag, "dir", os.ExpandEnv("${HOME}/.v23"), "Where to store the Vanadium credentials. NOTE: the content will be erased if the credentials are regenerated.")
 	cmd.Flags.BoolVar(&ec2Flag, "ec2", false, "Use the role of the EC2 VM.")
 	cmd.Flags.BoolVar(&browserFlag, "browser", os.Getenv("SSH_CLIENT") == "", "Attempt to open a browser.")
+	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
 	return cmd
 }
 
@@ -102,32 +105,38 @@ func run(ctx *v23context.T, env *cmdline.Env, args []string) error {
 	} else {
 		// We don't have access to credentials. Typically this happen on the first
 		// run when the credentials directory is empty.
+
+		// Dumping current credentials does not make sense when credentials are absent.
+		if dumpFlag {
+			fmt.Printf("Credentials not found in %s\n", credentialsDirFlag)
+			return nil
+		}
 	}
 
 	b, _ := v23.GetPrincipal(ctx).BlessingStore().Default()
 
-	now := time.Now()
-	if b.Expiry().After(now.Add(30 * time.Minute)) {
-		// If the blessing is not expired we show the current state and when
-		// the blessings will expire.
-		dump(ctx, env)
-		fmt.Printf("%s (%s)\n", b.Expiry().Local(), b.Expiry().Sub(now))
+	if dumpFlag || b.Expiry().After(time.Now().Add(7*24*time.Hour)) {
+		// Consider dump to be the default behavior for long lived credentials.
+		dump(ctx)
 		return nil
 	}
 	if ec2Flag {
-		return runEc2(ctx, env, args)
+		return runEc2(ctx)
 	}
-	return runGoogle(ctx, env, args)
+	return runGoogle(ctx)
 }
 
-func dump(ctx *v23context.T, env *cmdline.Env) {
+func dump(ctx *v23context.T) {
 	// Mimic the principal dump output.
 	principal := v23.GetPrincipal(ctx)
 	fmt.Printf("Public key: %s\n", principal.PublicKey())
 	fmt.Println("---------------- BlessingStore ----------------")
-	fmt.Fprintf(env.Stdout, principal.BlessingStore().DebugString())
+	fmt.Print(principal.BlessingStore().DebugString())
 	fmt.Println("---------------- BlessingRoots ----------------")
-	fmt.Fprintf(env.Stdout, principal.Roots().DebugString())
+	fmt.Print(principal.Roots().DebugString())
+
+	blessing, _ := principal.BlessingStore().Default()
+	fmt.Printf("Expires on %s (in %s)\n", blessing.Expiry().Local(), time.Until(blessing.Expiry()))
 }
 
 func main() {
