@@ -16,22 +16,22 @@ import (
 )
 
 func init() {
-	config.Register("aws/env", func(inst *config.Instance) {
+	config.Register("aws/env", func(constr *config.Constructor) {
 		var config aws.Config
-		config.Region = inst.String("region", "us-west-2", "the default AWS region for the session")
-		inst.Doc = "configure an AWS session from the environment"
-		inst.New = func() (interface{}, error) {
+		config.Region = constr.String("region", "us-west-2", "the default AWS region for the session")
+		constr.Doc = "configure an AWS session from the environment"
+		constr.New = func() (interface{}, error) {
 			return session.NewSession(&config)
 		}
 	})
 
-	config.Register("aws/ticket", func(inst *config.Instance) {
+	config.Register("aws/ticket", func(constr *config.Constructor) {
 		var (
-			region = inst.String("region", "us-west-2", "the default AWS region for the session")
-			path   = inst.String("path", "tickets/eng/dev/aws", "path to AWS ticket")
+			region = constr.String("region", "us-west-2", "the default AWS region for the session")
+			path   = constr.String("path", "tickets/eng/dev/aws", "path to AWS ticket")
 		)
-		inst.Doc = "configure an AWS session from a GRAIL ticket server path"
-		inst.New = func() (interface{}, error) {
+		constr.Doc = "configure an AWS session from a GRAIL ticket server path"
+		constr.New = func() (interface{}, error) {
 			return session.NewSession(&aws.Config{
 				Credentials: credentials.NewCredentials(&awssession.Provider{
 					Ctx:        vcontext.Background(),

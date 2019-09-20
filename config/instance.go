@@ -12,26 +12,27 @@ import (
 
 var (
 	globalsMu sync.Mutex
-	globals   = make(map[string]func(*Instance))
+	globals   = make(map[string]func(*Constructor))
 	defaults  = make(map[string]string)
 )
 
-// Register registers a global instance and later invokes the
-// provided function whenever a new profile instance is created.
-// Register panics if multiple instances are registered with the same
-// name. Instances should typically be registered in package init
+// Register registers a constructor and later invokes the provided
+// function whenever a new profile instance is created. Register
+// panics if multiple constructors are registered with the same name.
+// Constructors should typically be registered in package init
 // functions, and the configure function must define at least
-// Instance.New. For example, the following configures an instance
-// with a single parameter, n, which simply returns its value.
+// Constructor.New. For example, the following configures a
+// constructor with a single parameter, n, which simply returns its
+// value.
 //
-//	config.Register("config/test", func(inst *config.Instance) {
-//		n := inst.Int("n", 32, "the number configured")
-//		inst.New = func() (interface{}, error) {
+//	config.Register("config/test", func(constr *config.Constructor) {
+//		n := constr.Int("n", 32, "the number configured")
+//		constr.New = func() (interface{}, error) {
 //			return *n, nil
 //		}
-//		inst.Doc = "a customizable integer"
+//		constr.Doc = "a customizable integer"
 //	})
-func Register(name string, configure func(*Instance)) {
+func Register(name string, configure func(*Constructor)) {
 	globalsMu.Lock()
 	defer globalsMu.Unlock()
 	if globals[name] != nil {
@@ -60,11 +61,11 @@ func Default(name, instance string) {
 	defaults[name] = instance
 }
 
-// Instance is a global instance, as configured by Register.
-// Typically an instance registers a set of parameters through the
-// flags-like methods provided by Instance. The value returned by New
-// is configured by these parameters.
-type Instance struct {
+// Constructor defines a constructor, as configured by Register.
+// Typically a constructor registers a set of parameters through the
+// flags-like methods provided by Constructor. The value returned by
+// New is configured by these parameters.
+type Constructor struct {
 	// New instantiates the value provided by this instance, and
 	// configured by the flags registered.
 	//
@@ -79,8 +80,8 @@ type Instance struct {
 	params map[string]*param
 }
 
-func newInstance() *Instance {
-	return &Instance{
+func newConstructor() *Constructor {
+	return &Constructor{
 		params: make(map[string]*param),
 	}
 }
@@ -89,83 +90,83 @@ func newInstance() *Instance {
 // instance; the method panics if ptr is not a pointer. The default
 // value is always an indirection; if it is left empty it is taken as
 // the nil value: it remains uninitialized by default.
-func (inst *Instance) InstanceVar(ptr interface{}, name string, value string, help string) {
+func (c *Constructor) InstanceVar(ptr interface{}, name string, value string, help string) {
 	if reflect.TypeOf(ptr).Kind() != reflect.Ptr {
 		panic("Instance.InterfaceVar: passed interface is not a pointer")
 	}
-	param := inst.define(name, paramInterface, help)
+	param := c.define(name, paramInterface, help)
 	param.ifaceptr = ptr
 	param.ifaceindir = indirect(value)
 }
 
 // Int registers an integer parameter with a default value. The returned
 // pointer points to its value.
-func (inst *Instance) Int(name string, value int, help string) *int {
+func (c *Constructor) Int(name string, value int, help string) *int {
 	p := new(int)
-	inst.IntVar(p, name, value, help)
+	c.IntVar(p, name, value, help)
 	return p
 }
 
 // IntVar registers an integer parameter with a default value. The parameter's
 // value written to the location pointed to by ptr.
-func (inst *Instance) IntVar(ptr *int, name string, value int, help string) {
+func (c *Constructor) IntVar(ptr *int, name string, value int, help string) {
 	*ptr = value
-	inst.define(name, paramInt, help).intptr = ptr
+	c.define(name, paramInt, help).intptr = ptr
 }
 
 // Float registers floating point parameter with a default value. The returned
 // pointer points to its value.
-func (inst *Instance) Float(name string, value float64, help string) *float64 {
+func (c *Constructor) Float(name string, value float64, help string) *float64 {
 	p := new(float64)
-	inst.FloatVar(p, name, value, help)
+	c.FloatVar(p, name, value, help)
 	return p
 }
 
 // FloatVar register a floating point parameter with a default value. The parameter's
 // value is written to the provided pointer.
-func (inst *Instance) FloatVar(ptr *float64, name string, value float64, help string) {
+func (c *Constructor) FloatVar(ptr *float64, name string, value float64, help string) {
 	*ptr = value
-	inst.define(name, paramFloat, help).floatptr = ptr
+	c.define(name, paramFloat, help).floatptr = ptr
 }
 
 // String registers a string parameter with a default value. The returned pointer
 // points to its value.
-func (inst *Instance) String(name string, value string, help string) *string {
+func (c *Constructor) String(name string, value string, help string) *string {
 	p := new(string)
-	inst.StringVar(p, name, value, help)
+	c.StringVar(p, name, value, help)
 	return p
 }
 
 // StringVar registers a string parameter with a default value. The parameter's
 // value written to the location pointed to by ptr.
-func (inst *Instance) StringVar(ptr *string, name string, value string, help string) {
+func (c *Constructor) StringVar(ptr *string, name string, value string, help string) {
 	*ptr = value
-	inst.define(name, paramString, help).strptr = ptr
+	c.define(name, paramString, help).strptr = ptr
 }
 
 // Bool registers a boolean parameter with a default value. The returned pointer
 // points to its value.
-func (inst *Instance) Bool(name string, value bool, help string) *bool {
+func (c *Constructor) Bool(name string, value bool, help string) *bool {
 	p := new(bool)
-	inst.BoolVar(p, name, value, help)
+	c.BoolVar(p, name, value, help)
 	return p
 }
 
 // BoolVar registers a boolean parameter with a default value. The parameter's
 // value written to the location pointed to by ptr.
-func (inst *Instance) BoolVar(ptr *bool, name string, value bool, help string) {
+func (c *Constructor) BoolVar(ptr *bool, name string, value bool, help string) {
 	*ptr = value
-	inst.define(name, paramBool, help).boolptr = ptr
+	c.define(name, paramBool, help).boolptr = ptr
 }
 
-func (inst *Instance) define(name string, kind int, help string) *param {
-	if inst.params[name] != nil {
+func (c *Constructor) define(name string, kind int, help string) *param {
+	if c.params[name] != nil {
 		panic("config: parameter " + name + " already defined")
 	}
 	p := &param{kind: kind, help: help}
 	_, p.file, p.line, _ = runtime.Caller(2)
-	inst.params[name] = p
-	return inst.params[name]
+	c.params[name] = p
+	return c.params[name]
 }
 
 const (

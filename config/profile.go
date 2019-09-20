@@ -163,7 +163,7 @@ type Profile struct {
 	flagParams      []string
 	flagDump        bool
 
-	globals map[string]*Instance
+	globals map[string]*Constructor
 
 	mu        sync.Mutex
 	instances instances
@@ -175,14 +175,14 @@ type Profile struct {
 // to New are not reflected in the returned profile.
 func New() *Profile {
 	p := &Profile{
-		globals:   make(map[string]*Instance),
+		globals:   make(map[string]*Constructor),
 		instances: make(instances),
 		cached:    make(map[string]interface{}),
 	}
 
 	globalsMu.Lock()
 	for name, configure := range globals {
-		p.globals[name] = newInstance()
+		p.globals[name] = newConstructor()
 		configure(p.globals[name])
 	}
 	globalsMu.Unlock()
@@ -302,6 +302,52 @@ func (p *Profile) Set(path string, value string) error {
 	return nil
 }
 
+// Get returns the value of the configured parameter at the provided
+// dot-separated path.
+func (p *Profile) Get(path string) (value string, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	var (
+		elems = strings.Split(path, ".")
+		inst  = p.instances[elems[0]]
+	)
+	if inst == nil {
+		return "", false
+	}
+	// Special case: toplevels are "set" only if they are inherited.
+	// We return only the first level of inheritance.
+	if len(elems) == 1 {
+		return inst.parent, inst.parent != ""
+	}
+
+	for i := 1; i < len(elems)-1; i++ {
+		elem := elems[i]
+		for inst != nil && inst.params[elem] == nil {
+			inst = p.instances[inst.parent]
+		}
+		if inst == nil {
+			return "", false
+		}
+		v := unwrap(inst.params[elem])
+		indir, ok := v.(indirect)
+		if !ok {
+			return "", false
+		}
+		inst = p.instances[string(indir)]
+		if inst == nil {
+			return "", false
+		}
+	}
+
+	for elem := elems[len(elems)-1]; inst != nil; inst = p.instances[inst.parent] {
+		if v, ok := inst.params[elem]; ok {
+			return fmt.Sprintf("%#v", unwrap(v)), true
+		}
+	}
+	return "", false
+}
+
 // Merge merges the instance parameters in profile q into p,
 // so that parameters defined in q override those in p.
 func (p *Profile) Merge(q *Profile) {
@@ -332,10 +378,10 @@ func (p *Profile) Parse(r io.Reader) error {
 	return nil
 }
 
-// Get retrieves the named instance from this profile into the
+// Instance retrieves the named instance from this profile into the
 // pointer ptr. All of its parameters are fully resolved and the
 // underlying global object is instantiated according to the desired
-// parameterization. Get panics if ptr is not a pointer type. If the
+// parameterization. Instance panics if ptr is not a pointer type. If the
 // type of the instance cannot be assigned to the value pointed to by
 // ptr, an error is returned. Since such errors may occur
 // transitively (e.g., the type of an instance required by another
@@ -344,7 +390,7 @@ func (p *Profile) Parse(r io.Reader) error {
 // cached and are only initialized the first time they are requested.
 //
 // If ptr is nil, the instance is created without populating the pointer.
-func (p *Profile) Get(name string, ptr interface{}) error {
+func (p *Profile) Instance(name string, ptr interface{}) error {
 	var ptrv reflect.Value
 	if ptr != nil {
 		ptrv = reflect.ValueOf(ptr)
@@ -409,7 +455,7 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 	globalsMu.Lock()
 	configure := globals[inst.name]
 	globalsMu.Unlock()
-	instance := newInstance()
+	instance := newConstructor()
 	configure(instance)
 
 	for pname, param := range instance.params {
@@ -526,11 +572,11 @@ func Parse(r io.Reader) error {
 	return Application().Parse(r)
 }
 
-// Get retrieves the instance with the provided name into the
-// provided pointer from the default profile. See Profile.Get for
+// Instance retrieves the instance with the provided name into the
+// provided pointer from the default profile. See Profile.Instance for
 // more details.
-func Get(name string, ptr interface{}) error {
-	return Application().Get(name, ptr)
+func Instance(name string, ptr interface{}) error {
+	return Application().Instance(name, ptr)
 }
 
 // Set sets the value of the parameter named by the provided path on
@@ -539,9 +585,15 @@ func Set(path, value string) error {
 	return Application().Set(path, value)
 }
 
+// Get retrieves the value of the parameter named by the provided path
+// on the default profile.
+func Get(path string) (value string, ok bool) {
+	return Application().Get(path)
+}
+
 // Must is a version of get which calls log.Fatal on error.
 func Must(name string, ptr interface{}) {
-	if err := Get(name, ptr); err != nil {
+	if err := Instance(name, ptr); err != nil {
 		log.Fatal(err)
 	}
 }

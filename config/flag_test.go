@@ -40,26 +40,26 @@ type frontend struct {
 }
 
 func init() {
-	Register("app/auth/env", func(inst *Instance) {
-		inst.New = func() (interface{}, error) {
+	Register("app/auth/env", func(constr *Constructor) {
+		constr.New = func() (interface{}, error) {
 			return envCredentials{}, nil
 		}
 	})
-	Register("app/auth/login", func(inst *Instance) {
+	Register("app/auth/login", func(constr *Constructor) {
 		var (
-			username = inst.String("user", "test", "the username")
-			password = inst.String("password", "secret", "the password")
+			username = constr.String("user", "test", "the username")
+			password = constr.String("password", "secret", "the password")
 		)
-		inst.New = func() (interface{}, error) {
+		constr.New = func() (interface{}, error) {
 			return userCredentials(fmt.Sprintf("%s:%s", *username, *password)), nil
 		}
 	})
 
-	Register("app/database", func(inst *Instance) {
+	Register("app/database", func(constr *Constructor) {
 		var db database
-		inst.StringVar(&db.table, "table", "defaulttable", "the database table")
-		inst.InstanceVar(&db.creds, "credentials", "app/auth/env", "credentials used for database access")
-		inst.New = func() (interface{}, error) {
+		constr.StringVar(&db.table, "table", "defaulttable", "the database table")
+		constr.InstanceVar(&db.creds, "credentials", "app/auth/env", "credentials used for database access")
+		constr.New = func() (interface{}, error) {
 			if db.creds == nil {
 				return nil, errors.New("credentials not defined")
 			}
@@ -67,12 +67,12 @@ func init() {
 		}
 	})
 
-	Register("app/frontend", func(inst *Instance) {
+	Register("app/frontend", func(constr *Constructor) {
 		var fe frontend
-		inst.InstanceVar(&fe.db, "database", "app/database", "the database to be used")
-		inst.InstanceVar(&fe.creds, "credentials", "app/auth/env", "credentials to use for authentication")
-		inst.IntVar(&fe.limit, "limit", 128, "maximum number of concurrent requests to handle")
-		inst.New = func() (interface{}, error) {
+		constr.InstanceVar(&fe.db, "database", "app/database", "the database to be used")
+		constr.InstanceVar(&fe.creds, "credentials", "app/auth/env", "credentials to use for authentication")
+		constr.IntVar(&fe.limit, "limit", 128, "maximum number of concurrent requests to handle")
+		constr.New = func() (interface{}, error) {
 			if fe.db == (database{}) || fe.creds == nil {
 				return nil, errors.New("missing configuration")
 			}
@@ -106,7 +106,7 @@ func TestFlag(t *testing.T) {
 		t.Helper()
 		p := profile(args...)
 		var fe frontend
-		if err := p.Get("app/frontend", &fe); err != nil {
+		if err := p.Instance("app/frontend", &fe); err != nil {
 			t.Fatal(err)
 		}
 		if got, want := fe.creds.Creds(), fecreds; got != want {
