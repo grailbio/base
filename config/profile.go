@@ -342,10 +342,15 @@ func (p *Profile) Parse(r io.Reader) error {
 // instance may be wrong), the source location of the type mismatch
 // is included in the error to help with debugging. Instances are
 // cached and are only initialized the first time they are requested.
+//
+// If ptr is nil, the instance is created without populating the pointer.
 func (p *Profile) Get(name string, ptr interface{}) error {
-	ptrv := reflect.ValueOf(ptr)
-	if ptrv.Kind() != reflect.Ptr {
-		panic("profile.Get: not a pointer")
+	var ptrv reflect.Value
+	if ptr != nil {
+		ptrv = reflect.ValueOf(ptr)
+		if ptrv.Kind() != reflect.Ptr {
+			panic("profile.Get: not a pointer")
+		}
 	}
 	_, file, line, _ := runtime.Caller(1)
 	p.mu.Lock()
@@ -542,6 +547,9 @@ func Must(name string, ptr interface{}) {
 }
 
 func assign(name string, instance interface{}, ptr reflect.Value, file string, line int) error {
+	if ptr == (reflect.Value{}) {
+		return nil
+	}
 	v := reflect.ValueOf(instance)
 	if !v.Type().AssignableTo(ptr.Elem().Type()) {
 		return fmt.Errorf("%s:%d: %s: instance type %s not assignable to provided type %s",

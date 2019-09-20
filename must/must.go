@@ -69,3 +69,15 @@ func Truef(x bool, format string, v ...interface{}) {
 	}
 	Func(fmt.Sprintf(format, v...))
 }
+
+// Never asserts that it is never called. If it is, it formats a message
+// in the manner of fmt.Sprint and calls Func.
+func Never(v ...interface{}) {
+	Func(v...)
+}
+
+// Neverf asserts that it is never called. If it is, it formats a message
+// in the manner of fmt.Sprintf and calls Func.
+func Neverf(format string, v ...interface{}) {
+	Func(fmt.Sprintf(format, v...))
+}
