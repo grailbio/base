@@ -9,12 +9,16 @@ package intervalmap
 //go:generate ../gtl/generate_randomized_freepool.py --output=search_freepool --prefix=searcher -DELEM=*searcher --package=intervalmap
 
 import (
+	"bytes"
+	"encoding/gob"
+	"fmt"
 	"math"
 	"math/rand"
 	"runtime"
 	"unsafe"
 
 	"github.com/grailbio/base/log"
+	"github.com/grailbio/base/must"
 )
 
 // Key is the type for interval boundaries.
@@ -138,13 +142,17 @@ func New(ents []Entry) *T {
 	t.stats.MaxDepth = -1
 	t.stats.MaxLeafNodeSize = -1
 	t.root.init("", ients, keyRange(ients), r, &t.stats)
-	t.pool = NewsearcherFreePool(func() *searcher {
+	t.pool = newSearcherFreePool(t, len(ents))
+	return t
+}
+
+func newSearcherFreePool(t *T, nEnt int) *searcherFreePool {
+	return NewsearcherFreePool(func() *searcher {
 		return &searcher{
 			tree: t,
-			hits: make([]uint32, len(ents)),
+			hits: make([]uint32, nEnt),
 		}
 	}, runtime.NumCPU()*2)
-	return t
 }
 
 // searcher keeps state needed during one search episode.  It is owned by one
@@ -395,4 +403,108 @@ func (n *node) any(interval Interval, s *searcher) bool {
 		found = n.right.any(interval, s)
 	}
 	return found
+}
+
+// GOB support
+
+const gobFormatVersion = 1
+
+// MarshalBinary implements encoding.BinaryMarshaler interface.  It allows T to
+// be encoded and decoded using Gob.
+func (t *T) MarshalBinary() (data []byte, err error) {
+	buf := bytes.Buffer{}
+	e := gob.NewEncoder(&buf)
+	must.Nil(e.Encode(gobFormatVersion))
+	marshalNode(e, &t.root)
+	must.Nil(e.Encode(t.stats))
+	return buf.Bytes(), nil
+}
+
+func marshalNode(e *gob.Encoder, n *node) {
+	if n == nil {
+		must.Nil(e.Encode(false))
+		return
+	}
+	must.Nil(e.Encode(true))
+	must.Nil(e.Encode(n.bounds))
+	marshalNode(e, n.left)
+	marshalNode(e, n.right)
+	must.Nil(e.Encode(len(n.ents)))
+	for _, ent := range n.ents {
+		must.Nil(e.Encode(ent.Entry))
+		must.Nil(e.Encode(ent.id))
+	}
+	must.Nil(e.Encode(n.label))
+}
+
+// UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+// It allows T to be encoded and decoded using Gob.
+func (t *T) UnmarshalBinary(data []byte) error {
+	buf := bytes.NewReader(data)
+	d := gob.NewDecoder(buf)
+	var version int
+	if err := d.Decode(&version); err != nil {
+		return err
+	}
+	if version != gobFormatVersion {
+		return fmt.Errorf("gob decode: got version %d, want %d", version, gobFormatVersion)
+	}
+	var (
+		maxid = -1
+		err   error
+		root  *node
+	)
+	if root, err = unmarshalNode(d, &maxid); err != nil {
+		return err
+	}
+	t.root = *root
+	if err := d.Decode(&t.stats); err != nil {
+		return err
+	}
+	t.pool = newSearcherFreePool(t, maxid+1)
+	return nil
+}
+
+func unmarshalNode(d *gob.Decoder, maxid *int) (*node, error) {
+	var (
+		exist bool
+		err   error
+	)
+	if err = d.Decode(&exist); err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
+	n := &node{}
+	if err := d.Decode(&n.bounds); err != nil {
+		return nil, err
+	}
+	if n.left, err = unmarshalNode(d, maxid); err != nil {
+		return nil, err
+	}
+	if n.right, err = unmarshalNode(d, maxid); err != nil {
+		return nil, err
+	}
+	var nEnt int
+	if err := d.Decode(&nEnt); err != nil {
+		return nil, err
+	}
+	n.ents = make([]*entry, nEnt)
+	for i := 0; i < nEnt; i++ {
+		n.ents[i] = &entry{}
+		if err := d.Decode(&n.ents[i].Entry); err != nil {
+			return nil, err
+		}
+		if err := d.Decode(&n.ents[i].id); err != nil {
+			return nil, err
+		}
+		if n.ents[i].id > *maxid {
+			*maxid = n.ents[i].id
+		}
+	}
+	if err := d.Decode(&n.label); err != nil {
+		return nil, err
+	}
+	return n, nil
 }

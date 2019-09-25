@@ -1,6 +1,8 @@
 package intervalmap
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -144,6 +146,7 @@ func testRandom(t *testing.T, seed int, nElem int, max Key, width float64) {
 		entries = append(entries, newEntry(start, limit))
 	}
 	tree := New(entries)
+	tree2 := gobEncodeAndDecode(t, tree)
 
 	for i := 0; i < 1000; i++ {
 		start, limit := randInterval(r, max, width)
@@ -153,12 +156,38 @@ func testRandom(t *testing.T, seed int, nElem int, max Key, width float64) {
 		result := sortIntervals(testGet(tree, start, limit))
 		assert.EQ(t, result, r0, "seed=%d, i=%d, search=[%d,%d)", seed, i, start, limit)
 		assert.EQ(t, result, r1, "seed=%d, i=%d, search=[%d,%d)", seed, i, start, limit)
+		assert.EQ(t, result, sortIntervals(testGet(tree2, start, limit)))
 	}
 }
 
 func TestRandom0(t *testing.T) { testRandom(t, 0, 128, 1024, 10) }
 func TestRandom1(t *testing.T) { testRandom(t, 1, 128, 1024, 100) }
 func TestRandom2(t *testing.T) { testRandom(t, 1, 1000, 8192, 1000) }
+
+func gobEncodeAndDecode(t *testing.T, tree *T) *T {
+	buf := bytes.Buffer{}
+	e := gob.NewEncoder(&buf)
+	assert.NoError(t, e.Encode(tree))
+
+	d := gob.NewDecoder(&buf)
+	var tree2 *T
+	assert.NoError(t, d.Decode(&tree2))
+	return tree2
+}
+
+func TestGobEmpty(t *testing.T) {
+	tree := New(nil)
+	tree2 := gobEncodeAndDecode(t, tree)
+	expect.EQ(t, testGet(tree2, 1, 2), []Interval{})
+}
+
+func TestGobSmall(t *testing.T) {
+	tree := gobEncodeAndDecode(t, New([]Entry{newEntry(1, 2), newEntry(10, 15)}))
+	expect.EQ(t, testGet(tree, -1, 0), []Interval{})
+	expect.EQ(t, testGet(tree, 0, 2), []Interval{Interval{1, 2}})
+	expect.EQ(t, testGet(tree, 0, 10), []Interval{Interval{1, 2}})
+	expect.EQ(t, sortIntervals(testGet(tree, 0, 11)), []Interval{Interval{1, 2}, Interval{10, 15}})
+}
 
 func benchmarkRandom(b *testing.B, seed int, nElem int, max Key, width float64) {
 	b.StopTimer()
@@ -268,6 +297,50 @@ func Example() {
 	fmt.Println(doGet(tree, 0, 4))
 	fmt.Println(doGet(tree, 4, 6))
 	fmt.Println(doGet(tree, 4, 7))
+	// Output:
+	// [1,4)
+	// [1,4),[3,5)
+	// [3,5)
+	// [3,5),[6,7)
+}
+
+// ExampleGob is an example of serializing an intervalmap using Gob.
+func ExampleGob() {
+	newEntry := func(start, limit Key) Entry {
+		return Entry{
+			Interval: Interval{start, limit},
+			Data:     fmt.Sprintf("[%d,%d)", start, limit),
+		}
+	}
+
+	tree := New([]Entry{newEntry(1, 4), newEntry(3, 5), newEntry(6, 7)})
+
+	buf := bytes.Buffer{}
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(tree); err != nil {
+		panic(err)
+	}
+	dec := gob.NewDecoder(&buf)
+	var tree2 *T
+	if err := dec.Decode(&tree2); err != nil {
+		panic(err)
+	}
+
+	doGet := func(tree *T, start, limit Key) string {
+		matches := []*Entry{}
+		tree.Get(Interval{start, limit}, &matches)
+		s := []string{}
+		for _, m := range matches {
+			s = append(s, m.Data.(string))
+		}
+		sort.Strings(s)
+		return strings.Join(s, ",")
+	}
+
+	fmt.Println(doGet(tree2, 0, 2))
+	fmt.Println(doGet(tree2, 0, 4))
+	fmt.Println(doGet(tree2, 4, 6))
+	fmt.Println(doGet(tree2, 4, 7))
 	// Output:
 	// [1,4)
 	// [1,4),[3,5)
