@@ -47,14 +47,20 @@ func (w *Writer) WriteBytes(s []byte) {
 // WriteUint32 converts the given uint32 to a string, and appends that and a
 // tab to the current line.
 func (w *Writer) WriteUint32(ui uint32) {
-	w.line = strconv.AppendUint(w.line, uint64(ui), 10)
-	w.line = append(w.line, '\t')
+	w.WriteUint64(uint64(ui))
 }
 
 // WriteInt64 converts the given int64 to a string, and appends that and a
 // tab to the current line.
 func (w *Writer) WriteInt64(i int64) {
 	w.line = strconv.AppendInt(w.line, i, 10)
+	w.line = append(w.line, '\t')
+}
+
+// WriteUint64 converts the given uint64 to a string, and appends that and a
+// tab to the current line.
+func (w *Writer) WriteUint64(ui uint64) {
+	w.line = strconv.AppendUint(w.line, ui, 10)
 	w.line = append(w.line, '\t')
 }
 

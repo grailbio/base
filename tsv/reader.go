@@ -136,7 +136,7 @@ func (r *Reader) wrapError(err error, col columnFormat) error {
 // fillRow fills Go struct fields from the TSV row.  dest is the pointer to the
 // struct, and format defines the struct format.
 func (r *Reader) fillRow(val interface{}, row []string) error {
-	dest := reflect.ValueOf(val).Pointer()
+	p := unsafe.Pointer(reflect.ValueOf(val).Pointer())
 	if r.RequireParseAllColumns && len(r.cachedRowFormat) != len(row) { // check this for headerless TSVs
 		return fmt.Errorf("extra columns found in %+v", r.cachedRowFormat)
 	}
@@ -160,71 +160,71 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 					return r.wrapError(err, col)
 				}
 			}
-			*(*bool)(unsafe.Pointer(dest + col.offset)) = v
+			*(*bool)(unsafe.Pointer(uintptr(p) + col.offset)) = v
 		case reflect.String:
-			*(*string)(unsafe.Pointer(dest + col.offset)) = colVal
+			*(*string)(unsafe.Pointer(uintptr(p) + col.offset)) = colVal
 		case reflect.Int8:
 			v, err := strconv.ParseInt(colVal, 0, 8)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*int8)(unsafe.Pointer(dest + col.offset)) = int8(v)
+			*(*int8)(unsafe.Pointer(uintptr(p) + col.offset)) = int8(v)
 		case reflect.Int16:
 			v, err := strconv.ParseInt(colVal, 0, 16)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*int16)(unsafe.Pointer(dest + col.offset)) = int16(v)
+			*(*int16)(unsafe.Pointer(uintptr(p) + col.offset)) = int16(v)
 		case reflect.Int32:
 			v, err := strconv.ParseInt(colVal, 0, 32)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*int32)(unsafe.Pointer(dest + col.offset)) = int32(v)
+			*(*int32)(unsafe.Pointer(uintptr(p) + col.offset)) = int32(v)
 		case reflect.Int64:
 			v, err := strconv.ParseInt(colVal, 0, 64)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*int64)(unsafe.Pointer(dest + col.offset)) = v
+			*(*int64)(unsafe.Pointer(uintptr(p) + col.offset)) = v
 		case reflect.Int:
 			v, err := strconv.ParseInt(colVal, 0, 64)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*int)(unsafe.Pointer(dest + col.offset)) = int(v)
+			*(*int)(unsafe.Pointer(uintptr(p) + col.offset)) = int(v)
 		case reflect.Uint8:
 			v, err := strconv.ParseUint(colVal, 0, 8)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*uint8)(unsafe.Pointer(dest + col.offset)) = uint8(v)
+			*(*uint8)(unsafe.Pointer(uintptr(p) + col.offset)) = uint8(v)
 		case reflect.Uint16:
 			v, err := strconv.ParseUint(colVal, 0, 16)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*uint16)(unsafe.Pointer(dest + col.offset)) = uint16(v)
+			*(*uint16)(unsafe.Pointer(uintptr(p) + col.offset)) = uint16(v)
 		case reflect.Uint32:
 			v, err := strconv.ParseUint(colVal, 0, 32)
 			if err != nil {
 				return r.wrapError(err, col)
 
 			}
-			*(*uint32)(unsafe.Pointer(dest + col.offset)) = uint32(v)
+			*(*uint32)(unsafe.Pointer(uintptr(p) + col.offset)) = uint32(v)
 		case reflect.Uint64:
 			v, err := strconv.ParseUint(colVal, 0, 64)
 			if err != nil {
 				return r.wrapError(err, col)
 
 			}
-			*(*uint64)(unsafe.Pointer(dest + col.offset)) = v
+			*(*uint64)(unsafe.Pointer(uintptr(p) + col.offset)) = v
 		case reflect.Uint:
 			v, err := strconv.ParseUint(colVal, 0, 64)
 			if err != nil {
 				return r.wrapError(err, col)
 			}
-			*(*uint)(unsafe.Pointer(dest + col.offset)) = uint(v)
+			*(*uint)(unsafe.Pointer(uintptr(p) + col.offset)) = uint(v)
 
 		case reflect.Float32:
 			v, err := strconv.ParseFloat(colVal, 32)
@@ -232,14 +232,14 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 				return r.wrapError(err, col)
 
 			}
-			*(*float32)(unsafe.Pointer(dest + col.offset)) = float32(v)
+			*(*float32)(unsafe.Pointer(uintptr(p) + col.offset)) = float32(v)
 		case reflect.Float64:
 			v, err := strconv.ParseFloat(colVal, 64)
 			if err != nil {
 				return r.wrapError(err, col)
 
 			}
-			*(*float64)(unsafe.Pointer(dest + col.offset)) = v
+			*(*float64)(unsafe.Pointer(uintptr(p) + col.offset)) = v
 		default:
 			return r.wrapError(fmt.Errorf("unsupported type %v", col.kind), col)
 		}

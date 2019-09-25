@@ -11,7 +11,7 @@ import (
 	"github.com/grailbio/base/tsv"
 )
 
-func TestTSVWriter(t *testing.T) {
+func TestWriter(t *testing.T) {
 	var buf bytes.Buffer
 	tw := tsv.NewWriter(&buf)
 	tw.WriteString("field1")
@@ -26,6 +26,6 @@ func TestTSVWriter(t *testing.T) {
 	got := buf.String()
 	want := "field1\t2\tfield3\tfield4\t1.2345\t123456\n"
 	if got != want {
-		t.Errorf("tsvwriter test failed: got: %s, want %s", got, want)
+		t.Errorf("got: %q, want %q", got, want)
 	}
 }
