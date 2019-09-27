@@ -413,7 +413,15 @@ func (p *Profile) PrintTo(w io.Writer) error {
 		if len(inst.params) == 0 && inst.parent == "" {
 			continue
 		}
-		if _, err := fmt.Fprintln(w, inst.SyntaxString(nil)); err != nil {
+		// Try to populate parameter docs if we can.
+		var docs map[string]string
+		if global := p.globals[inst.name]; global != nil {
+			docs = make(map[string]string)
+			for name, param := range global.params {
+				docs[name] = param.help
+			}
+		}
+		if _, err := fmt.Fprintln(w, inst.SyntaxString(docs)); err != nil {
 			return err
 		}
 	}
