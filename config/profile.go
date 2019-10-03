@@ -553,6 +553,11 @@ var (
 	defaultInstance *Profile
 )
 
+// NewDefault is used to initialize the default profile. It can be
+// set by a program before the application profile has been created
+// in order to support asynchronous profile retrieval.
+var NewDefault = New
+
 // Application returns the default application profile. The default
 // instance is initialized during the first call to Application (and thus
 // of the package-level methods that operate on the default profile).
@@ -563,7 +568,7 @@ var (
 func Application() *Profile {
 	// TODO(marius): freeze registration after this?
 	defaultInit.Do(func() {
-		defaultInstance = New()
+		defaultInstance = NewDefault()
 	})
 	return defaultInstance
 }

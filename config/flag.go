@@ -54,6 +54,12 @@ func (p *Profile) RegisterFlags(fs *flag.FlagSet, prefix string, defaultProfileP
 	fs.BoolVar(&p.flagDump, "profiledump", false, "dump the profile to stderr and exit")
 }
 
+// NeedProcessFlags returns true when a call to p.ProcessFlags should
+// not be delayed -- i.e., the flag values have user-visible side effects.
+func (p *Profile) NeedProcessFlags() bool {
+	return p.flagDump
+}
+
 // ProcessFlags processes the flags as registered by RegisterFlags,
 // and is documented by that method.
 func (p *Profile) ProcessFlags() error {

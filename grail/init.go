@@ -51,7 +51,18 @@ func Init() Shutdown {
 	}
 	initialized = true
 	mu.Unlock()
-	config.RegisterFlags("", os.ExpandEnv("$HOME/grail/profile"))
+
+	profile := config.New()
+	config.NewDefault = func() *config.Profile {
+		if err := profile.Parse(strings.NewReader(defaultProfile)); err != nil {
+			panic("grail: error in default profile: " + err.Error())
+		}
+		if err := profile.ProcessFlags(); err != nil {
+			log.Fatal(err)
+		}
+		return profile
+	}
+	profile.RegisterFlags(flag.CommandLine, "", os.ExpandEnv("$HOME/grail/profile"))
 	flag.CommandLine.Init(os.Args[0], flag.ContinueOnError)
 	err := flag.CommandLine.Parse(os.Args[1:])
 	if err == flag.ErrHelp {
@@ -63,12 +74,10 @@ func Init() Shutdown {
 		vlog.Error(err)
 	}
 	log.SetOutputter(vlogOutputter{})
-	if err := config.Parse(strings.NewReader(defaultProfile)); err != nil {
-		panic("grail: error in default profile: " + err.Error())
+	if profile.NeedProcessFlags() {
+		_ = config.Application()
 	}
-	if err := config.ProcessFlags(); err != nil {
-		log.Fatal(err)
-	}
+
 	pprof.Start()
 	_, ok := os.LookupEnv("GOPS")
 	if ok || *gopsFlag {
