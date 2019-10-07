@@ -16,6 +16,10 @@ import (
 	"github.com/grailbio/base/config"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/pprof"
+	"github.com/grailbio/base/shutdown"
+
+	// GRAIL applications require the AWS ticket provider.
+	_ "github.com/grailbio/base/config/awsticket"
 	"v.io/x/lib/vlog"
 )
 
@@ -26,7 +30,6 @@ type Shutdown func()
 var (
 	initialized      = false
 	mu               = sync.Mutex{}
-	shutdownHandlers = []Shutdown{}
 	gopsFlag         = flag.Bool("gops", false, "enable the gops listener")
 )
 
@@ -86,29 +89,9 @@ func Init() Shutdown {
 		}
 	}
 	return func() {
-		RunShutdownCallbacks()
+		shutdown.Run()
 		pprof.Write(1)
 		vlog.FlushLog()
-	}
-}
-
-// RegisterShutdownCallback registers a function to be run in the Init shutdown
-// callback. The callbacks will run in the reverse order of registration.
-func RegisterShutdownCallback(cb Shutdown) {
-	mu.Lock()
-	shutdownHandlers = append(shutdownHandlers, cb)
-	mu.Unlock()
-}
-
-// RunShutdownCallbacks run callbacks added in RegisterShutdownCallbacks. This
-// function is not for general use.
-func RunShutdownCallbacks() {
-	mu.Lock()
-	cbs := shutdownHandlers
-	shutdownHandlers = nil
-	mu.Unlock()
-	for i := len(cbs) - 1; i >= 0; i-- {
-		cbs[i]()
 	}
 }
 

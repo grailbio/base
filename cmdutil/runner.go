@@ -7,8 +7,8 @@ package cmdutil
 import (
 	"sync"
 
-	"github.com/grailbio/base/grail"
 	"github.com/grailbio/base/pprof"
+	"github.com/grailbio/base/shutdown"
 	"v.io/x/lib/cmdline"
 	"v.io/x/lib/vlog"
 )
@@ -28,7 +28,7 @@ func (f RunnerFunc) Run(env *cmdline.Env, args []string) error {
 	})
 	err := f(env, args)
 
-	grail.RunShutdownCallbacks()
+	shutdown.Run()
 	vlog.FlushLog()
 	pprof.Write(1)
 	return err

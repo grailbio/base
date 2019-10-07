@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/grailbio/base/backgroundcontext"
-	"github.com/grailbio/base/grail"
+	"github.com/grailbio/base/shutdown"
 	_ "github.com/grailbio/v23/factories/grail" // Needed to initialize v23
 	v23 "v.io/v23"
 	"v.io/v23/context"
@@ -33,9 +33,9 @@ func init() {
 // production pipeline controller. Be extremely careful when changing it.
 func Background() *context.T {
 	once.Do(func() {
-		var shutdown v23.Shutdown
-		ctx, shutdown = v23.Init()
-		grail.RegisterShutdownCallback(grail.Shutdown(shutdown))
+		var done v23.Shutdown
+		ctx, done = v23.Init()
+		shutdown.Register(shutdown.Func(done))
 		backgroundcontext.Set(ctx)
 	})
 	return ctx
