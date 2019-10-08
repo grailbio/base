@@ -124,7 +124,7 @@
 // Default profile
 //
 // Package config also defines a default profile and a set of package-level
-// methods that operate on this profile. Most users should make user only
+// methods that operate on this profile. Most users should make use only
 // of the default profile. This package also exports an http handler on the
 // path /debug/profile on the default (global) ServeMux, which returns the
 // global profile in parseable form.
