@@ -71,6 +71,10 @@ const (
 	Precondition
 	// OOM indicates that an OOM condition was encountered.
 	OOM
+	// Remote indicates an error returned by an RPC, as distinct from errors in
+	// the machinery to execute the RPC, e.g. network issues, machine health,
+	// etc.
+	Remote
 
 	maxKind
 )
@@ -90,6 +94,7 @@ var kinds = map[Kind]string{
 	TooManyTries: "too many tries",
 	Precondition: "precondition failed",
 	OOM:          "out of memory",
+	Remote:       "remote error",
 }
 
 // String returns a human-readable explanation of the error kind k.
