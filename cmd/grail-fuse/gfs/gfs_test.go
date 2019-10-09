@@ -18,8 +18,8 @@ import (
 	"github.com/grailbio/testutil/assert"
 	"github.com/grailbio/testutil/expect"
 	"github.com/grailbio/testutil/h"
-	"github.com/hanwen/go-fuse/fs"
-	"github.com/hanwen/go-fuse/fuse"
+	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 type tester struct {
