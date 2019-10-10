@@ -13,9 +13,8 @@ import (
 )
 
 // Utility functions to assist with benchmarking of embarrassingly parallel
-// jobs.  Currently located here instead of testutil/benchmark since the latter
-// is currently oriented toward large applications, but it probably makes sense
-// to move this code to a more central location at some point.
+// jobs. It probably makes sense to move this code to a more central location
+// at some point.
 
 type multiBenchFunc func(dst, src []byte, nIter int) int
 
