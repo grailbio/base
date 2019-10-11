@@ -72,24 +72,26 @@ func Self() (*Reader, error) {
 			selfErr = err
 			return
 		}
-		f, err := os.Open(filename)
-		if err != nil {
-			selfErr = err
-			return
-		}
-		info, err := f.Stat()
-		if err != nil {
-			selfErr = err
-			return
-		}
-		_, _, offset, err := Sniff(f)
-		if err != nil {
-			selfErr = err
-			return
-		}
-		self, selfErr = NewReader(f, offset, info.Size(), runtime.GOOS, runtime.GOARCH)
+		self, selfErr = ReadFile(filename)
 	})
 	return self, selfErr
+}
+
+// ReadFile reads the specified binary image as a fatbin and returns a reader to it.
+func ReadFile(filename string) (*Reader, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	_, _, offset, err := Sniff(f)
+	if err != nil {
+		return nil, err
+	}
+	return NewReader(f, offset, info.Size(), runtime.GOOS, runtime.GOARCH)
 }
 
 // OpenFile parses the provided ReaderAt with the provided size. The
@@ -197,8 +199,10 @@ var sniffers = []sniffer{sniffElf, sniffMacho}
 func sniffElf(r io.ReaderAt) (goos, goarch string, size int64, ok bool) {
 	file, err := elf.NewFile(r)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "XXX: sniff: %v\n", err)
 		return
 	}
+
 	switch file.Class {
 	case elf.ELFCLASS32:
 		hdr := new(elf.Header32)

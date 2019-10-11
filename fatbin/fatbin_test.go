@@ -6,6 +6,7 @@ package fatbin
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -13,21 +14,67 @@ import (
 	"testing"
 )
 
-func TestFatbin(t *testing.T) {
-	filename, err := os.Executable()
+func createFatbinFileUsingSelf() (filename string, body []byte, err error) {
+	self, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		return
 	}
-	body, err := ioutil.ReadFile(filename)
+	body, err = ioutil.ReadFile(self)
 	if err != nil {
-		t.Fatal(err)
+		return
+	}
+	fd, err := os.Open(self)
+	if err != nil {
+		return
+	}
+	_, _, offset, err := Sniff(fd)
+	if err != nil {
+		return
 	}
 
-	self, err := Self()
+	// The original executable contains padding beyond the sniff'ed offset
+	// which the fatbin package strips away.
+	body = body[:offset]
+
+	tmpfile, err := ioutil.TempFile("", "fatbin-test-")
+	if err != nil {
+		return
+	}
+	filename = tmpfile.Name()
+	_, err = io.Copy(tmpfile, bytes.NewBuffer(body))
+	if err != nil {
+		return
+	}
+	wr := NewWriter(tmpfile)
+	iowr, err := wr.Create(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return
+	}
+	if _, err = io.Copy(iowr, bytes.NewBuffer(body)); err != nil {
+		return
+	}
+	if err = wr.Flush(); err != nil {
+		return
+	}
+	if err = wr.Close(); err != nil {
+		return
+	}
+	return
+}
+
+func TestFatbin(t *testing.T) {
+
+	fatbinFile, body, err := createFatbinFileUsingSelf()
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := self.Open(runtime.GOOS, runtime.GOARCH)
+	defer os.Remove(fatbinFile)
+
+	fb, err := ReadFile(fatbinFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := fb.Open(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,13 +83,21 @@ func TestFatbin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	fmt.Fprintf(os.Stderr, " %v ... %v\n", len(body), len(embedded))
+
 	if !bytes.Equal(body, embedded) {
 		t.Error("content mismatch")
 	}
 }
 
 func TestFatbinNonExist(t *testing.T) {
-	self, err := Self()
+	fatbinFile, _, err := createFatbinFileUsingSelf()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(fatbinFile)
+	self, err := ReadFile(fatbinFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,8 +137,9 @@ func TestSniff(t *testing.T) {
 	if got, want := goos, runtime.GOOS; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	if got, want := size, info.Size(); got != want {
-		t.Errorf("got %v, want %v", got, want)
+	// Executables appear to be padded on some systems.
+	if got, want := size, info.Size(); got >= want {
+		t.Errorf("got %v < want %v", got, want)
 	}
 }
 

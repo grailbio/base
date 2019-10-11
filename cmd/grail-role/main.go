@@ -98,7 +98,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 
 	vanadiumTicket, ok := t.(ticket.TicketVanadiumTicket)
 	if !ok {
-		return fmt.Errorf("Not a VanadiumTicket: %#s", t)
+		return fmt.Errorf("Not a VanadiumTicket: %#v", t)
 	}
 
 	var blessings security.Blessings
