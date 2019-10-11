@@ -17,7 +17,6 @@ require (
 	github.com/golang/protobuf v1.3.2
 	github.com/google/gofuzz v1.0.0
 	github.com/google/gops v0.3.6
-	github.com/google/uuid v1.1.1 // indirect
 	github.com/grailbio/testutil v0.0.3
 	github.com/grailbio/v23/factories/grail v0.0.0-20190904050408-8a555d238e9a
 	github.com/hanwen/go-fuse/v2 v2.0.2
@@ -34,11 +33,11 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20191008105621-543471e840be
-	gonum.org/v1/gonum v0.0.0-20190902003836-43865b531bee // indirect
-	google.golang.org/api v0.11.0
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd // indirect
 	google.golang.org/grpc v1.24.0 // indirect
 	v.io v0.1.7
 	v.io/x/lib v0.1.4
 )
+
+require google.golang.org/api v0.10.0
