@@ -140,7 +140,7 @@ func (t T) eachLimit(n int, fn func(i int) error) error {
 	return errors.Err()
 }
 
-// Range performs ranged traversal on fn: n is split is split into
+// Range performs ranged traversal on fn: n is split into
 // contiguous ranges, and fn is invoked for each range. The range
 // sizes are determined by the traverser's concurrency limits. Range
 // allows the caller to amortize function call costs, and is
