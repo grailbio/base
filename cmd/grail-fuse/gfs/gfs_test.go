@@ -1,3 +1,5 @@
+//+build !unit
+
 package gfs_test
 
 import (
