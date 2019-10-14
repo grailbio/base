@@ -9,15 +9,20 @@
 // containing copies of the same binary targeted to different
 // GOOS/GOARCH combinations. The zip archive contains one entry for
 // each supported architecture and operating system combination.
+// At the end of a fatbin image is a footer, storing the offset of the
+// zip archive as well as a magic constant used to identify fatbin
+// images:
 //
-// Fatbin currently only supports ELF or Mach-O base binaries.
+//	[8]offset[4]magic[8]checksum
+//
+// The checksum is a 64-bit xxhash checksum of the offset and
+// magic fields. The magic value is 0x5758ba2c.
 package fatbin
 
 import (
 	"archive/zip"
 	"debug/elf"
 	"debug/macho"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -40,9 +45,9 @@ var (
 	// ErrNoSuchImage is returned when the fatbin does not contain an
 	// image for the requested GOOS/GOARCH combination.
 	ErrNoSuchImage = errors.New("image does not exist")
-	// ErrUnknownImageFormat is returned when a binary cannot be read
-	// as a fatbin.
-	ErrUnknownImageFormat = errors.New("unknown image format")
+	// ErrCorruptedImage is returned when the fatbin image has been
+	// corrupted.
+	ErrCorruptedImage = errors.New("corrupted fatbin image")
 )
 
 // Info provides information for an embedded binary.
@@ -82,7 +87,7 @@ func Self() (*Reader, error) {
 			selfErr = err
 			return
 		}
-		_, _, offset, err := Sniff(f)
+		_, _, offset, err := Sniff(f, info.Size())
 		if err != nil {
 			selfErr = err
 			return
@@ -96,7 +101,7 @@ func Self() (*Reader, error) {
 // file's contents is parsed to determine the offset of the fatbin's
 // archive. OpenFile returns an error if the file is not a fatbin.
 func OpenFile(r io.ReaderAt, size int64) (*Reader, error) {
-	goos, goarch, offset, err := Sniff(r)
+	goos, goarch, offset, err := Sniff(r, size)
 	if err != nil {
 		return nil, err
 	}
@@ -176,60 +181,42 @@ func sectionEndAligned(s *elf.Section) int64 {
 	return int64(((s.Offset + s.FileSize) + (s.Addralign - 1)) & -s.Addralign)
 }
 
-// Sniff sniffs a binary's goos, goarch, and size. Sniff currently only supports
-// ELF and Mach-O binaries.
-func Sniff(r io.ReaderAt) (goos, goarch string, size int64, err error) {
+// Sniff sniffs a binary's goos, goarch, and fatbin offset. Sniff returns errors
+// returned by the provided reader, or ErrCorruptedImage if the binary is identified
+// as a fatbin image with a checksum mismatch.
+func Sniff(r io.ReaderAt, size int64) (goos, goarch string, offset int64, err error) {
 	for _, s := range sniffers {
 		var ok bool
-		goos, goarch, size, ok = s(r)
+		goos, goarch, ok = s(r)
 		if ok {
+			break
 			return
 		}
 	}
-	err = ErrUnknownImageFormat
+	if goos == "" {
+		goos = "unknown"
+	}
+	if goarch == "" {
+		goarch = "unknown"
+	}
+	offset, err = readFooter(r, size)
+	if err == errNoFooter {
+		err = nil
+		offset = size
+	}
 	return
 }
 
-type sniffer func(r io.ReaderAt) (goos, goarch string, size int64, ok bool)
+type sniffer func(r io.ReaderAt) (goos, goarch string, ok bool)
 
 var sniffers = []sniffer{sniffElf, sniffMacho}
 
-func sniffElf(r io.ReaderAt) (goos, goarch string, size int64, ok bool) {
+func sniffElf(r io.ReaderAt) (goos, goarch string, ok bool) {
 	file, err := elf.NewFile(r)
 	if err != nil {
 		return
 	}
-	switch file.Class {
-	case elf.ELFCLASS32:
-		hdr := new(elf.Header32)
-		sr := io.NewSectionReader(r, 0, 1<<63-1)
-		if err := binary.Read(sr, file.ByteOrder, hdr); err != nil {
-			// TODO(marius): this should be an actual error
-			ok = false
-			return
-		}
-		size = int64(hdr.Shoff) + int64(hdr.Shentsize*hdr.Shnum)
-	case elf.ELFCLASS64:
-		hdr := new(elf.Header64)
-		sr := io.NewSectionReader(r, 0, 1<<63-1)
-		if err := binary.Read(sr, file.ByteOrder, hdr); err != nil {
-			// TODO(marius): this should be an actual error
-			ok = false
-			return
-		}
-		size = int64(hdr.Shoff) + int64(hdr.Shentsize*hdr.Shnum)
-	}
-
-	for _, s := range file.Sections {
-		// section type SHT_NOBITS occupies no space in the file.
-		if s.Type == elf.SHT_NOBITS {
-			continue
-		}
-		if off := sectionEndAligned(s); off > size {
-			size = off
-		}
-	}
-
+	ok = true
 	switch file.OSABI {
 	default:
 		goos = "unknown"
@@ -240,7 +227,6 @@ func sniffElf(r io.ReaderAt) (goos, goarch string, size int64, ok bool) {
 	case elf.ELFOSABI_OPENBSD:
 		goos = "openbsd"
 	}
-
 	switch file.Machine {
 	default:
 		goarch = "unknown"
@@ -253,18 +239,15 @@ func sniffElf(r io.ReaderAt) (goos, goarch string, size int64, ok bool) {
 	case elf.EM_AARCH64:
 		goarch = "arm64"
 	}
-
-	ok = true
 	return
 }
 
-func sniffMacho(r io.ReaderAt) (goos, goarch string, size int64, ok bool) {
+func sniffMacho(r io.ReaderAt) (goos, goarch string, ok bool) {
 	file, err := macho.NewFile(r)
 	if err != nil {
 		return
 	}
-	sg := file.Segment("__LINKEDIT")
-	size = int64(sg.SegmentHeader.Filesz + sg.SegmentHeader.Offset)
+	ok = true
 	// We assume mach-o is only used in Darwin. This is not exposed
 	// by the mach-o files.
 	goos = "darwin"
@@ -284,6 +267,5 @@ func sniffMacho(r io.ReaderAt) (goos, goarch string, size int64, ok bool) {
 	case macho.CpuPpc64:
 		goarch = "ppc64"
 	}
-	ok = true
 	return
 }

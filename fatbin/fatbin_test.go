@@ -72,7 +72,7 @@ func TestSniff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	goos, goarch, size, err := Sniff(f)
+	goos, goarch, size, err := Sniff(f, info.Size())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSniff(t *testing.T) {
 
 func TestLinuxElf(t *testing.T) {
 	r := bytes.NewReader(svelteLinuxElfBinary)
-	goos, goarch, size, err := Sniff(r)
+	goos, goarch, size, err := Sniff(r, int64(r.Len()))
 	if err != nil {
 		t.Fatal(err)
 	}

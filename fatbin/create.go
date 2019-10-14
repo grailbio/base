@@ -12,7 +12,10 @@ import (
 
 // A Writer is used to append fatbin images to an existing binary.
 type Writer struct {
-	z *zip.Writer
+	z            *zip.Writer
+	w            io.Writer
+	off          int64
+	goos, goarch string
 }
 
 // NewFileWriter returns a writer that can be used to append fatbin
@@ -21,25 +24,29 @@ type Writer struct {
 // attached to the binary. It relies on content sniffing (see Sniff)
 // to determine its offset.
 func NewFileWriter(file *os.File) (*Writer, error) {
-	_, _, size, err := Sniff(file)
+	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
-	if err := file.Truncate(size); err != nil {
+	goos, goarch, offset, err := Sniff(file, info.Size())
+	if err != nil {
+		return nil, err
+	}
+	if err := file.Truncate(offset); err != nil {
 		return nil, err
 	}
 	_, err = file.Seek(0, io.SeekEnd)
 	if err != nil {
 		return nil, err
 	}
-	return NewWriter(file), nil
+	return NewWriter(file, offset, goos, goarch), nil
 }
 
 // NewWriter returns a writer that may be used to append fatbin
 // images to the writer w. The writer should be positioned at the end
 // of the base binary image.
-func NewWriter(w io.Writer) *Writer {
-	return &Writer{z: zip.NewWriter(w)}
+func NewWriter(w io.Writer, offset int64, goos, goarch string) *Writer {
+	return &Writer{z: zip.NewWriter(w), w: w, off: offset, goos: goos, goarch: goarch}
 }
 
 // Create returns a Writer into which the image for the provided goos
@@ -57,5 +64,12 @@ func (w *Writer) Flush() error {
 // Close should be called after all images have been written. No more
 // images can be written after a call to Close.
 func (w *Writer) Close() error {
-	return w.z.Close()
+	if err := w.z.SetComment(w.goos + "/" + w.goarch); err != nil {
+		return err
+	}
+	if err := w.z.Close(); err != nil {
+		return err
+	}
+	_, err := writeFooter(w.w, w.off)
+	return err
 }
