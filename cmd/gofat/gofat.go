@@ -99,7 +99,9 @@ func build(args []string) {
 
 	f, err := os.OpenFile(*out, os.O_WRONLY|os.O_APPEND, 0777)
 	must(err)
-	fat := fatbin.NewWriter(f)
+	info, err := f.Stat()
+	must(err)
+	fat := fatbin.NewWriter(f, info.Size(), runtime.GOOS, runtime.GOARCH)
 
 	for _, goarch := range strings.Split(*goarches, ",") {
 		for _, goos := range strings.Split(*gooses, ",") {
