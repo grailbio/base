@@ -56,6 +56,12 @@ func SetPrefix(prefix string) {
 	golog.SetPrefix(prefix)
 }
 
+// SetLevel sets the log level for the Go standard logger.
+// It should be called once at the beginning of a program's main.
+func SetLevel(level Level) {
+	golevel = level
+}
+
 type logFlag string
 
 func (f logFlag) String() string {
