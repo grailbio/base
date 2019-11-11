@@ -64,6 +64,7 @@ func (info Info) String() string {
 type Reader struct {
 	self         io.ReaderAt
 	goos, goarch string
+	offset       int64
 
 	z *zip.Reader
 }
@@ -117,6 +118,7 @@ func NewReader(r io.ReaderAt, offset, size int64, goos, goarch string) (*Reader,
 		self:   io.NewSectionReader(r, 0, offset),
 		goos:   goos,
 		goarch: goarch,
+		offset: offset,
 	}
 	if offset == size {
 		return rd, nil
@@ -174,7 +176,28 @@ func (r *Reader) Open(goos, goarch string) (io.ReadCloser, error) {
 		}
 	}
 	return nil, ErrNoSuchImage
+}
 
+// Stat returns the information for the image identified by the
+// provided GOOS and GOARCH. It returns a boolean indicating
+// whether the requested image was found.
+func (r *Reader) Stat(goos, goarch string) (info Info, ok bool) {
+	info.Goos = goos
+	info.Goarch = goarch
+	if goos == r.goos && goarch == r.goarch {
+		info.Size = r.offset
+		ok = true
+		return
+	}
+	look := goos + "/" + goarch
+	for _, f := range r.z.File {
+		if f.Name == look {
+			info.Size = int64(f.UncompressedSize64)
+			ok = true
+			return
+		}
+	}
+	return
 }
 
 func sectionEndAligned(s *elf.Section) int64 {
