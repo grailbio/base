@@ -39,6 +39,14 @@ func TestFatbin(t *testing.T) {
 	if !bytes.Equal(body, embedded) {
 		t.Error("content mismatch")
 	}
+
+	info, ok := self.Stat(runtime.GOOS, runtime.GOARCH)
+	if !ok {
+		t.Fatal(runtime.GOOS, "/", runtime.GOARCH, ": not found")
+	}
+	if got, want := info.Size, int64(len(embedded)); got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
 }
 
 func TestFatbinNonExist(t *testing.T) {
@@ -53,11 +61,6 @@ func TestFatbinNonExist(t *testing.T) {
 }
 
 func TestSniff(t *testing.T) {
-	switch runtime.GOOS {
-	case "linux", "darwin":
-	default:
-		t.Skipf("GOOS=%s not supported", runtime.GOOS)
-	}
 	filename, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -140,6 +143,14 @@ func TestCreate(t *testing.T) {
 		}
 		mustBytes(t, rc, c.body)
 		must(t, rc.Close())
+		info, ok := r.Stat(c.goos, c.goarch)
+		if !ok {
+			t.Error(c.goos, "/", c.goarch, ": not found")
+			continue
+		}
+		if got, want := info.Size, int64(len(c.body)); got != want {
+			t.Errorf("%s/%s: got %v, want %v", c.goos, c.goarch, got, want)
+		}
 	}
 
 	_, err = r.Open("test", "nope")
