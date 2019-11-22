@@ -62,6 +62,12 @@ type Closer interface {
 	Close(context.Context) error
 }
 
+// ETagged defines a getter for a file with an ETag.
+type ETagged interface {
+	// ETag is an identifier assigned to a specific version of the file.
+	ETag() string
+}
+
 // CloseAndReport returns a defer-able helper that calls f.Close and reports errors, if any,
 // to *err. Pass your function's named return error. Example usage:
 //

@@ -1372,6 +1372,7 @@ func (l *s3Lister) showDirs() bool {
 func (i *s3Info) Name() string       { return i.name }
 func (i *s3Info) Size() int64        { return i.size }
 func (i *s3Info) ModTime() time.Time { return i.modTime }
+func (i *s3Info) ETag() string       { return i.etag }
 
 // ParseURL parses a path of form "s3://grail-bucket/dir/file" and returns
 // ("s3", "grail-bucket", "dir/file", nil).
