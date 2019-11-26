@@ -101,30 +101,16 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 			}
 
 			// If the group is in a different domain, perform a user based group membership check
+			// This loses the ability to check for nested groups - see https://phabricator.grailbio.com/D13275
+			// and https://github.com/googleapis/google-api-java-client/issues/1082
 			if googleGroupSufix != googleUserSufix {
-				isMember := false
-				nextToken := true
-				nextTokenValue := ""
-				for ok := true; ok; ok = !isMember && nextToken {
-					nextToken = false
-					r, e := admin.NewGroupsService(service).List().UserKey(user).PageToken(nextTokenValue).Do()
-					if e != nil {
-						vlog.Info(err)
-						return false
-					}
-
-					for _, g := range r.Groups {
-						if g.Email == group {
-							vlog.Infof("%v member of %v", user, group)
-							isMember = true
-						}
-					}
-					if r.NextPageToken != "" {
-						nextToken = true
-						nextTokenValue = r.NextPageToken
-					}
+				member, member_err := admin.NewMembersService(service).Get(group, user).Do()
+				if member_err != nil {
+					vlog.Info(member_err)
+					return false
 				}
-
+				vlog.Infof("member: %+v", member)
+				isMember := member.Status == "ACTIVE"
 				vlog.VI(1).Infof("add to cache %+v", key)
 				cache.Set(key, isMember)
 				return isMember
