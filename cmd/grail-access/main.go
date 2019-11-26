@@ -42,7 +42,8 @@ var (
 	blesserEc2Flag       string
 	identityDocumentFlag string
 
-	dumpFlag bool
+	dumpFlag                 bool
+	doNotRefreshDurationFlag time.Duration
 )
 
 func newCmdRoot() *cmdline.Command {
@@ -75,6 +76,7 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	cmd.Flags.BoolVar(&ec2Flag, "ec2", false, "Use the role of the EC2 VM.")
 	cmd.Flags.BoolVar(&browserFlag, "browser", os.Getenv("SSH_CLIENT") == "", "Attempt to open a browser.")
 	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
+	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")
 	return cmd
 }
 
@@ -115,8 +117,7 @@ func run(ctx *v23context.T, env *cmdline.Env, args []string) error {
 
 	b, _ := v23.GetPrincipal(ctx).BlessingStore().Default()
 
-	if dumpFlag || b.Expiry().After(time.Now().Add(7*24*time.Hour)) {
-		// Consider dump to be the default behavior for long lived credentials.
+	if dumpFlag || b.Expiry().After(time.Now().Add(doNotRefreshDurationFlag)) {
 		dump(ctx)
 		return nil
 	}
