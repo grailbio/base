@@ -6,7 +6,6 @@ package admit
 
 import (
 	"context"
-	"errors"
 	"expvar"
 	"fmt"
 	"math/rand"
@@ -125,15 +124,14 @@ func TestControllerConcurrently(t *testing.T) {
 }
 
 func TestDo(t *testing.T) {
-	someErr := errors.New("some other error")
 	c := newController(100, 10000, nil)
 	// Must satisfy even 150 tokens since none are used.
-	if err := Do(context.Background(), c, 150, func() error { return nil }); err != nil {
+	if err := Do(context.Background(), c, 150, func() (bool, error) { return true, nil }); err != nil {
 		t.Fatal(err)
 	}
 	checkState(t, c, 150, 0)
 	// controller has 150 tokens, use 10 and report capacity error
-	if want, got := ErrOverCapacity, Do(context.Background(), c, 10, func() error { return ErrOverCapacity }); got != want {
+	if want, got := error(nil), Do(context.Background(), c, 10, func() (bool, error) { return false, nil }); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	checkState(t, c, 135, 0)
@@ -142,17 +140,17 @@ func TestDo(t *testing.T) {
 	checkState(t, c, 135, 35)
 	// can go upto 1.1*135 = 148, so should timeout for 114.
 	ctx, _ := context.WithTimeout(context.Background(), time.Second)
-	if want, got := context.DeadlineExceeded, Do(ctx, c, 114, func() error { return someErr }); got != want {
+	if want, got := context.DeadlineExceeded, Do(ctx, c, 114, func() (bool, error) { return true, nil }); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	checkState(t, c, 135, 35)
 	// can go upto 1.1*135 = 148, so should timeout for 113.
-	if want, got := someErr, Do(context.Background(), c, 113, func() error { return someErr }); got != want {
+	if want, got := error(nil), Do(context.Background(), c, 113, func() (bool, error) { return true, nil }); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	checkState(t, c, 148, 35)
 	// can go upto 1.1*148 = 162, so should go upto 127.
-	if err := Do(context.Background(), c, 127, func() error { return nil }); err != nil {
+	if err := Do(context.Background(), c, 127, func() (bool, error) { return true, nil }); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -167,15 +165,23 @@ func TestRetry(t *testing.T) {
 	err := traverse.Each(N, func(i int) error {
 		begin.Done()
 		begin.Wait()
-		randFunc := func() error {
-			if i%2 == 0 { // Every other request can potentially fail ...
+		randFunc := func() (CapacityStatus, error) {
+			// Out of every three requests, one will (5% of the time) report over capacity with a need to retry,
+			// and another (also 5% of the time) will report over capacity with no need to retry.
+			switch i % 3 {
+			case 0:
 				time.Sleep(time.Millisecond * time.Duration(20+rand.Intn(50)))
 				if rand.Intn(100) < 5 { // 5% of the time.
-					return ErrOverCapacity
+					return OverNeedRetry, nil
+				}
+			case 1:
+				time.Sleep(time.Millisecond * time.Duration(20+rand.Intn(50)))
+				if rand.Intn(100) < 5 { // 5% of the time.
+					return OverNoRetry, nil
 				}
 			}
 			time.Sleep(time.Millisecond * time.Duration(5+rand.Intn(20)))
-			return nil
+			return Within, nil
 		}
 		n := rand.Intn(20) + 1
 		return Retry(context.Background(), c, n, randFunc)

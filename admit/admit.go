@@ -7,7 +7,6 @@ package admit
 
 import (
 	"context"
-	"errors"
 	"expvar"
 	"sync"
 
@@ -36,46 +35,63 @@ type Policy interface {
 	Release(tokens int, ok bool)
 }
 
+// Do calls f after being admitted by the controller. f's bool return value is
+// passed on to the underlying policy upon Release, and the error is simply
+// returned back to the caller as a convenience.
+// If policy is nil, then this will simply call f.
+func Do(ctx context.Context, policy Policy, tokens int, f func() (bool, error)) error {
+	if policy == nil {
+		_, err := f()
+		return err
+	}
+	if err := policy.Acquire(ctx, tokens); err != nil {
+		return err
+	}
+	var (
+		ok  bool
+		err error
+	)
+	defer func() { policy.Release(tokens, ok) }()
+	ok, err = f()
+	return err
+}
+
+// CapacityStatus is the feedback provided by the user to Retry about the underlying resource being managed by Policy.
+type CapacityStatus int
+
+const (
+	// Within means that the underlying resource is within capacity.
+	Within CapacityStatus = iota
+	// OverNoRetry means that the underlying resource is over capacity but no retry is needed.
+	// This is useful in situations where a request using the resource succeeded, but there are
+	// signs of congestion (for example, in the form of high latency).
+	OverNoRetry
+	// OverNeedRetry means that the underlying resource is over capacity and a retry is needed.
+	// This is useful in situations where requests failed due to the underlying resource hitting capacity limits.
+	OverNeedRetry
+)
+
 // RetryPolicy combines an admission controller with a retry policy.
 type RetryPolicy interface {
 	Policy
 	retry.Policy
 }
 
-// ErrOverCapacity should be thrown by the "do" func passed to admit.Do or admit.Retry
-// for it to be considered an over capacity error.
-var ErrOverCapacity = errors.New("over capacity")
-
-// Do calls the provided function after being admitted by the admission controller.
-// If the function returns ErrOverCapacity, it is then reported as a capacity request
-// to the underlying policy.
-// If policy is nil, then this will simply call the do() func.
-func Do(ctx context.Context, policy Policy, tokens int, do func() error) error {
-	if policy == nil {
-		return do()
-	}
-	if err := policy.Acquire(ctx, tokens); err != nil {
-		return err
-	}
-	var err error
-	defer func(err *error) {
-		policy.Release(tokens, *err != ErrOverCapacity)
-	}(&err)
-	err = do()
-	return err
-}
-
-// Retry calls the provided function with the combined retry and admission policies.
-// If policy is nil, then this will simply call the do() func.
-func Retry(ctx context.Context, policy RetryPolicy, tokens int, do func() error) error {
-	if policy == nil {
-		return do()
-	}
+// Retry calls f after being admitted by the Policy (implied by the given RetryPolicy).
+// If f returns Within, true is passed to the underlying policy upon Release and false otherwise.
+// If f returns OverNeedRetry, f will be retried as per the RetryPolicy (and the error returned by f is ignored),
+// and if f can no longer be retried, the error returned by retry.Policy will be returned.
+func Retry(ctx context.Context, policy RetryPolicy, tokens int, f func() (CapacityStatus, error)) error {
 	var err error
 	for retries := 0; ; retries++ {
-		err = Do(ctx, policy, tokens, do)
+		var c CapacityStatus
+		err = Do(ctx, policy, tokens, func() (bool, error) {
+			var err error // nolint:govet
+			c, err = f()
+			return c == Within, err
+		})
 		// Retry as per retry policy if attempt failed due to over capacity.
-		if err != ErrOverCapacity {
+		if c != OverNeedRetry {
 			break
 		}
 		if err = retry.Wait(ctx, policy, retries); err != nil {
