@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	admitMax  = expvar.NewMap("admit.max")
-	admitUsed = expvar.NewMap("admit.used")
+	admitLimit = expvar.NewMap("admit.limit")
+	admitUsed  = expvar.NewMap("admit.used")
 )
 
 // Policy implements the low level details of an admission control
@@ -104,15 +104,9 @@ func Retry(ctx context.Context, policy RetryPolicy, tokens int, f func() (Capaci
 
 const defaultLimitChangeRate = 0.1
 
-// Adjust either increases or decreases the given limit by defaultChangeRate.
-func adjust(limit int, increase bool) int {
-	var change float32
-	if increase {
-		change = 1.0 + defaultLimitChangeRate
-	} else {
-		change = 1.0 - defaultLimitChangeRate
-	}
-	return int(float32(limit) * change)
+// Adjust changes the limit by factor.
+func adjust(limit int, factor float32) int {
+	return int(float32(limit) * (1 + factor))
 }
 
 func min(x, y int) int {
@@ -122,16 +116,30 @@ func min(x, y int) int {
 	return y
 }
 
-type controller struct {
-	retry.Policy
-	max, used, limit int
-	mu               sync.Mutex
-	cond             *ctxsync.Cond
-	maxVar, usedVar  expvar.Int
+func max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
 }
 
-func newController(start, limit int, retryPolicy retry.Policy) *controller {
-	c := &controller{Policy: retryPolicy, max: start, used: 0, limit: limit}
+type controller struct {
+	// limit, used are the current limit and current used tokens respectively.
+	limit, used int
+	// low, high define the range within which the limit can be adjusted.
+	low, high         int
+	mu                sync.Mutex
+	cond              *ctxsync.Cond
+	limitVar, usedVar expvar.Int
+}
+
+type controllerWithRetry struct {
+	*controller
+	retry.Policy
+}
+
+func newController(start, limit int) *controller {
+	c := &controller{limit: start, used: 0, low: start, high: limit}
 	c.cond = ctxsync.NewCond(&c.mu)
 	return c
 }
@@ -141,7 +149,7 @@ func newController(start, limit int, retryPolicy retry.Policy) *controller {
 // A controller is not fair: tokens are not granted in FIFO order;
 // rather, waiters are picked randomly to be granted new tokens.
 func Controller(start, limit int) Policy {
-	return ControllerWithRetry(start, limit, nil)
+	return newController(start, limit)
 }
 
 // ControllerWithRetry returns a RetryPolicy which starts with a concurrency
@@ -149,14 +157,17 @@ func Controller(start, limit int) Policy {
 // A controller is not fair: tokens are not granted in FIFO order;
 // rather, waiters are picked randomly to be granted new tokens.
 func ControllerWithRetry(start, limit int, retryPolicy retry.Policy) RetryPolicy {
-	return newController(start, limit, retryPolicy)
+	return controllerWithRetry{controller: newController(start, limit), Policy: retryPolicy}
 }
 
 // EnableVarExport enables the export of relevant vars useful for debugging/monitoring.
 func EnableVarExport(policy Policy, name string) {
 	switch c := policy.(type) {
 	case *controller:
-		admitMax.Set(name, &c.maxVar)
+		admitLimit.Set(name, &c.limitVar)
+		admitUsed.Set(name, &c.usedVar)
+	case *aimd:
+		admitLimit.Set(name, &c.limitVar)
 		admitUsed.Set(name, &c.usedVar)
 	}
 }
@@ -168,7 +179,7 @@ func (c *controller) Acquire(ctx context.Context, need int) error {
 	defer c.mu.Unlock()
 	for {
 		// TODO(swami): should allow an increase only when the last release was ok
-		lim := min(adjust(c.max, true), c.limit)
+		lim := min(adjust(c.limit, defaultLimitChangeRate), c.high)
 		have := lim - c.used
 		if need <= have || (need > lim && c.used == 0) {
 			c.used += need
@@ -187,15 +198,91 @@ func (c *controller) Release(tokens int, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ok {
-		if c.used > c.max {
-			c.max = min(c.used, c.limit)
+		if c.used > c.limit {
+			c.limit = min(c.used, c.high)
 		}
 	} else {
-		c.max = adjust(c.max, false)
+		c.limit = max(c.low, adjust(c.limit, -defaultLimitChangeRate))
 	}
 	c.used -= tokens
 
-	c.maxVar.Set(int64(c.max))
+	c.limitVar.Set(int64(c.limit))
+	c.usedVar.Set(int64(c.used))
+	c.cond.Broadcast()
+}
+
+type aimd struct {
+	// limit, used are the current limit and current used tokens respectively.
+	limit, used int
+	// min is the minimum limit.
+	min int
+	// decfactor is the factor by which tokens are reduced upon congestion.
+	decfactor float32
+
+	mu                sync.Mutex
+	cond              *ctxsync.Cond
+	limitVar, usedVar expvar.Int
+}
+
+type aimdWithRetry struct {
+	*aimd
+	retry.Policy
+}
+
+func newAimd(min int, decfactor float32) *aimd {
+	c := &aimd{min: min, limit: min, decfactor: decfactor}
+	c.cond = ctxsync.NewCond(&c.mu)
+	return c
+}
+
+// AIMD returns a Policy which uses the Additive increase/multiplicative decrease
+// algorithm for computing the amount of the concurrency to allow.
+// AIMD is not fair: tokens are not granted in FIFO order;
+// rather, waiters are picked randomly to be granted new tokens.
+func AIMD(min int, decfactor float32) Policy {
+	return newAimd(min, decfactor)
+}
+
+// AIMDWithRetry returns a RetryPolicy which uses the Additive increase/multiplicative decrease
+// algorithm for computing the amount of the concurrency to allow.
+// AIMDWithRetry is not fair: tokens are not granted in FIFO order;
+// rather, waiters are picked randomly to be granted new tokens.
+func AIMDWithRetry(min int, decfactor float32, retryPolicy retry.Policy) RetryPolicy {
+	return aimdWithRetry{aimd: newAimd(min, decfactor), Policy: retryPolicy}
+}
+
+// Acquire acquires a number of tokens from the admission controller.
+// Returns on success, or if the context was canceled.
+func (c *aimd) Acquire(ctx context.Context, need int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for {
+		have := c.limit - c.used
+		if need <= have || (need > c.limit && c.used == 0) {
+			c.used += need
+			c.usedVar.Set(int64(c.used))
+			return nil
+		}
+		if err := c.cond.Wait(ctx); err != nil {
+			return err
+		}
+	}
+}
+
+// Release releases a number of tokens to the admission controller,
+// reporting whether the request was within the capacity limits.
+func (c *aimd) Release(tokens int, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch {
+	case !ok:
+		c.limit = max(c.min, adjust(c.limit, -c.decfactor))
+	case ok && c.used == c.limit:
+		c.limit += 1
+	}
+	c.used -= tokens
+
+	c.limitVar.Set(int64(c.limit))
 	c.usedVar.Set(int64(c.used))
 	c.cond.Broadcast()
 }

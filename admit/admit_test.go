@@ -18,22 +18,31 @@ import (
 	"github.com/grailbio/base/traverse"
 )
 
-func checkState(t *testing.T, c *controller, max, used int) {
+func checkState(t *testing.T, p Policy, limit, used int) {
 	t.Helper()
-	if c.used != used {
-		t.Errorf("c.used: got %d, want %d", c.used, used)
+	var gotl, gotu int
+	switch c := p.(type) {
+	case *controller:
+		gotl = c.limit
+		gotu = c.used
+	case *aimd:
+		gotl = c.limit
+		gotu = c.used
 	}
-	if c.max != max {
-		t.Errorf("c.max: got %d, want %d", c.max, max)
+	if gotu != used {
+		t.Errorf("c.used: got %d, want %d", gotu, used)
+	}
+	if gotl != limit {
+		t.Errorf("c.limit: got %d, want %d", gotl, limit)
 	}
 }
 
-func checkVars(t *testing.T, max, used string) {
+func checkVars(t *testing.T, key, max, used string) {
 	t.Helper()
-	if want, got := max, admitMax.Get("test").String(); got != want {
-		t.Errorf("admitMax got %s, want %s", got, want)
+	if want, got := max, admitLimit.Get(key).String(); got != want {
+		t.Errorf("admitLimit got %s, want %s", got, want)
 	}
-	if want, got := used, admitUsed.Get("test").String(); got != want {
+	if want, got := used, admitUsed.Get(key).String(); got != want {
 		t.Errorf("admitUsed got %s, want %s", got, want)
 	}
 }
@@ -47,7 +56,7 @@ func getKeys(m *expvar.Map) map[string]bool {
 }
 
 func TestController(t *testing.T) {
-	c := newController(10, 15, nil)
+	c := newController(10, 15)
 	// use up 5.
 	if err := c.Acquire(context.Background(), 5); err != nil {
 		t.Fatal(err)
@@ -59,63 +68,123 @@ func TestController(t *testing.T) {
 	}
 	// release and report capacity error.
 	c.Release(5, false)
-	checkState(t, c, 9, 6)
-	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond)
-	// 6 still in use and max should now be 9, so can't acquire 4.
-	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 4); got != want {
+	checkState(t, c, 10, 6)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	// 6 still in use and limit should now be 10, so can't acquire 6.
+	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 6); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
-	if want, got := 0, getKeys(admitMax); len(got) != want {
-		t.Fatalf("admitMax got %v, want len %d", got, want)
+	cancel()
+	if want, got := 0, getKeys(admitLimit); len(got) != want {
+		t.Fatalf("admitLimit got %v, want len %d", got, want)
 	}
 	if want, got := 0, getKeys(admitUsed); len(got) != want {
-		t.Fatalf("admitMax got %v, want len %d", got, want)
+		t.Fatalf("admitUsed got %v, want len %d", got, want)
 	}
 	EnableVarExport(c, "test")
 	c.Release(6, true)
-	checkState(t, c, 9, 0)
-	checkVars(t, "9", "0")
+	checkState(t, c, 10, 0)
+	checkVars(t, "test", "10", "0")
 	// max is still 9, but since none are used, should accommodate larger request.
 	if err := c.Acquire(context.Background(), 18); err != nil {
 		t.Fatal(err)
 	}
-	checkState(t, c, 9, 18)
-	checkVars(t, "9", "18")
+	checkState(t, c, 10, 18)
+	checkVars(t, "test", "10", "18")
 	c.Release(17, true)
 	checkState(t, c, 15, 1)
-	checkVars(t, "15", "1")
-	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond)
+	checkVars(t, "test", "15", "1")
+	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	// 1 still in use and max is 15, so shouldn't accommodate larger request.
 	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 18); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}
+	cancel()
 	checkState(t, c, 15, 1)
-	checkVars(t, "15", "1")
+	checkVars(t, "test", "15", "1")
 	c.Release(1, true)
 	checkState(t, c, 15, 0)
-	checkVars(t, "15", "0")
+	checkVars(t, "test", "15", "0")
 }
 
 func TestControllerConcurrently(t *testing.T) {
+	testPolicy(t, ControllerWithRetry(100, 1000, nil))
+}
+
+func TestAIMD(t *testing.T) {
+	c := newAimd(10, 0.2)
+	// use up 5.
+	if err := c.Acquire(context.Background(), 5); err != nil {
+		t.Fatal(err)
+	}
+	checkState(t, c, 10, 5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	// 5 in use and limit should still be 10, so can't acquire 6.
+	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 6); got != want {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	cancel()
+	// release and report capacity error.
+	EnableVarExport(c, "aimd")
+	c.Release(5, true)
+	checkState(t, c, 10, 0)
+	checkVars(t, "aimd", "10", "0")
+
+	for i := 0; i < 10; i++ {
+		if err := c.Acquire(context.Background(), 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	checkState(t, c, 10, 10)
+	checkVars(t, "aimd", "10", "10")
+	for i := 1; i <= 5; i++ {
+		c.Release(i, true)
+		if err := c.Acquire(context.Background(), i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	checkState(t, c, 15, 15)
+	checkVars(t, "aimd", "15", "15")
+
+	c.Release(1, false)
+	checkState(t, c, 12, 14)
+	checkVars(t, "aimd", "12", "14")
+
+	c.Release(1, false)
+	checkState(t, c, 10, 13)
+	checkVars(t, "aimd", "10", "13")
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
+	// 13 still in use and limit should now be 10, so can't acquire 1.
+	if want, got := context.DeadlineExceeded, c.Acquire(ctx, 1); got != want {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	cancel()
+}
+
+func TestAIMDConcurrently(t *testing.T) {
+	testPolicy(t, AIMDWithRetry(100, 0.25, nil))
+}
+
+func testPolicy(t *testing.T, p Policy) {
 	const (
 		N = 100
 		T = 100
 	)
 	var pending int32
-	c := Controller(100, 1000)
 	var begin sync.WaitGroup
 	begin.Add(N)
 	err := traverse.Each(N, func(i int) error {
 		begin.Done()
 		n := rand.Intn(T/10) + 1
-		if err := c.Acquire(context.Background(), n); err != nil {
+		if err := p.Acquire(context.Background(), n); err != nil {
 			return err
 		}
 		if m := atomic.AddInt32(&pending, int32(n)); m > T {
 			return fmt.Errorf("too many tokens: %d > %d", m, T)
 		}
 		atomic.AddInt32(&pending, -int32(n))
-		c.Release(n, (i > 10 && i < 20) || (i > 70 && i < 80))
+		p.Release(n, (i > 10 && i < 20) || (i > 70 && i < 80))
 		return nil
 	})
 	if err != nil {
@@ -124,7 +193,7 @@ func TestControllerConcurrently(t *testing.T) {
 }
 
 func TestDo(t *testing.T) {
-	c := newController(100, 10000, nil)
+	c := newController(100, 10000)
 	// Must satisfy even 150 tokens since none are used.
 	if err := Do(context.Background(), c, 150, func() (bool, error) { return true, nil }); err != nil {
 		t.Fatal(err)
