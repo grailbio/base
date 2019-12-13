@@ -255,9 +255,9 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 //   r := tsv.NewReader(...)
 //   ...
 //   type row struct {
-//     col0 string
-//     col1 int
-//     float int
+//     Col0 string
+//     Col1 int
+//     Float int
 //  }
 //  var v row
 //  err := r.Read(&v)
@@ -274,9 +274,9 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 //   field. Imagine the following row type:
 //
 //   type row struct {
-//      chr string `tsv:"chromo"`
-//      start int `tsv:"pos"`
-//      length int
+//      Chr string `tsv:"chromo"`
+//      Start int `tsv:"pos"`
+//      Length int
 //   }
 //
 //   and the following TSV file:
