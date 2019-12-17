@@ -137,7 +137,8 @@ func newClient(t *testing.T) *s3test.Client { return s3test.NewClient(t, "b") }
 func permErrorClient(t *testing.T) s3iface.S3API {
 	c := s3test.NewClient(t, "b")
 	c.Err = func(api string, input interface{}) error {
-		return fmt.Errorf("test permission error: %s", string(debug.Stack()))
+		// TODO(swami): Use an AWS error code that represents a permission error.
+		return awserr.New("", fmt.Sprintf("test permission error: %s", string(debug.Stack())), nil)
 	}
 	return c
 }

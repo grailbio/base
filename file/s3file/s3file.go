@@ -355,14 +355,7 @@ func (r *retryPolicy) shouldRetry(ctx context.Context, err error, message string
 	if err == nil {
 		return false
 	}
-	var awsRetryable bool
-	if _, ok := err.(awserr.Error); ok {
-		// The following AWS SDK method considers all unrecognized error types as retryable
-		// which is not what we want (and doesn't seem like the right thing to do anyway).
-		// So here, we use that method only if its an AWS error type.
-		awsRetryable = awsrequest.IsErrorRetryable(err)
-	}
-	if awsRetryable || awsrequest.IsErrorThrottle(err) || otherRetriableError(err) {
+	if awsrequest.IsErrorRetryable(err) || awsrequest.IsErrorThrottle(err) || otherRetriableError(err) {
 		// Transient errors. Retry with the same client.
 		log.Printf("retry %s: %v", message, err)
 		return wait()
