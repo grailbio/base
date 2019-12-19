@@ -294,6 +294,12 @@ func otherRetriableError(err error) bool {
 	aerr, ok := getAWSError(err)
 	if ok && (aerr.Code() == awsrequest.ErrCodeSerialization ||
 		aerr.Code() == awsrequest.ErrCodeRead ||
+		// The AWS SDK method IsErrorRetryable doesn't consider certain errors as retryable
+		// depending on the underlying cause.  (For a detailed explanation as to why,
+		// see https://github.com/aws/aws-sdk-go/issues/3027)
+		// In our case, we can safely consider every error of type "RequestError" regardless
+		// of the underlying cause as a retryable error.
+		aerr.Code() == "RequestError" ||
 		aerr.Code() == "SlowDown" ||
 		aerr.Code() == "InternalError") {
 		return true

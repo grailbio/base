@@ -134,17 +134,18 @@ func (p *testProvider) NotifyResult(ctx context.Context, op, path string, client
 }
 
 func newClient(t *testing.T) *s3test.Client { return s3test.NewClient(t, "b") }
-func permErrorClient(t *testing.T) s3iface.S3API {
+func errorClient(t *testing.T, err error) s3iface.S3API {
 	c := s3test.NewClient(t, "b")
 	c.Err = func(api string, input interface{}) error {
-		// TODO(swami): Use an AWS error code that represents a permission error.
-		return awserr.New("", fmt.Sprintf("test permission error: %s", string(debug.Stack())), nil)
+		return err
 	}
 	return c
 }
 
 func TestS3(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{permErrorClient(t), newClient(t)}}
+	provider := &testProvider{clients: []s3iface.S3API{errorClient(t,
+		awserr.New("", // TODO(swami): Use an AWS error code that represents a permission error.
+			fmt.Sprintf("test permission error: %s", string(debug.Stack())), nil)), newClient(t)}}
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testutil.TestAll(ctx, t, impl, "s3://b/dir")
@@ -162,8 +163,11 @@ func TestS3WithRetries(t *testing.T) {
 		r := rand.New(rand.NewSource(int64(iter)))
 		client := newClient(t)
 		client.Err = func(api string, input interface{}) error {
-			if r.Intn(3) == 0 {
+			switch r.Intn(6) {
+			case 0:
 				return awserr.New(request.ErrCodeSerialization, fmt.Sprintf("test failure %s (%s)", api, string(debug.Stack())), nil)
+			case 1:
+				return awserr.New("RequestError", "send request failed", readConnResetError{})
 			}
 			return nil
 		}
@@ -195,8 +199,15 @@ func TestListBucketRoot(t *testing.T) {
 	assert.NoError(t, l.Err())
 }
 
+type readConnResetError struct{}
+
+func (c readConnResetError) Temporary() bool { return false }
+func (c readConnResetError) Error() string   { return "read: connection reset" }
+
 func TestErrors(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{permErrorClient(t)}}
+	provider := &testProvider{clients: []s3iface.S3API{errorClient(t,
+		awserr.New("", // TODO(swami): Use an AWS error code that represents a permission error.
+			fmt.Sprintf("test permission error: %s", string(debug.Stack())), nil))}}
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 
@@ -209,6 +220,20 @@ func TestErrors(t *testing.T) {
 	l := impl.List(ctx, "s3://b/foo", true)
 	assert.False(t, l.Scan())
 	assert.Regexp(t, l.Err(), "test permission error")
+}
+
+func TestTransientErrors(t *testing.T) {
+	provider := &testProvider{clients: []s3iface.S3API{errorClient(t, awserr.New("RequestError", "send request failed", readConnResetError{}))}}
+	impl := s3file.NewImplementation(provider, s3file.Options{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := impl.Stat(ctx, "s3://b/junk0.txt")
+	assert.Regexp(t, err, "request cancelled")
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err = impl.Stat(ctx, "s3://b/junk0.txt")
+	assert.Regexp(t, err, "ran out of time while waiting")
 }
 
 func TestWriteRetryAfterError(t *testing.T) {
