@@ -10,7 +10,7 @@ import (
 	"os"
 )
 
-// A Writer is used to append fatbin images to an existing binary.
+// Writer is used to append fatbin images to an existing binary.
 type Writer struct {
 	z            *zip.Writer
 	w            io.Writer

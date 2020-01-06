@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/grailbio/base/embedbin"
 	"github.com/grailbio/base/fatbin"
 	"github.com/grailbio/base/log"
 )
@@ -30,6 +31,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, `usage:
 	gofat build   build a fatbin binary
 	gofat info    show fatbin binary information
+	gofat embed   build an embedbin binary
 `)
 		flag.PrintDefaults()
 		os.Exit(2)
@@ -48,6 +50,8 @@ func main() {
 		info(args)
 	case "build":
 		build(args)
+	case "embed":
+		embed(args)
 	}
 }
 
@@ -76,7 +80,7 @@ func build(args []string) {
 		flags    = flag.NewFlagSet("build", flag.ExitOnError)
 		goarches = flags.String("goarches", "amd64", "list of GOARCH values to build")
 		gooses   = flags.String("gooses", "darwin,linux", "list of GOOS values to build")
-		out      = flag.String("o", "", "build output path")
+		out      = flags.String("o", "", "build output path")
 	)
 	flags.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: gofat build [-o output] [packages]\n")
@@ -130,6 +134,70 @@ func build(args []string) {
 	}
 	must(fat.Close())
 	must(f.Close())
+}
+
+func embed(args []string) {
+	var (
+		flags = flag.NewFlagSet("embed", flag.ExitOnError)
+		out   = flags.String("o", "", "build output path")
+	)
+	flags.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: gofat embed [-o output] [name1:path1 [name2:path2 ...]]\n")
+		flags.PrintDefaults()
+		os.Exit(2)
+	}
+
+	must(flags.Parse(args))
+	args = flags.Args()
+	if len(args) == 0 {
+		log.Fatal("missing path to input binary")
+	}
+	inputPath, args := args[0], args[1:]
+
+	paths := map[string]string{}
+	var names []string
+	for _, arg := range args {
+		parts := strings.SplitN(arg, ":", 2)
+		if len(parts) != 2 {
+			log.Fatalf("malformed argument: %s", arg)
+		}
+		name, path := parts[0], parts[1]
+		if _, ok := paths[name]; ok {
+			log.Fatalf("duplicate name: %s", name)
+		}
+		paths[name] = path
+		names = append(names, name)
+	}
+
+	var outF *os.File
+	var err error
+	if *out != "" {
+		outF, err = os.OpenFile(*out, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0777)
+		must(err)
+		var inF *os.File
+		inF, err = os.Open(inputPath)
+		must(err)
+		_, err = io.Copy(outF, inF)
+		must(err)
+		must(inF.Close())
+	} else {
+		outF, err = os.OpenFile(inputPath, os.O_RDWR|os.O_APPEND, 0777)
+		must(err)
+	}
+
+	ew, err := embedbin.NewFileWriter(outF)
+	must(err)
+	for _, name := range names {
+		embedF, err := os.Open(paths[name])
+		must(err)
+		embedW, err := ew.Create(name)
+		must(err)
+		_, err = io.Copy(embedW, embedF)
+		must(err)
+		must(embedF.Close())
+	}
+	must(ew.Close())
+	must(outF.Close())
 }
 
 func must(err error) {
