@@ -9,6 +9,10 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
+	"os"
+	"os/exec"
+	"syscall"
 	"time"
 
 	_ "github.com/grailbio/base/cmdutil/interactive"
@@ -70,8 +74,8 @@ func saveCredentials(creds ticket.TlsCredentials) error {
 }
 
 func run(ctx *context.T, env *cmdline.Env, args []string) error {
-	if len(args) != 1 {
-		return env.UsageErrorf("Exactly one arguments (<ticket>) is required.")
+	if len(args) == 0 {
+		return env.UsageErrorf("At least one arguments (<ticket>) is required.")
 	}
 
 	ticketPath := args[0]
@@ -113,6 +117,33 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 		case (ticket.TicketTlsClientTicket{}).Index():
 			return saveCredentials(t.(ticket.TicketTlsClientTicket).Value.Credentials)
 		}
+	}
+
+	if t.Index() == (ticket.TicketAwsTicket{}).Index() && len(args) > 1 {
+		creds := t.(ticket.TicketAwsTicket).Value.AwsCredentials
+		awsEnv := map[string]string{
+			"AWS_ACCESS_KEY_ID":     creds.AccessKeyId,
+			"AWS_SECRET_ACCESS_KEY": creds.SecretAccessKey,
+			"AWS_SESSION_TOKEN":     creds.SessionToken,
+		}
+
+		args = args[1:]
+		path, err := exec.LookPath(args[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		for k := range awsEnv {
+			os.Unsetenv(k)
+		}
+		env := os.Environ()
+		for k, v := range awsEnv {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+
+		// run runs a program with certain arguments and certain environment
+		// variables. This function never returns. The arguments list contains
+		// the name of the program.
+		return syscall.Exec(path, args, env)
 	}
 
 	fmt.Println(jsonOutput)
