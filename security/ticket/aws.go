@@ -5,14 +5,19 @@
 package ticket
 
 import (
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecr"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/grailbio/base/cloud/ec2util"
 	"github.com/grailbio/base/ttlcache"
 	"v.io/x/lib/vlog"
 )
@@ -247,4 +252,104 @@ func newEcrTicket(awsCredentials AwsCredentials) EcrTicket {
 		Expiration:         aws.TimeValue(auth.ExpiresAt).Format(time.RFC3339Nano),
 		Endpoint:           *auth.ProxyEndpoint,
 	}
+}
+
+// Returns a list of Compute Instances that match the filter
+func AwsEc2InstanceLookup(ctx *TicketContext, builder *AwsComputeInstancesBuilder) ([]ComputeInstance, error) {
+	var instances []ComputeInstance
+
+	if len(builder.InstanceFilters) == 0 {
+		return instances, errors.New("An instance filters is required")
+	}
+
+	// Create the STS session with the provided lookup role
+	config := aws.Config{
+		Region:      aws.String(builder.Region),
+		Credentials: stscreds.NewCredentials(ctx.session, builder.AwsAccountLookupRole),
+		Retryer: client.DefaultRetryer{
+			NumMaxRetries: 100,
+		},
+	}
+
+	s, err := session.NewSession(&config)
+	if err != nil {
+		vlog.Infof("error: %+v", err)
+		return instances, err
+	}
+
+	var filters []*ec2.Filter
+	filters = append(filters,
+		&ec2.Filter{
+			Name: aws.String("instance-state-name"),
+			Values: []*string{
+				aws.String("running"),
+			},
+		},
+	)
+
+	for _, f := range builder.InstanceFilters {
+		filters = append(filters,
+			&ec2.Filter{
+				Name: aws.String(f.Key),
+				Values: []*string{
+					aws.String(f.Value),
+				},
+			},
+		)
+	}
+
+	output, err := ec2.New(s, &config).DescribeInstances(&ec2.DescribeInstancesInput{
+		Filters: filters,
+	})
+	if err != nil {
+		vlog.Error(err)
+		return instances, err
+	}
+
+	for _, reservations := range output.Reservations {
+		for _, instance := range reservations.Instances {
+			var params []Parameter
+			publicIp, err := ec2util.GetPublicIPAddress(instance)
+			if err != nil {
+				vlog.Error(err)
+				continue // parse error skip
+			}
+
+			privateIp, err := ec2util.GetPrivateIPAddress(instance)
+			if err != nil {
+				vlog.Error(err)
+				continue // parse error skip
+			}
+
+			ec2Tags, err := ec2util.GetTags(instance)
+			if err != nil {
+				vlog.Error(err)
+				continue // parse error skip
+			}
+			for _, tag := range ec2Tags {
+				params = append(params,
+					Parameter{
+						Key:   *tag.Key,
+						Value: *tag.Value,
+					})
+			}
+
+			instanceId, err := ec2util.GetInstanceId(instance)
+			if err != nil {
+				vlog.Error(err)
+				continue // parse error skip
+			}
+
+			instances = append(instances,
+				ComputeInstance{
+					PublicIp:   publicIp,
+					PrivateIp:  privateIp,
+					InstanceId: instanceId,
+					Tags:       params,
+				})
+		}
+	}
+
+	vlog.Infof("instances %+v", instances)
+	return instances, nil
 }

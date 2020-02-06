@@ -48,7 +48,7 @@ func init() {
 	awsPublicCertificates = []*x509.Certificate{cert}
 }
 
-func getInstance(output *ec2.DescribeInstancesOutput) (*ec2.Instance, error) {
+func GetInstance(output *ec2.DescribeInstancesOutput) (*ec2.Instance, error) {
 	if len(output.Reservations) != 1 {
 		return nil, fmt.Errorf("unexpected number of Reservations (want 1): %+v", output)
 	}
@@ -66,48 +66,85 @@ func getInstance(output *ec2.DescribeInstancesOutput) (*ec2.Instance, error) {
 	return instance, nil
 }
 
-// GetIamInstanceProfileARN extracts the ARN from the output of a call to
+// GetIamInstanceProfileARN extracts the ARN from the `instance` output of a call to
 // DescribeInstances. The ARN is expected to be non-empty.
-func GetIamInstanceProfileARN(output *ec2.DescribeInstancesOutput) (string, error) {
-	instance, err := getInstance(output)
-	if err != nil {
-		return "", err
+func GetIamInstanceProfileARN(instance *ec2.Instance) (string, error) {
+	if instance == nil {
+		return "", fmt.Errorf("non-nil instance is required: %+v", instance)
 	}
 
 	if instance.IamInstanceProfile == nil {
-		return "", fmt.Errorf("non-nil IamInstanceProfile is required: %+v", output)
+		return "", fmt.Errorf("non-nil IamInstanceProfile is required: %+v", instance)
 	}
 
 	profile := instance.IamInstanceProfile
 	if profile.Arn == nil {
-		return "", fmt.Errorf("non-nil Arn is required: %+v", output)
+		return "", fmt.Errorf("non-nil Arn is required: %+v", instance)
 	}
 
 	if len(*profile.Arn) == 0 {
-		return "", fmt.Errorf("non-empty Arn is required: %+v", output)
+		return "", fmt.Errorf("non-empty Arn is required: %+v", instance)
 	}
 
 	return *profile.Arn, nil
 }
 
 // GetPublicIPAddress extracts the public IP address from the output of a call
-// to DescribeInstances. The response is expected to be non-empty if the
+// to DescribeInstances Instance. The response is expected to be non-empty if the
 // instance has a public IP and empty ("") if the instance is private.
-func GetPublicIPAddress(output *ec2.DescribeInstancesOutput) (string, error) {
-	instance, err := getInstance(output)
-	if err != nil {
-		return "", err
+func GetPublicIPAddress(instance *ec2.Instance) (string, error) {
+	if instance == nil {
+		return "", fmt.Errorf("non-nil instance is required: %+v", instance)
 	}
 
-	if instance.PublicIpAddress == nil {
-		return "", nil
-	}
-
-	if len(*instance.PublicIpAddress) == 0 {
+	if instance.PublicIpAddress == nil || len(*instance.PublicIpAddress) == 0 {
 		return "", nil
 	}
 
 	return *instance.PublicIpAddress, nil
+}
+
+// GetPrivateIPAddress extracts the private IP address from the output of a call
+// to DescribeInstances Instance. The response is expected to be the first private IP
+// attached to the instance.
+// If the instances no attached interfaces, the value is empty ("")
+func GetPrivateIPAddress(instance *ec2.Instance) (string, error) {
+	if instance == nil {
+		return "", fmt.Errorf("non-nil instance is required: %+v", instance)
+	}
+
+	if instance.PrivateIpAddress == nil || len(*instance.PrivateIpAddress) == 0 {
+		return "", nil
+	}
+
+	return *instance.PrivateIpAddress, nil
+}
+
+// GetTags returns a map of Key/Value pairs representing the tags
+func GetTags(instance *ec2.Instance) ([]*ec2.Tag, error) {
+	if instance == nil {
+		return nil, fmt.Errorf("non-nil instance is required: %+v", instance)
+	}
+
+	if instance.Tags == nil || len(instance.Tags) == 0 {
+		return nil, nil
+	}
+
+	return instance.Tags, nil
+}
+
+// GetInstanceId returns the instanceID from the output of a call
+// to DescribeInstances Instance.
+func GetInstanceId(instance *ec2.Instance) (string, error) {
+	if instance == nil {
+		return "", fmt.Errorf("non-nil instance is required: %+v", instance)
+	}
+
+	if instance.InstanceId == nil || len(*instance.InstanceId) == 0 {
+		return "", nil
+	}
+
+	return *instance.InstanceId, nil
 }
 
 // ValidateInstance checks if an EC2 instance exists and it has the expected
@@ -117,7 +154,12 @@ func GetPublicIPAddress(output *ec2.DescribeInstancesOutput) (string, error) {
 func ValidateInstance(output *ec2.DescribeInstancesOutput, doc IdentityDocument, remoteAddr string) (role string, err error) {
 	vlog.Infof("reservations:\n%+v", output.Reservations)
 
-	publicIP, err := GetPublicIPAddress(output)
+	instance, err := GetInstance(output)
+	if err != nil {
+		return "", err
+	}
+
+	publicIP, err := GetPublicIPAddress(instance)
 	if err != nil {
 		return "", err
 	}
@@ -133,7 +175,7 @@ func ValidateInstance(output *ec2.DescribeInstancesOutput, doc IdentityDocument,
 		}
 	}
 
-	arn, err := GetIamInstanceProfileARN(output)
+	arn, err := GetIamInstanceProfileARN(instance)
 	if err != nil {
 		return "", err
 	}

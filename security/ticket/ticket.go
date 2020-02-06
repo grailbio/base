@@ -37,12 +37,13 @@ func NewTicketContext(ctx *context.T, session *session.Session, remoteBlessings 
 
 // Builder is the interface for building a Ticket.
 type Builder interface {
-	Build(ctx *TicketContext) (Ticket, error)
+	Build(ctx *TicketContext, parameters []Parameter) (Ticket, error)
 }
 
 var (
 	_ Builder = (*TicketAwsTicket)(nil)
 	_ Builder = (*TicketS3Ticket)(nil)
+	_ Builder = (*TicketSshCertificateTicket)(nil)
 	_ Builder = (*TicketEcrTicket)(nil)
 	_ Builder = (*TicketTlsServerTicket)(nil)
 	_ Builder = (*TicketTlsClientTicket)(nil)
@@ -55,7 +56,7 @@ var (
 )
 
 // Build builds a Ticket by running all the builders.
-func (t TicketAwsTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketAwsTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketAwsTicket{}
 	var err error
 	if t.Value.AwsAssumeRoleBuilder != nil {
@@ -88,7 +89,7 @@ func (t *AwsCredentials) kmsInterpolate() (err error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketS3Ticket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketS3Ticket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketS3Ticket{}
 	var err error
 	if t.Value.AwsAssumeRoleBuilder != nil {
@@ -115,7 +116,48 @@ func (t TicketS3Ticket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketEcrTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketSshCertificateTicket) Build(ctx *TicketContext, parameters []Parameter) (Ticket, error) {
+	rCompute := TicketSshCertificateTicket{}
+
+	// Populate the ComputeInstances first as input to the SSH CertBuilder
+	if t.Value.AwsComputeInstancesBuilder != nil {
+		var instanceBuilder = t.Value.AwsComputeInstancesBuilder
+		if instanceBuilder.AwsAccountLookupRole != "" {
+			instances, err := AwsEc2InstanceLookup(ctx, instanceBuilder)
+			if err != nil {
+				return nil, err
+			}
+			rCompute.Value.ComputeInstances = instances
+		} else {
+			return rCompute, fmt.Errorf("AwsAccountLookupRole required for AwsComputeInstancesBuilder.")
+		}
+	}
+
+	rSsh := TicketSshCertificateTicket{}
+	if t.Value.SshCertAuthorityBuilder != nil {
+
+		// Set the PublicKey parameter on the builder from the input parameters
+		// NOTE: If multiple publicKeys are provided as input, use the last one
+		for _, param := range parameters {
+			if param.Key == "PublicKey" {
+				t.Value.SshCertAuthorityBuilder.PublicKey = param.Value
+			}
+		}
+
+		var err error
+		rSsh, err = t.Value.SshCertAuthorityBuilder.newSshCertificateTicket(ctx)
+		if err != nil {
+			return rSsh, err
+		}
+		t.Value.SshCertAuthorityBuilder = nil
+	}
+
+	r := *mergeOrDie(&rCompute, &rSsh).(*TicketSshCertificateTicket)
+	return *mergeOrDie(&r, &t).(*TicketSshCertificateTicket), nil
+}
+
+// Build builds a Ticket by running all the builders.
+func (t TicketEcrTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketEcrTicket{}
 	if t.Value.AwsAssumeRoleBuilder != nil {
 		var err error
@@ -129,7 +171,7 @@ func (t TicketEcrTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketTlsServerTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketTlsServerTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketTlsServerTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
@@ -143,7 +185,7 @@ func (t TicketTlsServerTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketTlsClientTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketTlsClientTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketTlsClientTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
@@ -157,7 +199,7 @@ func (t TicketTlsClientTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketDockerTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketDockerTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketDockerTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
@@ -171,7 +213,7 @@ func (t TicketDockerTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketDockerServerTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketDockerServerTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketDockerServerTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
@@ -185,7 +227,7 @@ func (t TicketDockerServerTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketDockerClientTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketDockerClientTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketDockerClientTicket{}
 	if t.Value.TlsCertAuthorityBuilder != nil {
 		var err error
@@ -199,7 +241,7 @@ func (t TicketDockerClientTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketB2Ticket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketB2Ticket) Build(_ *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketB2Ticket{}
 	if t.Value.B2AccountAuthorizationBuilder != nil {
 		var err error
@@ -213,7 +255,7 @@ func (t TicketB2Ticket) Build(_ *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketVanadiumTicket) Build(ctx *TicketContext) (Ticket, error) {
+func (t TicketVanadiumTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketVanadiumTicket{}
 	if t.Value.VanadiumBuilder != nil {
 		var err error
@@ -227,7 +269,7 @@ func (t TicketVanadiumTicket) Build(ctx *TicketContext) (Ticket, error) {
 }
 
 // Build builds a Ticket.
-func (t TicketGenericTicket) Build(_ *TicketContext) (Ticket, error) {
+func (t TicketGenericTicket) Build(_ *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketGenericTicket{}
 	r = *mergeOrDie(&r, &t).(*TicketGenericTicket)
 	var err error

@@ -15,7 +15,7 @@ import (
 	"github.com/grailbio/base/cloud/ec2util"
 )
 
-func TestGetARN(t *testing.T) {
+func TestGetInstance(t *testing.T) {
 	cases := []struct {
 		output *ec2.DescribeInstancesOutput
 
@@ -53,19 +53,29 @@ func TestGetARN(t *testing.T) {
 				},
 			},
 		}, "", "non-nil IamInstanceProfile"},
-		{&ec2.DescribeInstancesOutput{
-			Reservations: []*ec2.Reservation{
-				&ec2.Reservation{
-					Instances: []*ec2.Instance{
-						&ec2.Instance{
-							IamInstanceProfile: &ec2.IamInstanceProfile{},
-						},
-					},
-				},
-			},
-		}, "", "non-nil Arn"},
-		{newDescribeInstancesOutput("", ""), "", "non-empty Arn"},
-		{newDescribeInstancesOutput("dummy", ""), "dummy", ""},
+	}
+
+	for _, c := range cases {
+		_, err := ec2util.GetInstance(c.output)
+		if err != nil && (c.errPrefix == "" || !strings.HasPrefix(err.Error(), c.errPrefix)) {
+			t.Errorf("GetInstance: got %q, want %q", err, c.errPrefix)
+		}
+	}
+}
+
+func TestGetARN(t *testing.T) {
+	cases := []struct {
+		output *ec2.Instance
+
+		arn       string
+		errPrefix string
+	}{
+		{
+			&ec2.Instance{
+				IamInstanceProfile: &ec2.IamInstanceProfile{},
+			}, "", "non-nil Arn"},
+		{newInstancesOutput("", "", ""), "", "non-empty Arn"},
+		{newInstancesOutput("", "dummy", ""), "dummy", ""},
 	}
 
 	for _, c := range cases {
@@ -76,6 +86,77 @@ func TestGetARN(t *testing.T) {
 		if arn != c.arn {
 			t.Errorf("GetIamInstanceProfileARN: got %q, want %q", arn, c.arn)
 		}
+	}
+}
+
+func TestGetInstanceId(t *testing.T) {
+	cases := []struct {
+		output *ec2.Instance
+
+		instanceId string
+		errPrefix  string
+	}{
+		{nil, "", "non-nil"},
+		{newInstancesOutput("i-1234", "", ""),
+			"i-1234", ""},
+	}
+
+	for _, c := range cases {
+		instanceId, err := ec2util.GetInstanceId(c.output)
+		if err != nil && (c.errPrefix == "" || !strings.HasPrefix(err.Error(), c.errPrefix)) {
+			t.Errorf("GetInstanceId: got %q, want %q", err, c.errPrefix)
+		}
+		if instanceId != c.instanceId {
+			t.Errorf("GetInstanceId: got %q, want %q", instanceId, c.instanceId)
+		}
+	}
+}
+
+func TestGetPublicIPAddress(t *testing.T) {
+	cases := []struct {
+		output *ec2.Instance
+
+		publicIp  string
+		errPrefix string
+	}{
+		{nil, "", "non-nil"},
+		{newInstancesOutput("", "", "192.168.1.1"),
+			"192.168.1.1", ""},
+	}
+
+	for _, c := range cases {
+		publicIp, err := ec2util.GetPublicIPAddress(c.output)
+		if err != nil && (c.errPrefix == "" || !strings.HasPrefix(err.Error(), c.errPrefix)) {
+			t.Errorf("GetPublicIPAddress: got %q, want %q", err, c.errPrefix)
+		}
+		if publicIp != c.publicIp {
+			t.Errorf("GetPublicIPAddress: got %q, want %q", publicIp, c.publicIp)
+		}
+	}
+}
+
+// TODO(aeiser) Implement test checking for tags
+func TestGetTags(t *testing.T) {
+	cases := []struct {
+		output *ec2.Instance
+
+		tags      string
+		errPrefix string
+	}{
+		{nil, "", "non-nil"},
+		{&ec2.Instance{
+			IamInstanceProfile: &ec2.IamInstanceProfile{},
+		}, "", "non-nil Arn"},
+	}
+
+	for _, c := range cases {
+		_, err := ec2util.GetTags(c.output)
+		if err != nil && (c.errPrefix == "" || !strings.HasPrefix(err.Error(), c.errPrefix)) {
+			t.Errorf("GetTags: got %q, want %q", err, c.errPrefix)
+		}
+		//		if tags != c.tags {
+		//			t.Errorf("GetTags: got %q, want %q", tags, c.tags)
+		//		}
 	}
 }
 
@@ -205,14 +286,19 @@ func newDescribeInstancesOutput(arn string, publicIP string) *ec2.DescribeInstan
 		Reservations: []*ec2.Reservation{
 			&ec2.Reservation{
 				Instances: []*ec2.Instance{
-					&ec2.Instance{
-						IamInstanceProfile: &ec2.IamInstanceProfile{
-							Arn: aws.String(arn),
-						},
-						PublicIpAddress: aws.String(publicIP),
-					},
+					newInstancesOutput("", arn, publicIP),
 				},
 			},
 		},
+	}
+}
+
+func newInstancesOutput(instanceId string, arn string, publicIP string) *ec2.Instance {
+	return &ec2.Instance{
+		InstanceId: &instanceId,
+		IamInstanceProfile: &ec2.IamInstanceProfile{
+			Arn: aws.String(arn),
+		},
+		PublicIpAddress: aws.String(publicIP),
 	}
 }

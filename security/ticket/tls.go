@@ -15,7 +15,7 @@ import (
 	"v.io/x/lib/vlog"
 )
 
-const driftMargin = 10 * time.Minute
+const tlsDriftMargin = 10 * time.Minute
 
 func (b *TlsCertAuthorityBuilder) newTlsClientTicket(ctx *TicketContext) (TicketTlsClientTicket, error) {
 	tlsCredentials, err := b.genTlsCredentials(ctx)
@@ -99,7 +99,7 @@ func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(ctx *TicketConte
 	if err != nil {
 		return empty, err
 	}
-	authority := certificateauthority.CertificateAuthority{DriftMargin: driftMargin, Signer: secret}
+	authority := certificateauthority.CertificateAuthority{DriftMargin: tlsDriftMargin, Signer: secret}
 	if err := authority.Init(); err != nil {
 		return empty, err
 	}

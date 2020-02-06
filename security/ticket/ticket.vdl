@@ -45,11 +45,42 @@ type TlsCertAuthorityBuilder struct {
 
     // Common Name of the generated cert.
     CommonName string
-    
+
     // Subject Alternate Name list.
-    // Note: x509 spec says if SAN is set, CN is usually ignored. 
+    // Note: x509 spec says if SAN is set, CN is usually ignored.
     //       Include CN in SAN list if you want the CN to be verified.
     San []string
+}
+
+type SshCertAuthorityBuilder struct {
+    // ssh-encoded private key of the Certificate Authority.
+    CaPrivateKey string
+
+    // ssh-encoded Certificate
+    CaCertificate string
+
+    // ssh-encoded Public key that will be signed to create the certificate.
+    PublicKey string
+
+    // Additional SSH Cert options like
+    //    permit-X11-forwarding
+    //    permit-agent-forwarding
+    //    permit-port-forwarding
+    //    permit-pty
+    //    permit-user-rc
+    ExtensionsOptions []string
+
+    // Additional SSH Options that are required to be valid/accepted
+    CriticalOptions []string
+
+    // The Usernames that this key can connect as - defaults as
+    //   ubuntu
+    //   core
+    //   ec2-user
+    Principals []string
+
+    // TTL for the generated cert - user cert < 60 ; host cert < 2628000 (5 years)
+    TtlMin int32
 }
 
 // B2AccountAuthorizationBuilder describes the information required to
@@ -103,7 +134,13 @@ type EcrTicket struct {
     Endpoint string
 }
 
-// TlsCredentials describes a generic set of TLS credentials that include:
+// SshCert describes a ssh public Certifcate
+type SshCert struct {
+    // ssh-encoded certificate (host or user).
+    Cert string
+}
+
+// TlsCredentials describes a generic set of Tls credentials that include:
 // the CA that accepted by the client (only peers that present a certificate
 // sign by this CA are accepted), the client certificate and the client
 // private key.
@@ -154,7 +191,7 @@ type DockerServerTicket struct {
     Credentials TlsCredentials
 }
 
-// DockerClientTicket instance represents the TLS certificate material required 
+// DockerClientTicket instance represents the TLS certificate material required
 // for clients to authenticate against a specific DockerServer.
 type DockerClientTicket struct {
     TlsCertAuthorityBuilder ?TlsCertAuthorityBuilder
@@ -165,6 +202,38 @@ type DockerClientTicket struct {
     Url string
 }
 
+// SshCertificateTicket describes a SSH Signed Certificate.
+// SSH Certificates are essentially a version of TLS certs but they have additional
+// optional parameters and can take a public key as part of their signing request.
+type SshCertificateTicket struct {
+    SshCertAuthorityBuilder ?SshCertAuthorityBuilder
+    AwsComputeInstancesBuilder ?AwsComputeInstancesBuilder
+
+    ComputeInstances []ComputeInstance
+    Credentials SshCert
+    // Recommended username to use
+    Username string
+}
+
+type AwsComputeInstancesBuilder struct {
+    // Instance Filters that will produce a list of instance IDs and related information
+    // https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstances.html
+    InstanceFilters []Parameter
+
+    // AWS ARN for a role that should be used to perform the instance lookups
+    AwsAccountLookupRole string
+
+    // AWS region to use for the lookup
+    Region string
+}
+
+// Simplification of describeInstance data to provide to ticket-server users
+type ComputeInstance struct {
+    PublicIp string
+    PrivateIp string
+    InstanceId string
+    Tags []Parameter
+}
 
 // B2Ticket instance contains a B2 account level authorization
 // token plus URLs and configuration values for the account.
@@ -199,6 +268,7 @@ type GenericTicket struct {
 type Ticket union {
     AwsTicket AwsTicket
     S3Ticket S3Ticket
+    SshCertificateTicket SshCertificateTicket
     EcrTicket EcrTicket
     TlsServerTicket TlsServerTicket
     TlsClientTicket TlsClientTicket
@@ -221,10 +291,18 @@ type Config struct {
     Permissions access.Permissions
 }
 
+// Key/Value pair that can be passed into the GET request.
+type Parameter struct {
+    Key string
+    Value string
+}
+
+
 // TicketService provides a way to obtain a ticket. The access can be
 // restricted by setting the permissions appropriately.
 type TicketService interface {
     GetPermissions() (perms access.Permissions, version string | error) {access.Read}
     SetPermissions(perms access.Permissions, version string) error {access.Admin}
     Get() (Ticket | error) {access.Read}
+    GetWithParameters(parameters []Parameter) (Ticket | error) {access.Read}
 }

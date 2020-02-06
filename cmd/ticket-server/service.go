@@ -24,32 +24,40 @@ type service struct {
 }
 
 func (s *service) Get(ctx *context.T, call rpc.ServerCall) (ticket.Ticket, error) {
+	// use an empty parameters list
+	return (s.GetWithParameters(ctx, call, nil))
+
+}
+
+func (s *service) GetWithParameters(ctx *context.T, call rpc.ServerCall, parameters []ticket.Parameter) (ticket.Ticket, error) {
 	vlog.Infof("Get: ctx: %+v call: %+v", ctx, call)
 	remoteBlessings := call.Security().RemoteBlessings()
 	ticketCtx := ticket.NewTicketContext(ctx, s.awsSession, remoteBlessings)
 	switch t := s.ticket.(type) {
 	case ticket.TicketAwsTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketS3Ticket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
+	case ticket.TicketSshCertificateTicket:
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketEcrTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketTlsServerTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketTlsClientTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketDockerTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketDockerServerTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketDockerClientTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketB2Ticket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketVanadiumTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	case ticket.TicketGenericTicket:
-		return t.Build(ticketCtx)
+		return t.Build(ticketCtx, parameters)
 	}
 	return nil, fmt.Errorf("not implemented")
 }
