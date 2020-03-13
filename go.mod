@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go v0.46.3 // indirect
 	github.com/DataDog/zstd v1.4.1
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5
-	github.com/aws/aws-sdk-go v1.25.10
+	github.com/aws/aws-sdk-go v1.29.24
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cespare/xxhash/v2 v2.1.0
 	github.com/coreos/go-oidc v2.1.0+incompatible
@@ -23,13 +23,13 @@ require (
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/keybase/go-keychain v0.0.0-20190828153431-2390ae572545
 	github.com/klauspost/compress v1.8.6
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.4.0
 	github.com/willf/bitset v1.1.10
 	github.com/yasushi-saito/zlibng v0.0.0-20190922135643-2a860060b80c
 	go.opencensus.io v0.22.1 // indirect
 	golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc
-	golang.org/x/net v0.0.0-20191007182048-72f939374954
+	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20191008105621-543471e840be
@@ -40,4 +40,8 @@ require (
 	v.io/x/lib v0.1.4
 )
 
-require google.golang.org/api v0.10.0
+require (
+	github.com/cespare/xxhash v1.1.0
+	github.com/shirou/gopsutil v2.19.9+incompatible
+	google.golang.org/api v0.10.0
+)
