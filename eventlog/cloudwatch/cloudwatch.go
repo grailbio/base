@@ -189,11 +189,11 @@ func (c *CloudWatchEventer) loop(ctx context.Context) {
 		inputLogEvents []*cloudwatchlogs.InputLogEvent
 		batchSize      int
 	)
-	sync := func(drain bool) {
+	sync := func(drainTimer bool) {
 		defer func() {
 			inputLogEvents = nil
 			batchSize = 0
-			if !syncTimer.Stop() && drain {
+			if !syncTimer.Stop() && drainTimer {
 				<-syncTimer.C
 			}
 			syncTimer.Reset(syncInterval)
@@ -238,7 +238,7 @@ func (c *CloudWatchEventer) loop(ctx context.Context) {
 			Timestamp: aws.Int64(e.timestamp.UnixNano() / 1000000),
 		})
 	}
-	drain := func() {
+	drainEvents := func() {
 	drainLoop:
 		for {
 			select {
@@ -252,7 +252,7 @@ func (c *CloudWatchEventer) loop(ctx context.Context) {
 	for {
 		select {
 		case <-c.syncc:
-			drain()
+			drainEvents()
 			sync(false)
 			c.syncDonec <- struct{}{}
 		case <-syncTimer.C:
