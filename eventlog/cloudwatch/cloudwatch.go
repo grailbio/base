@@ -111,7 +111,7 @@ func NewCloudWatchEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, s
 		client:    client,
 		group:     group,
 		stream:    stream,
-		eventc:    make(chan event, 1024),
+		eventc:    make(chan event, eventBufferSize),
 		syncc:     make(chan struct{}),
 		syncDonec: make(chan struct{}),
 		donec:     make(chan struct{}),
