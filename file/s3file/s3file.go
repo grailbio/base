@@ -723,9 +723,9 @@ func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
 func newInfo(path string, output *s3.GetObjectOutput) *s3Info {
 	return &s3Info{
 		name:    filepath.Base(path),
-		size:    *output.ContentLength,
-		modTime: *output.LastModified,
-		etag:    *output.ETag,
+		size:    aws.Int64Value(output.ContentLength),
+		modTime: aws.TimeValue(output.LastModified),
+		etag:    aws.StringValue(output.ETag),
 	}
 }
 
