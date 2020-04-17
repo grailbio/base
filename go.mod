@@ -28,15 +28,15 @@ require (
 	github.com/willf/bitset v1.1.10
 	github.com/yasushi-saito/zlibng v0.0.0-20190922135643-2a860060b80c
 	go.opencensus.io v0.22.1 // indirect
-	golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc
-	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20191008105621-543471e840be
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd // indirect
 	google.golang.org/grpc v1.24.0 // indirect
-	v.io v0.1.7
+	v.io v0.0.0-20200306001120-b448c780c269
 	v.io/x/lib v0.1.4
 )
 
