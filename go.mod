@@ -36,7 +36,7 @@ require (
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd // indirect
 	google.golang.org/grpc v1.24.0 // indirect
-	v.io v0.0.0-20200306001120-b448c780c269
+	v.io v0.1.7
 	v.io/x/lib v0.1.4
 )
 
