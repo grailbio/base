@@ -739,26 +739,27 @@ func (f *s3File) handleStat(req request) {
 	policy := newRetryPolicy(clients, f.opts)
 	for {
 		var ids s3RequestIDs
-		output, err := policy.client().GetObjectWithContext(ctx, &s3.GetObjectInput{
+		output, err := policy.client().HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 			Bucket: aws.String(f.bucket),
 			Key:    aws.String(f.key)},
 			captureRequestIDs(&ids))
-		if policy.shouldRetry(req.ctx, err, f.name) {
+		if policy.shouldRetry(ctx, err, f.name) {
 			continue
 		}
 		if err != nil {
 			req.ch <- response{err: annotate(err, ids, &policy, "s3file.stat", f.name)}
 			return
 		}
-		if output.Body == nil {
-			panic(ids.String() + ": GetObject with nil Body")
-		}
-		output.Body.Close() // nolint: errcheck
 		if *output.ETag == "" {
 			req.ch <- response{err: errors.E("read", f.name, errors.NotExist, "awsrequestID:", ids.String())}
 			return
 		}
-		f.info = newInfo(f.name, output)
+		f.info = &s3Info{
+			name:    filepath.Base(f.name),
+			size:    *output.ContentLength,
+			modTime: *output.LastModified,
+			etag:    *output.ETag,
+		}
 		req.ch <- response{err: nil}
 		return
 	}
