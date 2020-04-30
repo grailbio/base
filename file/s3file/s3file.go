@@ -516,42 +516,16 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 // Stat implements file.Implementation interface.
 func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (file.Info, error) {
 	resp := runRequest(ctx, func() response {
-		_, bucket, key, err := ParseURL(path)
-		if err != nil {
-			return response{err: err}
-		}
 		clients, err := impl.provider.Get(ctx, "GetObject", path)
 		if err != nil {
 			return response{err: err}
 		}
 		policy := newRetryPolicy(clients, mergeFileOpts(opts))
-		for {
-			var ids s3RequestIDs
-			resp, err := policy.client().HeadObjectWithContext(ctx, &s3.HeadObjectInput{
-				Bucket: aws.String(bucket),
-				Key:    aws.String(key),
-			}, captureRequestIDs(&ids))
-			if policy.shouldRetry(ctx, err, path) {
-				continue
-			}
-			if err != nil {
-				return response{err: annotate(err, ids, &policy, fmt.Sprintf("s3file.stat %s", path))}
-			}
-			if *resp.ETag == "" {
-				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
-			}
-			if *resp.ContentLength == 0 && strings.HasSuffix(path, "/") {
-				// Assume this is a directory marker:
-				// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
-				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
-			}
-			return response{info: &s3Info{
-				name:    filepath.Base(path),
-				size:    *resp.ContentLength,
-				modTime: *resp.LastModified,
-				etag:    *resp.ETag,
-			}}
+		info, err := stat(ctx, clients, policy, path)
+		if err != nil {
+			return response{err: err}
 		}
+		return response{info: info}
 	})
 	return resp.info, resp.err
 }
@@ -731,46 +705,19 @@ func newInfo(path string, output *s3.GetObjectOutput) *s3Info {
 
 func (f *s3File) handleStat(req request) {
 	ctx := req.ctx
-	clients, err := f.provider.Get(req.ctx, "GetObject", f.name)
+	clients, err := f.provider.Get(ctx, "GetObject", f.name)
 	if err != nil {
 		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.stat %v", f.name))}
 		return
 	}
 	policy := newRetryPolicy(clients, f.opts)
-	for {
-		var ids s3RequestIDs
-		output, err := policy.client().HeadObjectWithContext(ctx, &s3.HeadObjectInput{
-			Bucket: aws.String(f.bucket),
-			Key:    aws.String(f.key)},
-			captureRequestIDs(&ids))
-		if policy.shouldRetry(ctx, err, f.name) {
-			continue
-		}
-		if err != nil {
-			req.ch <- response{err: annotate(err, ids, &policy, "s3file.stat", f.name)}
-			return
-		}
-		if output.ETag == nil || *output.ETag == "" {
-			req.ch <- response{err: errors.E("s3file.stat: empty ETag", f.name, errors.NotExist, "awsrequestID:", ids.String())}
-			return
-		}
-		if output.ContentLength == nil {
-			req.ch <- response{err: errors.E("s3file.stat: nil ContentLength", f.name, errors.NotExist, "awsrequestID:", ids.String())}
-			return
-		}
-		if output.LastModified == nil {
-			req.ch <- response{err: errors.E("s3file.stat: nil LastModified", f.name, errors.NotExist, "awsrequestID:", ids.String())}
-			return
-		}
-		f.info = &s3Info{
-			name:    filepath.Base(f.name),
-			size:    *output.ContentLength,
-			modTime: *output.LastModified,
-			etag:    *output.ETag,
-		}
-		req.ch <- response{err: nil}
+	info, err := stat(ctx, clients, policy, f.name)
+	if err != nil {
+		req.ch <- response{err: err}
 		return
 	}
+	f.info = info
+	req.ch <- response{err: nil}
 }
 
 func (f *s3File) Reader(ctx context.Context) io.ReadSeeker {
@@ -1402,6 +1349,49 @@ func ParseURL(url string) (scheme, bucket, key string, err error) {
 		return scheme, parts[0], "", nil
 	}
 	return scheme, parts[0], parts[1], nil
+}
+
+func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path string) (*s3Info, error) {
+	_, bucket, key, err := ParseURL(path)
+	if err != nil {
+		return nil, errors.E(errors.Invalid, "could not parse", path, err)
+	}
+	for {
+		var ids s3RequestIDs
+		output, err := policy.client().HeadObjectWithContext(ctx,
+			&s3.HeadObjectInput{
+				Bucket: aws.String(bucket),
+				Key:    aws.String(key),
+			},
+			captureRequestIDs(&ids),
+		)
+		if policy.shouldRetry(ctx, err, path) {
+			continue
+		}
+		if err != nil {
+			return nil, annotate(err, ids, &policy, "s3file.stat", path)
+		}
+		if output.ETag == nil || *output.ETag == "" {
+			return nil, errors.E("s3file.stat: empty ETag", path, errors.NotExist, "awsrequestID:", ids.String())
+		}
+		if output.ContentLength == nil {
+			return nil, errors.E("s3file.stat: nil ContentLength", path, errors.NotExist, "awsrequestID:", ids.String())
+		}
+		if *output.ContentLength == 0 && strings.HasSuffix(path, "/") {
+			// Assume this is a directory marker:
+			// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
+			return nil, errors.E("s3file.stat: directory marker at path", path, errors.Invalid, "awsrequestID:", ids.String())
+		}
+		if output.LastModified == nil {
+			return nil, errors.E("s3file.stat: nil LastModified", path, errors.NotExist, "awsrequestID:", ids.String())
+		}
+		return &s3Info{
+			name:    filepath.Base(path),
+			size:    *output.ContentLength,
+			modTime: *output.LastModified,
+			etag:    *output.ETag,
+		}, nil
+	}
 }
 
 // Annotate interprets err as an AWS request error and returns a version of it
