@@ -750,8 +750,16 @@ func (f *s3File) handleStat(req request) {
 			req.ch <- response{err: annotate(err, ids, &policy, "s3file.stat", f.name)}
 			return
 		}
-		if *output.ETag == "" {
-			req.ch <- response{err: errors.E("read", f.name, errors.NotExist, "awsrequestID:", ids.String())}
+		if output.ETag == nil || *output.ETag == "" {
+			req.ch <- response{err: errors.E("s3file.stat: empty ETag", f.name, errors.NotExist, "awsrequestID:", ids.String())}
+			return
+		}
+		if output.ContentLength == nil {
+			req.ch <- response{err: errors.E("s3file.stat: nil ContentLength", f.name, errors.NotExist, "awsrequestID:", ids.String())}
+			return
+		}
+		if output.LastModified == nil {
+			req.ch <- response{err: errors.E("s3file.stat: nil LastModified", f.name, errors.NotExist, "awsrequestID:", ids.String())}
 			return
 		}
 		f.info = &s3Info{
