@@ -537,19 +537,20 @@ func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (f
 			if err != nil {
 				return response{err: annotate(err, ids, &policy, fmt.Sprintf("s3file.stat %s", path))}
 			}
-			if *resp.ETag == "" {
+			etag, contentLength := aws.StringValue(resp.ETag), aws.Int64Value(resp.ContentLength)
+			if etag == "" {
 				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
 			}
-			if *resp.ContentLength == 0 && strings.HasSuffix(path, "/") {
+			if contentLength == 0 && strings.HasSuffix(path, "/") {
 				// Assume this is a directory marker:
 				// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
 				return response{err: errors.E(errors.NotExist, "s3file.stat", path, "awsrequestID:", ids.String())}
 			}
 			return response{info: &s3Info{
 				name:    filepath.Base(path),
-				size:    *resp.ContentLength,
-				modTime: *resp.LastModified,
-				etag:    *resp.ETag,
+				size:    contentLength,
+				modTime: aws.TimeValue(resp.LastModified),
+				etag:    etag,
 			}}
 		}
 	})
@@ -750,15 +751,15 @@ func (f *s3File) handleStat(req request) {
 			req.ch <- response{err: annotate(err, ids, &policy, "s3file.stat", f.name)}
 			return
 		}
-		if *output.ETag == "" {
+		if aws.StringValue(output.ETag) == "" {
 			req.ch <- response{err: errors.E("read", f.name, errors.NotExist, "awsrequestID:", ids.String())}
 			return
 		}
 		f.info = &s3Info{
 			name:    filepath.Base(f.name),
-			size:    *output.ContentLength,
-			modTime: *output.LastModified,
-			etag:    *output.ETag,
+			size:    aws.Int64Value(output.ContentLength),
+			modTime: aws.TimeValue(output.LastModified),
+			etag:    aws.StringValue(output.ETag),
 		}
 		req.ch <- response{err: nil}
 		return
