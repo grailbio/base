@@ -39,8 +39,8 @@ var (
 	blesserGoogleFlag string
 	browserFlag       bool
 
-	blesserEc2Flag       string
-	identityDocumentFlag string
+	blesserEc2Flag          string
+	ec2InstanceIdentityFlag string
 
 	dumpFlag                 bool
 	doNotRefreshDurationFlag time.Duration
@@ -74,6 +74,9 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	cmd.Flags.StringVar(&blesserEc2Flag, "blesser-ec2", "/ticket-server.eng.grail.com:8102/blesser/ec2", "Blesser to talk to for the EC2-based flow.")
 	cmd.Flags.StringVar(&credentialsDirFlag, "dir", os.ExpandEnv("${HOME}/.v23"), "Where to store the Vanadium credentials. NOTE: the content will be erased if the credentials are regenerated.")
 	cmd.Flags.BoolVar(&ec2Flag, "ec2", false, "Use the role of the EC2 VM.")
+	cmd.Flags.StringVar(&ec2InstanceIdentityFlag, "ec2-instance-identity-url",
+		"http://169.254.169.254/latest/dynamic/instance-identity/pkcs7",
+		"URL for fetching instance identity document, for testing")
 	cmd.Flags.BoolVar(&browserFlag, "browser", os.Getenv("SSH_CLIENT") == "", "Attempt to open a browser.")
 	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
 	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")

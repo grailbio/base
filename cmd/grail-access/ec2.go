@@ -20,8 +20,6 @@ import (
 	libsecurity "v.io/x/ref/lib/security"
 )
 
-const instanceIdentityURL = "http://169.254.169.254/latest/dynamic/instance-identity/pkcs7"
-
 func runEc2(ctx *context.T) error {
 	// TODO(razvanm): do we need to kill the v23agentd?
 
@@ -45,27 +43,23 @@ func runEc2(ctx *context.T) error {
 	}
 
 	stub := identity.Ec2BlesserClient(blesserEc2Flag)
-	doc := identityDocumentFlag
-	if doc == "" {
-		client := http.Client{
-			Timeout: 5 * time.Second,
-		}
-		resp, err := client.Get(instanceIdentityURL)
-		if err != nil {
-			vlog.Error(err)
-			return fmt.Errorf("unable to talk to the EC2 metadata server (not an EC2 instance?)")
-		}
-		b, err := ioutil.ReadAll(resp.Body)
-		if err2 := resp.Body.Close(); err2 != nil {
-			vlog.Info("warning: ", err2)
-		}
-		vlog.VI(1).Infof("pkcs7: %d bytes", len(b))
-		if err != nil {
-			return err
-		}
-		doc = string(b)
+	client := http.Client{
+		Timeout: 5 * time.Second,
 	}
-	blessings, err := stub.BlessEc2(ctx, doc)
+	resp, err := client.Get(ec2InstanceIdentityFlag)
+	if err != nil {
+		vlog.Error(err)
+		return fmt.Errorf("unable to talk to the EC2 metadata server (not an EC2 instance?)")
+	}
+	identityDocument, err := ioutil.ReadAll(resp.Body)
+	if err2 := resp.Body.Close(); err2 != nil {
+		vlog.Info("warning: ", err2)
+	}
+	vlog.VI(1).Infof("pkcs7: %d bytes", len(identityDocument))
+	if err != nil {
+		return err
+	}
+	blessings, err := stub.BlessEc2(ctx, string(identityDocument))
 	if err != nil {
 		vlog.Error(err)
 		return err
