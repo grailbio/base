@@ -38,6 +38,7 @@ var (
 
 	blesserGoogleFlag string
 	browserFlag       bool
+	googleOauth2Flag  string
 
 	blesserEc2Flag          string
 	ec2InstanceIdentityFlag string
@@ -78,6 +79,9 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 		"http://169.254.169.254/latest/dynamic/instance-identity/pkcs7",
 		"URL for fetching instance identity document, for testing")
 	cmd.Flags.BoolVar(&browserFlag, "browser", os.Getenv("SSH_CLIENT") == "", "Attempt to open a browser.")
+	cmd.Flags.StringVar(&googleOauth2Flag, "google-oauth2-url",
+		"https://accounts.google.com/o/oauth2",
+		"URL for oauth2 API calls, for testing")
 	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
 	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")
 	return cmd

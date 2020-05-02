@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -93,62 +95,134 @@ func TestCmd(t *testing.T) {
 		assert.Empty(t, stderr)
 	})
 
-	t.Run("ec2", func(t *testing.T) {
-		const (
-			wantDoc                 = "grailaccesstesttoken92lsl83"
-			serverBlessingName      = "grail-access-test-blessing-laul37"
-			clientBlessingExtension = "ec2-test"
-			wantClientBlessing      = serverBlessingName + ":" + clientBlessingExtension
-		)
-
-		// Run fake ticket server: accepts EC2 instance identity document, returns blessings.
+	t.Run("fake_v23_servers", func(t *testing.T) {
 		ctx, v23CleanUp := v23.Init()
 		defer v23CleanUp()
-		ctx, blesserEndpoint := runBlesserServer(ctx, t,
-			identity.Ec2BlesserServer(fakeBlesser(
-				func(gotDoc string, recipient security.PublicKey) security.Blessings {
-					assert.Equal(t, wantDoc, gotDoc)
-					p := v23.GetPrincipal(ctx)
-					caveat, err := security.NewExpiryCaveat(time.Now().Add(24 * time.Hour))
-					assert.NoError(t, err)
-					localBlessings, err := p.BlessSelf(serverBlessingName)
-					assert.NoError(t, err)
-					b, err := p.Bless(recipient, localBlessings, clientBlessingExtension, caveat)
-					assert.NoError(t, err)
-					return b
+
+		t.Run("ec2", func(t *testing.T) {
+			const (
+				wantDoc                 = "grailaccesstesttoken92lsl83"
+				serverBlessingName      = "grail-access-test-blessing-laul37"
+				clientBlessingExtension = "ec2-test"
+				wantClientBlessing      = serverBlessingName + ":" + clientBlessingExtension
+			)
+
+			// Run fake ticket server: accepts EC2 instance identity document, returns blessings.
+			var blesserEndpoint naming.Endpoint
+			ctx, blesserEndpoint = runBlesserServer(ctx, t,
+				identity.Ec2BlesserServer(fakeBlesser(
+					func(gotDoc string, recipient security.PublicKey) security.Blessings {
+						assert.Equal(t, wantDoc, gotDoc)
+						p := v23.GetPrincipal(ctx)
+						caveat, err := security.NewExpiryCaveat(time.Now().Add(24 * time.Hour))
+						assert.NoError(t, err)
+						localBlessings, err := p.BlessSelf(serverBlessingName)
+						assert.NoError(t, err)
+						b, err := p.Bless(recipient, localBlessings, clientBlessingExtension, caveat)
+						assert.NoError(t, err)
+						return b
+					}),
+				),
+			)
+
+			// Run fake EC2 instance identity server.
+			listener, err := net.Listen("tcp", "localhost:")
+			assert.NoError(t, err)
+			defer func() { assert.NoError(t, listener.Close()) }()
+			go http.Serve( // nolint: errcheck
+				listener,
+				http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					_, httpErr := w.Write([]byte(wantDoc))
+					assert.NoError(t, httpErr)
 				}),
-			),
-		)
+			)
 
-		// Run fake EC2 instance identity server.
-		listener, err := net.Listen("tcp", "localhost:")
-		assert.NoError(t, err)
-		defer func() { assert.NoError(t, listener.Close()) }()
-		go http.Serve( // nolint: errcheck
-			listener,
-			http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				_, httpErr := w.Write([]byte(wantDoc))
-				assert.NoError(t, httpErr)
-			}),
-		)
+			// Run grail-access to create a principal and bless it with the EC2 flow.
+			principalDir, principalCleanUp := testutil.TempDir(t, "", "")
+			defer principalCleanUp()
+			cmd := exec.Command(exe,
+				"-dir", principalDir,
+				"-ec2",
+				"-blesser-ec2", fmt.Sprintf("/%s", blesserEndpoint.Address),
+				"-ec2-instance-identity-url", fmt.Sprintf("http://%s/", listener.Addr().String()))
+			cmd.Env = []string{}
+			stdout, _ := runAndCapture(t, cmd)
+			assert.Contains(t, stdout, wantClientBlessing)
 
-		// Run grail-access to create a principal and bless it with the EC2 flow.
-		principalDir, principalCleanUp := testutil.TempDir(t, "", "")
-		defer principalCleanUp()
-		cmd := exec.Command(exe,
-			"-dir", principalDir,
-			"-ec2",
-			"-blesser-ec2", fmt.Sprintf("/%s", blesserEndpoint.Address),
-			"-ec2-instance-identity-url", fmt.Sprintf("http://%s/", listener.Addr().String()))
-		cmd.Env = []string{}
-		stdout, _ := runAndCapture(t, cmd)
-		assert.Contains(t, stdout, wantClientBlessing)
+			// Make sure we got the right blessing.
+			principal, err := libsecurity.LoadPersistentPrincipal(principalDir, nil)
+			assert.NoError(t, err)
+			defaultBlessing, _ := principal.BlessingStore().Default()
+			assert.Contains(t, defaultBlessing.String(), wantClientBlessing)
+		})
 
-		// Make sure we got the right blessing.
-		principal, err := libsecurity.LoadPersistentPrincipal(principalDir, nil)
-		assert.NoError(t, err)
-		defaultBlessing, _ := principal.BlessingStore().Default()
-		assert.Contains(t, defaultBlessing.String(), wantClientBlessing)
+		t.Run("google", func(t *testing.T) {
+			const (
+				wantToken               = "grailaccesstesttokensjo289d"
+				serverBlessingName      = "grail-access-test-blessing-s8j9dk"
+				clientBlessingExtension = "google-test"
+				wantClientBlessing      = serverBlessingName + ":" + clientBlessingExtension
+			)
+
+			// Run fake ticket server: accepts Google ID token, returns blessings.
+			var blesserEndpoint naming.Endpoint
+			ctx, blesserEndpoint = runBlesserServer(ctx, t,
+				identity.GoogleBlesserServer(fakeBlesser(
+					func(gotToken string, recipient security.PublicKey) security.Blessings {
+						assert.Equal(t, wantToken, gotToken)
+						p := v23.GetPrincipal(ctx)
+						caveat, err := security.NewExpiryCaveat(time.Now().Add(24 * time.Hour))
+						assert.NoError(t, err)
+						localBlessings, err := p.BlessSelf(serverBlessingName)
+						assert.NoError(t, err)
+						b, err := p.Bless(recipient, localBlessings, clientBlessingExtension, caveat)
+						assert.NoError(t, err)
+						return b
+					}),
+				),
+			)
+
+			// Run fake oauth server.
+			listener, err := net.Listen("tcp", "localhost:")
+			assert.NoError(t, err)
+			defer func() { assert.NoError(t, listener.Close()) }()
+			go http.Serve( // nolint: errcheck
+				listener,
+				http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					if req.URL.Path != "/token" {
+						assert.FailNowf(t, "fake oauth server: unexpected request: %s", req.URL.Path)
+					}
+					w.Header().Set("Content-Type", "application/json")
+					assert.NoError(t, json.NewEncoder(w).Encode(
+						map[string]interface{}{
+							"access_token": "testtoken",
+							"expires_in":   3600,
+							"id_token":     wantToken,
+							"scope":        "https://www.googleapis.com/auth/userinfo.email",
+						},
+					))
+				}),
+			)
+
+			// Run grail-access to create a principal and bless it with the EC2 flow.
+			principalDir, principalCleanUp := testutil.TempDir(t, "", "")
+			defer principalCleanUp()
+			cmd := exec.Command(exe,
+				"-dir", principalDir,
+				"-browser=false",
+				"-blesser-google", fmt.Sprintf("/%s", blesserEndpoint.Address),
+				"-google-oauth2-url", fmt.Sprintf("http://%s", listener.Addr().String()))
+			cmd.Env = []string{}
+			cmd.Stdin = bytes.NewReader([]byte("testcode"))
+			stdout, _ := runAndCapture(t, cmd)
+			assert.Contains(t, stdout, wantClientBlessing)
+
+			// Make sure we got the right blessing.
+			principal, err := libsecurity.LoadPersistentPrincipal(principalDir, nil)
+			assert.NoError(t, err)
+			defaultBlessing, _ := principal.BlessingStore().Default()
+			assert.Contains(t, defaultBlessing.String(), wantClientBlessing)
+		})
 	})
 }
 

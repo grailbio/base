@@ -119,8 +119,8 @@ func fetchIDToken() (string, error) {
 		Scopes:       []string{goauth2.UserinfoEmailScope},
 		RedirectURL:  fmt.Sprintf("http://localhost:%s", port),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
-			TokenURL: "https://accounts.google.com/o/oauth2/token",
+			AuthURL:  googleOauth2Flag + "/v2/auth",
+			TokenURL: googleOauth2Flag + "/token",
 		},
 	}
 
