@@ -1380,7 +1380,7 @@ func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path
 		if *output.ContentLength == 0 && strings.HasSuffix(path, "/") {
 			// Assume this is a directory marker:
 			// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
-			return nil, errors.E("s3file.stat: directory marker at path", path, errors.Invalid, "awsrequestID:", ids.String())
+			return nil, errors.E("s3file.stat: directory marker at path", path, errors.NotExist, "awsrequestID:", ids.String())
 		}
 		if output.LastModified == nil {
 			return nil, errors.E("s3file.stat: nil LastModified", path, errors.NotExist, "awsrequestID:", ids.String())
