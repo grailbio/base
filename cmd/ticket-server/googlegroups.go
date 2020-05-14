@@ -39,8 +39,8 @@ var (
 )
 
 func googleGroupsInit(googleUserSufix string, googleGroupSufix string) {
-	groupRE = regexp.MustCompile(strings.Join([]string{"^" + "googlegroups", fmt.Sprintf("([a-z0-9-]+@%s)$", googleGroupSufix)}, security.ChainSeparator))
-	userRE = regexp.MustCompile(strings.Join([]string{"^" + extensionPrefix, fmt.Sprintf("([a-z0-9]+@%s)", googleUserSufix)}, security.ChainSeparator))
+	groupRE = regexp.MustCompile(strings.Join([]string{"^" + "googlegroups", fmt.Sprintf("([a-z0-9-_+.]+@%s)$", googleGroupSufix)}, security.ChainSeparator))
+	userRE = regexp.MustCompile(strings.Join([]string{"^" + extensionPrefix, fmt.Sprintf("([a-z0-9-_+.]+@%s)", googleUserSufix)}, security.ChainSeparator))
 }
 
 //

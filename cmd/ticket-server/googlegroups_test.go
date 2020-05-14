@@ -21,6 +21,7 @@ func TestEmail(t *testing.T) {
 	}{
 		{"v23.grail.com:google:razvanm@grailbio.com", "razvanm@grailbio.com"},
 		{"v23.grail.com:google:razvanm@grailbio.com:_role", "razvanm@grailbio.com"},
+		{"v23.grail.com:google:complex_+.email@grailbio.com:_role", "complex_+.email@grailbio.com"},
 		{"v23.grail.com:google:razvanm@gmail.com", ""},
 		{"v23.grail.com:google:razvanm@", ""},
 		{"v23.grail.com:google:razvanm", ""},
@@ -50,6 +51,7 @@ func TestGroup(t *testing.T) {
 	}{
 		{"v23.grail.com:googlegroups:eng-dev-access@grailbio.com", "eng-dev-access@grailbio.com"},
 		{"v23.grail.com:googlegroups:golang-nuts@googlegroups.com", ""},
+		{"v23.grail.com:googlegroups:golang-_+.nuts@grailbio.com", "golang-_+.nuts@grailbio.com"},
 		{"v23.grail.com:googlegroups:eng@", ""},
 		{"v23.grail.com:googlegroups:eng", ""},
 		{"v23.grail.com:googlegroups", ""},
