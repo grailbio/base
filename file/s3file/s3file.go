@@ -301,7 +301,8 @@ func otherRetriableError(err error) bool {
 		// of the underlying cause as a retryable error.
 		aerr.Code() == "RequestError" ||
 		aerr.Code() == "SlowDown" ||
-		aerr.Code() == "InternalError") {
+		aerr.Code() == "InternalError" ||
+		aerr.Code() == "InternalServerError") {
 		return true
 	}
 	if ok && aerr.Code() == "XAmzContentSHA256Mismatch" {
