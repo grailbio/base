@@ -7,18 +7,18 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/log"
 	_ "github.com/grailbio/v23/factories/grail"
 	v23 "v.io/v23"
-	v23context "v.io/v23/context"
 	"v.io/v23/security"
 	"v.io/x/lib/cmdline"
 	"v.io/x/ref"
-	"v.io/x/ref/lib/v23cmd"
+	libsecurity "v.io/x/ref/lib/security"
 	"v.io/x/ref/services/agent/agentlib"
 )
 
@@ -47,9 +47,18 @@ var (
 	doNotRefreshDurationFlag time.Duration
 )
 
-func newCmdRoot() *cmdline.Command {
+func main() {
+	var defaultCredentialsDir string
+	if dir, ok := os.LookupEnv(ref.EnvCredentials); ok {
+		defaultCredentialsDir = dir
+	} else {
+		// TODO(josh): This expands to /.v23 if $HOME is undefined.
+		// We keep this for backwards compatibility, but maybe we shouldn't.
+		defaultCredentialsDir = os.ExpandEnv("${HOME}/.v23")
+	}
+
 	cmd := &cmdline.Command{
-		Runner: v23cmd.RunnerFunc(run),
+		Runner: cmdline.RunnerFunc(run),
 		Name:   "grail-access",
 		Short:  "Creates fresh Vanadium credentials",
 		Long: `
@@ -73,7 +82,7 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	}
 	cmd.Flags.StringVar(&blesserGoogleFlag, "blesser-google", "/ticket-server.eng.grail.com:8102/blesser/google", "Blesser to talk to for the Google-based flow.")
 	cmd.Flags.StringVar(&blesserEc2Flag, "blesser-ec2", "/ticket-server.eng.grail.com:8102/blesser/ec2", "Blesser to talk to for the EC2-based flow.")
-	cmd.Flags.StringVar(&credentialsDirFlag, "dir", os.ExpandEnv("${HOME}/.v23"), "Where to store the Vanadium credentials. NOTE: the content will be erased if the credentials are regenerated.")
+	cmd.Flags.StringVar(&credentialsDirFlag, "dir", defaultCredentialsDir, "Where to store the Vanadium credentials. NOTE: the content will be erased if the credentials are regenerated.")
 	cmd.Flags.BoolVar(&ec2Flag, "ec2", false, "Use the role of the EC2 VM.")
 	cmd.Flags.StringVar(&ec2InstanceIdentityFlag, "ec2-instance-identity-url",
 		"http://169.254.169.254/latest/dynamic/instance-identity/pkcs7",
@@ -84,59 +93,82 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 		"URL for oauth2 API calls, for testing")
 	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
 	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")
-	return cmd
+
+	cmdline.HideGlobalFlagsExcept()
+	cmdline.Main(cmd)
 }
 
-func run(ctx *v23context.T, env *cmdline.Env, args []string) error {
+func run(*cmdline.Env, []string) error {
+	if credentialsDirFlag == "" {
+		return fmt.Errorf("missing credentials dir, need -dir, $HOME, or $%s", ref.EnvCredentials)
+	}
+
 	if _, ok := os.LookupEnv(ref.EnvCredentials); !ok {
-		fmt.Printf("*******************************************************\n")
-		fmt.Printf("*    WARNING: $V23_CREDENTIALS is not defined!        *\n")
+		fmt.Print("*******************************************************\n")
+		fmt.Printf("*    WARNING: $%s is not defined!        *\n", ref.EnvCredentials)
 		fmt.Printf("*******************************************************\n\n")
-		fmt.Printf("How to fix this in bash: export V23_CREDENTIALS=%s\n\n", credentialsDirFlag)
-	}
-	agentPrincipal, err := agentlib.LoadPrincipal(credentialsDirFlag)
-	if err == nil {
-		// We have access to some credentials so we'll try to load them.
-		ctx, err = v23.WithPrincipal(ctx, agentPrincipal)
-		if err != nil {
-			return err
-		}
-		agentBlessings, _ := agentPrincipal.BlessingStore().Default()
-		if !agentBlessings.IsZero() {
-			principal := v23.GetPrincipal(ctx)
-			if err := principal.BlessingStore().SetDefault(agentBlessings); err != nil {
-				return err
-			}
-			if err := security.AddToRoots(principal, agentBlessings); err != nil {
-				return err
-			}
-		}
-	} else {
-		// We don't have access to credentials. Typically this happen on the first
-		// run when the credentials directory is empty.
-
-		// Dumping current credentials does not make sense when credentials are absent.
-		if dumpFlag {
-			fmt.Printf("Credentials not found in %s\n", credentialsDirFlag)
-			return nil
-		}
+		fmt.Printf("How to fix this in bash: export %s=%s\n\n", ref.EnvCredentials, credentialsDirFlag)
 	}
 
-	b, _ := v23.GetPrincipal(ctx).BlessingStore().Default()
+	principal, err := agentlib.LoadPrincipal(credentialsDirFlag)
+	if err != nil {
+		log.Printf("INFO: Couldn't load principal from %s. Creating new one...", credentialsDirFlag)
+		// TODO(josh): Do we need to kill the v23agentd?
+		_, createErr := libsecurity.CreatePersistentPrincipal(credentialsDirFlag, nil)
+		if createErr != nil {
+			return fmt.Errorf("failed to create new principal: %w, after load error: %v", createErr, err)
+		}
+		principal, err = agentlib.LoadPrincipal(credentialsDirFlag)
+	}
+	if err != nil {
+		return errors.E("failed to load principal", err)
+	}
 
-	if dumpFlag || b.Expiry().After(time.Now().Add(doNotRefreshDurationFlag)) {
-		dump(ctx)
+	defaultBlessings, _ := principal.BlessingStore().Default()
+	if dumpFlag || defaultBlessings.Expiry().After(time.Now().Add(doNotRefreshDurationFlag)) {
+		dump(principal)
 		return nil
 	}
-	if ec2Flag {
-		return runEc2(ctx)
+
+	ctx, shutDown := v23.Init()
+	defer shutDown()
+	ctx, err = v23.WithPrincipal(ctx, principal)
+	if err != nil {
+		return errors.E("failed to initialize context", err)
 	}
-	return runGoogle(ctx)
+
+	var blessings security.Blessings
+	if ec2Flag {
+		blessings, err = fetchEC2Blessings(ctx)
+	} else {
+		blessings, err = fetchGoogleBlessings(ctx)
+	}
+	if err != nil {
+		return errors.E("failed to fetch blessings", err)
+	}
+
+	if err = principal.BlessingStore().SetDefault(blessings); err != nil {
+		return errors.E(err, "failed to set default blessings")
+	}
+	_, err = principal.BlessingStore().Set(blessings, security.AllPrincipals)
+	if err != nil {
+		return errors.E(err, "failed to set peer blessings")
+	}
+	if err := security.AddToRoots(principal, blessings); err != nil {
+		return errors.E(err, "failed to add blessing roots")
+	}
+
+	fmt.Println("Successfully applied new blessing:")
+	dump(principal)
+
+	if err := principal.Close(); err != nil {
+		return errors.E("failed to close agent principal", err)
+	}
+	return nil
 }
 
-func dump(ctx *v23context.T) {
-	// Mimic the principal dump output.
-	principal := v23.GetPrincipal(ctx)
+func dump(principal security.Principal) {
+	// Mimic the output of the v.io/x/ref/cmd/principal dump command.
 	fmt.Printf("Public key: %s\n", principal.PublicKey())
 	fmt.Println("---------------- BlessingStore ----------------")
 	fmt.Print(principal.BlessingStore().DebugString())
@@ -145,18 +177,4 @@ func dump(ctx *v23context.T) {
 
 	blessing, _ := principal.BlessingStore().Default()
 	fmt.Printf("Expires on %s (in %s)\n", blessing.Expiry().Local(), time.Until(blessing.Expiry()))
-}
-
-func main() {
-	// We disable this flag because it's initialized with the value of the
-	// V23_CREDENTIALS environmental variable and that directory might be empty.
-	if err := flag.Set("v23.credentials", ""); err != nil {
-		panic(err)
-	}
-	// Prevent the v23agentd from running.
-	if err := os.Setenv(ref.EnvCredentialsNoAgent, "1"); err != nil {
-		panic(err)
-	}
-	cmdline.HideGlobalFlagsExcept()
-	cmdline.Main(newCmdRoot())
 }

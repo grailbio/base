@@ -11,75 +11,31 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
-	"github.com/grailbio/base/cmdutil"
-	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/security/identity"
 	"github.com/grailbio/base/web/webutil"
 	"golang.org/x/oauth2"
 	goauth2 "google.golang.org/api/oauth2/v1"
-	v23 "v.io/v23"
-	v23context "v.io/v23/context"
+	vcontext "v.io/v23/context"
 	"v.io/v23/security"
 	"v.io/x/lib/vlog"
-	libsecurity "v.io/x/ref/lib/security"
 )
 
-func runGoogle(ctx *v23context.T) error {
-	// TODO(razvanm): do we need to kill the v23agentd?
-
-	// Best-effort cleanup.
-	err := os.RemoveAll(credentialsDirFlag)
-	if !os.IsNotExist(err) {
-		vlog.Infof("remove %s: %v", credentialsDirFlag, err)
-	}
-
-	principal, err := libsecurity.CreatePersistentPrincipal(credentialsDirFlag, nil)
+func fetchGoogleBlessings(ctx *vcontext.T) (security.Blessings, error) {
+	idToken, err := fetchIDToken(ctx)
 	if err != nil {
-		return err
+		return security.Blessings{}, err
 	}
-
-	ctx, err = v23.WithPrincipal(ctx, principal)
-	if err != nil {
-		return err
-	}
-
-	idToken, err := fetchIDToken()
-	if err != nil {
-		return err
-	}
-
 	stub := identity.GoogleBlesserClient(blesserGoogleFlag)
-	blessings, err := stub.BlessGoogle(ctx, idToken)
-	if err != nil {
-		return err
-	}
-
-	principal = v23.GetPrincipal(ctx)
-	if err := principal.BlessingStore().SetDefault(blessings); err != nil {
-		vlog.Error(err)
-		return errors.E(err, "set default blessings")
-	}
-	_, err = principal.BlessingStore().Set(blessings, "...")
-	if err != nil {
-		vlog.Error(err)
-		return errors.E(err, "set blessings")
-	}
-	if err := security.AddToRoots(principal, blessings); err != nil {
-		return errors.E(err, "failed to add blessings to recognized roots: %v")
-	}
-
-	dump(ctx)
-
-	return nil
+	return stub.BlessGoogle(ctx, idToken)
 }
 
 // fetchIDToken obtains a Google ID Token using an OAuth2 flow with Google. The
 // user will be instructed to use and URL or a browser will automatically open.
-func fetchIDToken() (string, error) {
+func fetchIDToken(ctx context.Context) (string, error) {
 	stateBytes := make([]byte, 16)
 	if _, err := rand.Read(stateBytes); err != nil {
 		return "", err
@@ -94,7 +50,7 @@ func fetchIDToken() (string, error) {
 			return
 		}
 		if got, want := r.FormValue("state"), state; got != want {
-			cmdutil.Fatalf("Bad state: got %q, want %q", got, want)
+			log.Fatalf("Bad state: got %q, want %q", got, want)
 		}
 		code = r.FormValue("code")
 		w.Header().Set("Content-Type", "text/html")
@@ -130,7 +86,7 @@ func fetchIDToken() (string, error) {
 		fmt.Printf("Opening %q...\n", url)
 		if webutil.StartBrowser(url) {
 			wg.Wait()
-			if err = server.Shutdown(context.Background()); err != nil {
+			if err = server.Shutdown(ctx); err != nil {
 				vlog.Errorf("shutting down: %v", err)
 			}
 		} else {
@@ -141,7 +97,7 @@ func fetchIDToken() (string, error) {
 	if !browserFlag {
 		config.RedirectURL = "urn:ietf:wg:oauth:2.0:oob"
 		url := config.AuthCodeURL(state, oauth2.AccessTypeOnline)
-		fmt.Printf("The attempt to automatically open a browser failed. Please open the following link in your browse:\n\n\t%s\n\n", url)
+		fmt.Printf("The attempt to automatically open a browser failed. Please open the following link:\n\n\t%s\n\n", url)
 		fmt.Printf("Paste the received code and then press enter: ")
 		if _, err := fmt.Scanf("%s", &code); err != nil {
 			return "", err
@@ -150,7 +106,7 @@ func fetchIDToken() (string, error) {
 	}
 
 	vlog.VI(1).Infof("code: %+v", code)
-	token, err := config.Exchange(context.Background(), code)
+	token, err := config.Exchange(ctx, code)
 	if err != nil {
 		return "", err
 	}

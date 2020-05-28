@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path"
 	"strings"
@@ -26,26 +27,26 @@ import (
 func TestCmd(t *testing.T) {
 	exe := testutil.GoExecutable(t, "//go/src/github.com/grailbio/base/cmd/grail-access/grail-access")
 
+	// Preserve the test environment's PATH. On Darwin, Vanadium's agentlib uses `ioreg` from the
+	// path in the process of locking [1] and loading [2] the principal when there's no agent.
+	// [1] https://github.com/vanadium/core/blob/694a147f5dfd7ebc2d2e5a4fb3c4fe448c7a377c/x/ref/services/agent/internal/lockutil/version1_darwin.go#L21
+	// [2] https://github.com/vanadium/core/blob/694a147f5dfd7ebc2d2e5a4fb3c4fe448c7a377c/x/ref/services/agent/agentlib/principal.go#L57
+	pathEnv := "PATH=" + os.Getenv("PATH")
+
 	t.Run("help", func(t *testing.T) {
 		cmd := exec.Command(exe, "-help")
-		cmd.Env = []string{}
+		cmd.Env = []string{pathEnv}
 		stdout, stderr := runAndCapture(t, cmd)
 		assert.NotEmpty(t, stdout)
 		assert.Empty(t, stderr)
 	})
 
-	t.Run("dump_empty_env", func(t *testing.T) {
-		cmd := exec.Command(exe, "-dump")
-		cmd.Env = []string{}
-		stdout, stderr := runAndCapture(t, cmd)
-		assert.NotEmpty(t, stdout)
-		assert.Empty(t, stderr)
-	})
-
+	// TODO(josh): Test with v23agentd on the path, too.
 	t.Run("dump_existing_principal", func(t *testing.T) {
 		homeDir, cleanUp := testutil.TempDir(t, "", "")
 		defer cleanUp()
 		principalDir := path.Join(homeDir, ".v23")
+		decoyPrincipalDir := path.Join(homeDir, "decoy_principal_dir")
 		principal, err := libsecurity.CreatePersistentPrincipal(principalDir, nil)
 		assert.NoError(t, err)
 
@@ -56,7 +57,8 @@ func TestCmd(t *testing.T) {
 
 		t.Run("flag_dir", func(t *testing.T) {
 			cmd := exec.Command(exe, "-dump", "-dir", principalDir)
-			cmd.Env = []string{}
+			// Set $V23_CREDENTIALS to test that -dir takes priority.
+			cmd.Env = []string{pathEnv, "V23_CREDENTIALS=" + decoyPrincipalDir}
 			stdout, stderr := runAndCapture(t, cmd)
 			assert.Contains(t, stdout, blessingName)
 			assert.Empty(t, stderr)
@@ -64,7 +66,7 @@ func TestCmd(t *testing.T) {
 
 		t.Run("env_home", func(t *testing.T) {
 			cmd := exec.Command(exe, "-dump")
-			cmd.Env = []string{"HOME=" + homeDir}
+			cmd.Env = []string{pathEnv, "HOME=" + homeDir}
 			stdout, stderr := runAndCapture(t, cmd)
 			assert.Contains(t, stdout, blessingName)
 			assert.Empty(t, stderr)
@@ -89,7 +91,7 @@ func TestCmd(t *testing.T) {
 		cmd := exec.Command(exe,
 			"-dir", principalDir,
 			"-do-not-refresh-duration", doNotRefreshDuration.String())
-		cmd.Env = []string{}
+		cmd.Env = []string{pathEnv}
 		stdout, stderr := runAndCapture(t, cmd)
 		assert.Contains(t, stdout, blessingName)
 		assert.Empty(t, stderr)
@@ -145,7 +147,7 @@ func TestCmd(t *testing.T) {
 				"-ec2",
 				"-blesser-ec2", fmt.Sprintf("/%s", blesserEndpoint.Address),
 				"-ec2-instance-identity-url", fmt.Sprintf("http://%s/", listener.Addr().String()))
-			cmd.Env = []string{}
+			cmd.Env = []string{pathEnv}
 			stdout, _ := runAndCapture(t, cmd)
 			assert.Contains(t, stdout, wantClientBlessing)
 
@@ -212,7 +214,7 @@ func TestCmd(t *testing.T) {
 				"-browser=false",
 				"-blesser-google", fmt.Sprintf("/%s", blesserEndpoint.Address),
 				"-google-oauth2-url", fmt.Sprintf("http://%s", listener.Addr().String()))
-			cmd.Env = []string{}
+			cmd.Env = []string{pathEnv}
 			cmd.Stdin = bytes.NewReader([]byte("testcode"))
 			stdout, _ := runAndCapture(t, cmd)
 			assert.Contains(t, stdout, wantClientBlessing)
