@@ -131,16 +131,16 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 	}
 }
 
-func (a *authorizer) pruneBlacklisted(acl access.AccessList, blessings []string, localBlessings string) []string {
+func (a *authorizer) pruneBlessingslist(acl access.AccessList, blessings []string, localBlessings string) []string {
 	if len(acl.NotIn) == 0 {
 		return blessings
 	}
 	var filtered []string
 	for _, b := range blessings {
-		blacklisted := false
+		inDenyList := false
 		for _, bp := range acl.NotIn {
 			if security.BlessingPattern(bp).MatchedBy(b) {
-				blacklisted = true
+				inDenyList = true
 				break
 			}
 			userEmail := email(b, localBlessings)
@@ -149,12 +149,12 @@ func (a *authorizer) pruneBlacklisted(acl access.AccessList, blessings []string,
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {
 					vlog.Infof("%q is a member of %q (NotIn blessing pattern %q)", userEmail, groupEmail, bp)
-					blacklisted = true
+					inDenyList = true
 					break
 				}
 			}
 		}
-		if !blacklisted {
+		if !inDenyList {
 			filtered = append(filtered, b)
 		}
 	}
@@ -162,7 +162,7 @@ func (a *authorizer) pruneBlacklisted(acl access.AccessList, blessings []string,
 }
 
 func (a *authorizer) aclIncludes(acl access.AccessList, blessings []string, localBlessings string) bool {
-	blessings = a.pruneBlacklisted(acl, blessings, localBlessings)
+	blessings = a.pruneBlessingslist(acl, blessings, localBlessings)
 	for _, pattern := range acl.In {
 		if pattern.MatchedBy(blessings...) {
 			return true
