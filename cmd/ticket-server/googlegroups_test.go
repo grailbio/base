@@ -7,13 +7,32 @@ package main
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"v.io/v23/security"
 	"v.io/v23/security/access"
 )
 
+var (
+	testDomainList = []string{"grailbio.com", "contractors.grail.com"}
+)
+
+func TestInit(t *testing.T) {
+	f := func() {
+		hostedDomains = nil
+		googleGroupsInit("admin@grailbio.com")
+	}
+	assert.PanicsWithValue(t, "hostedDomains not initialized", f)
+
+	f = func() {
+		googleBlesserInit([]string{})
+		googleGroupsInit("admin@grailbio.com")
+	}
+	assert.PanicsWithValue(t, "hostedDomains not initialized", f)
+}
+
 func TestEmail(t *testing.T) {
-	googleBlesserInit("grailbio.com")
-	googleGroupsInit("grailbio.com", "grailbio.com")
+	googleBlesserInit(testDomainList)
+	googleGroupsInit("admin@grailbio.com")
 
 	cases := []struct {
 		blessing string
@@ -22,6 +41,7 @@ func TestEmail(t *testing.T) {
 		{"v23.grail.com:google:razvanm@grailbio.com", "razvanm@grailbio.com"},
 		{"v23.grail.com:google:razvanm@grailbio.com:_role", "razvanm@grailbio.com"},
 		{"v23.grail.com:google:complex_+.email@grailbio.com:_role", "complex_+.email@grailbio.com"},
+		{"v23.grail.com:google:razvanm@grailbioacom", ""},
 		{"v23.grail.com:google:razvanm@gmail.com", ""},
 		{"v23.grail.com:google:razvanm@", ""},
 		{"v23.grail.com:google:razvanm", ""},
@@ -34,7 +54,7 @@ func TestEmail(t *testing.T) {
 
 	prefix := "v23.grail.com"
 	for _, c := range cases {
-		got, want := email(c.blessing, prefix), c.email
+		got, want := verifyAndExtractEmailFromBlessing(c.blessing, prefix), c.email
 		if got != want {
 			t.Errorf("email(%q, %q): got %q, want %q", c.blessing, prefix, got, want)
 		}
@@ -42,8 +62,8 @@ func TestEmail(t *testing.T) {
 }
 
 func TestGroup(t *testing.T) {
-	googleBlesserInit("grailbio.com")
-	googleGroupsInit("grailbio.com", "grailbio.com")
+	googleBlesserInit(testDomainList)
+	googleGroupsInit("admin@grailbio.com")
 
 	cases := []struct {
 		blessing string
@@ -63,7 +83,7 @@ func TestGroup(t *testing.T) {
 
 	prefix := "v23.grail.com"
 	for _, c := range cases {
-		got, want := group(c.blessing, prefix), c.email
+		got, want := extractGroupEmailFromBlessing(c.blessing, prefix), c.email
 		if got != want {
 			t.Errorf("email(%q, %q): got %q, want %q", c.blessing, prefix, got, want)
 		}
@@ -71,8 +91,8 @@ func TestGroup(t *testing.T) {
 }
 
 func TestAclIncludes(t *testing.T) {
-	googleBlesserInit("grailbio.com")
-	googleGroupsInit("grailbio.com", "grailbio.com")
+	googleBlesserInit(testDomainList)
+	googleGroupsInit("admin@grailbio.com")
 
 	cases := []struct {
 		acl  access.AccessList

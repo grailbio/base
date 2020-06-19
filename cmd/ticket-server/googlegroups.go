@@ -34,37 +34,47 @@ var cache = ttlcache.New(cacheTTL)
 // email returns the user email from a Vanadium blessing that was produced via
 // a BlessGoogle call.
 var (
-	groupRE *regexp.Regexp
-	userRE  *regexp.Regexp
+	groupRE           *regexp.Regexp
+	userRE            *regexp.Regexp
+	adminLookupDomain string
 )
 
-func googleGroupsInit(googleUserSufix string, googleGroupSufix string) {
-	groupRE = regexp.MustCompile(strings.Join([]string{"^" + "googlegroups", fmt.Sprintf("([a-z0-9-_+.]+@%s)$", googleGroupSufix)}, security.ChainSeparator))
-	userRE = regexp.MustCompile(strings.Join([]string{"^" + extensionPrefix, fmt.Sprintf("([a-z0-9-_+.]+@%s)", googleUserSufix)}, security.ChainSeparator))
+func googleGroupsInit(groupLookupName string) {
+	if hostedDomains == nil || len(hostedDomains) == 0 {
+		vlog.Panic("hostedDomains not initialized")
+	}
+
+	// Extract the domain of the admin account to filter users in the same Google Domain
+	adminLookupDomain = emailDomain(groupLookupName)
+	groupRE = regexp.MustCompile(strings.Join([]string{"^" + "googlegroups", fmt.Sprintf("([a-z0-9-_+.]+@[a-z0-9-_+.]+)$")}, security.ChainSeparator))
+	// NOTE This is a non terminating string, because the user validation can be terminated by the ChainSeparator (`:`)
+	userRE = regexp.MustCompile(strings.Join([]string{"^" + extensionPrefix, fmt.Sprintf("([a-z0-9-_+.]+@[a-z0-9-_+.]+)")}, security.ChainSeparator))
 }
 
+//verifyAndExtractEmailFromBlessing returns the email address defined in a v23 principal/blessing
 //
 // For example, for 'v23.grail.com:google:razvanm@grailbio.com' the return
 // string should be 'razvanm@grailbio.com'.
-func email(blessing string, prefix string) string {
+func verifyAndExtractEmailFromBlessing(blessing string, prefix string) string {
 	if strings.HasPrefix(blessing, prefix) && blessing != prefix {
 		m := userRE.FindStringSubmatch(blessing[len(prefix)+1:])
-		if m != nil {
+		if m != nil && stringInSlice(hostedDomains, emailDomain(m[1])) {
 			return m[1]
 		}
 	}
 	return ""
 }
 
-// group returns the Google Groups name from a Vanadium blessing.
+// extractGroupEmailFromBlessing returns the Google Groups name from a Vanadium blessing.
 //
 // For example, for 'v23.grail.com:googlegroups:eng@grailbio.com' the return
 // string should be 'eng@grailbio.com'.
-func group(blessing string, prefix string) string {
+func extractGroupEmailFromBlessing(blessing string, prefix string) string {
 	vlog.Infof("blessing %q %q", blessing, prefix)
 	if strings.HasPrefix(blessing, prefix) {
 		m := groupRE.FindStringSubmatch(blessing[len(prefix)+1:])
-		if m != nil {
+
+		if m != nil && stringInSlice(hostedDomains, emailDomain(m[1])) {
 			return m[1]
 		}
 	}
@@ -78,8 +88,8 @@ type authorizer struct {
 	isMember func(user, group string) bool
 }
 
-func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, groupLookupName string, googleUserSufix string, googleGroupSufix string) security.Authorizer {
-	googleGroupsInit(googleUserSufix, googleGroupSufix)
+func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, groupLookupName string) security.Authorizer {
+	googleGroupsInit(groupLookupName)
 	return &authorizer{
 		perms:   perms,
 		tagType: access.TypicalTagType(),
@@ -94,6 +104,7 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 			config := *jwtConfig
 			// This needs to be a Super Admin of the domain.
 			config.Subject = groupLookupName
+
 			service, err := admin.New(config.Client(context.Background()))
 			if err != nil {
 				vlog.Info(err)
@@ -103,7 +114,7 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 			// If the group is in a different domain, perform a user based group membership check
 			// This loses the ability to check for nested groups - see https://phabricator.grailbio.com/D13275
 			// and https://github.com/googleapis/google-api-java-client/issues/1082
-			if googleGroupSufix != googleUserSufix {
+			if adminLookupDomain != emailDomain(user) {
 				member, member_err := admin.NewMembersService(service).Get(group, user).Do()
 				if member_err != nil {
 					vlog.Info(member_err)
@@ -143,8 +154,8 @@ func (a *authorizer) pruneBlessingslist(acl access.AccessList, blessings []strin
 				inDenyList = true
 				break
 			}
-			userEmail := email(b, localBlessings)
-			groupEmail := group(bp, localBlessings)
+			userEmail := verifyAndExtractEmailFromBlessing(b, localBlessings)
+			groupEmail := extractGroupEmailFromBlessing(bp, localBlessings)
 			vlog.Infof("%q %q", userEmail, groupEmail)
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {
@@ -168,8 +179,8 @@ func (a *authorizer) aclIncludes(acl access.AccessList, blessings []string, loca
 			return true
 		}
 		for _, b := range blessings {
-			userEmail := email(b, localBlessings)
-			groupEmail := group(string(pattern), localBlessings)
+			userEmail := verifyAndExtractEmailFromBlessing(b, localBlessings)
+			groupEmail := extractGroupEmailFromBlessing(string(pattern), localBlessings)
 			vlog.Infof("%q %q", userEmail, groupEmail)
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {

@@ -25,13 +25,11 @@ const (
 )
 
 var (
-	hostedDomain string
-	emailSuffix  string
+	hostedDomains []string
 )
 
-func googleBlesserInit(domain string) {
-	hostedDomain = domain
-	emailSuffix = "@" + domain
+func googleBlesserInit(googleUserDomainList []string) {
+	hostedDomains = googleUserDomainList
 }
 
 func (c *claims) checkClaims() error {
@@ -39,14 +37,13 @@ func (c *claims) checkClaims() error {
 		return fmt.Errorf("ID token doesn't have a verified email")
 	}
 
-	if got, want := c.HostedDomain, hostedDomain; got != want {
-		return fmt.Errorf("ID token has a wrong hosted domain: got %q, want %q", got, want)
+	if !stringInSlice(hostedDomains, c.HostedDomain) {
+		return fmt.Errorf("ID token has a wrong hosted domain: got %q, want %q", c.HostedDomain, strings.Join(hostedDomains, ","))
 	}
 
-	if !strings.HasSuffix(c.Email, emailSuffix) {
-		return fmt.Errorf("ID token does not have the right email suffix (%q): %q", emailSuffix, c.Email)
+	if !stringInSlice(hostedDomains, emailDomain(c.Email)) {
+		return fmt.Errorf("ID token does not have a sufix with a authorized email domain (%q): %q", strings.Join(hostedDomains, ","), c.Email)
 	}
-
 	return nil
 }
 
@@ -61,8 +58,8 @@ type googleBlesser struct {
 	expirationInterval time.Duration
 }
 
-func newGoogleBlesser(expiration time.Duration, domain string) *googleBlesser {
-	googleBlesserInit(domain)
+func newGoogleBlesser(expiration time.Duration, domains []string) *googleBlesser {
+	googleBlesserInit(domains)
 
 	provider, err := oidc.NewProvider(context.Background(), issuer)
 	if err != nil {

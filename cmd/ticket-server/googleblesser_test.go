@@ -10,17 +10,19 @@ import (
 )
 
 func TestCheckClaims(t *testing.T) {
-	googleBlesserInit("grailbio.com")
+	googleBlesserInit([]string{"grailbio.com", "contractors.grail.com"})
 
 	cases := []struct {
 		claims    claims
 		errPrefix string
 	}{
 		{claims{HostedDomain: "grailbio.com", EmailVerified: true, Email: "user@grailbio.com"}, ""},
+		{claims{HostedDomain: "grailbio.com", EmailVerified: true, Email: "user@contractors.grail.com"}, ""},
 		{claims{}, "ID token doesn't have a verified email"},
 		{claims{EmailVerified: false}, "ID token doesn't have a verified email"},
 		{claims{EmailVerified: true, Email: "user@grailbio.com"}, "ID token has a wrong hosted domain:"},
-		{claims{HostedDomain: "grailbio.com", EmailVerified: true, Email: "user@gmail.com"}, "ID token does not have the right email suffix"},
+		{claims{HostedDomain: "grailbio.com", EmailVerified: true, Email: "user@gmail.com"}, "ID token does not have a sufix with a authorized email domain"},
+		{claims{HostedDomain: "grailbio.com", EmailVerified: true, Email: "user@gmail@.com"}, "ID token does not have a sufix with a authorized email domain"},
 	}
 
 	for _, c := range cases {

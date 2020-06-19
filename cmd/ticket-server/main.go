@@ -38,12 +38,11 @@ import (
 )
 
 var (
-	nameFlag             string
-	configDirFlag        string
-	regionFlag           string
-	googleUserSufixFlag  string
-	googleGroupSufixFlag string
-	googleAdminNameFlag  string
+	nameFlag            string
+	configDirFlag       string
+	regionFlag          string
+	googleUserSufixFlag string
+	googleAdminNameFlag string
 
 	dryrunFlag bool
 
@@ -85,9 +84,8 @@ certificate + the private key and the URL to reach the Docker daemon.
 	root.Flags.BoolVar(&ec2DisableUniquenessCheckFlag, "danger-danger-danger-ec2-disable-uniqueness-check", false, "Disable the uniqueness check for the EC2-based blessings requests. Only useful for local tests.")
 	root.Flags.BoolVar(&ec2DisablePendingTimeCheckFlag, "danger-danger-danger-ec2-disable-pending-time-check", false, "Disable the pendint time check for the EC2-based blessings requests. Only useful for local tests.")
 
-	root.Flags.StringVar(&googleUserSufixFlag, "google-user-domain", "grailbio.com", "Google domain used for validating users")
-	root.Flags.StringVar(&googleGroupSufixFlag, "google-group-domain", "grailbio.com", "Google domain used for matching supported groups")
-	root.Flags.StringVar(&googleAdminNameFlag, "google-admin", "admin@grailbio.com", "Google Admin that can read all group memberhsips")
+	root.Flags.StringVar(&googleUserSufixFlag, "google-user-domain", "grailbio.com", "Comma-separated list of email domains used for validating users")
+	root.Flags.StringVar(&googleAdminNameFlag, "google-admin", "admin@grailbio.com", "Google Admin that can read all group memberships - NOTE: all groups will need to match the admin user's domain")
 
 	return root
 }
@@ -208,7 +206,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	// Note that the blesser/ endpoints are not exposed via Glob__ and the
 	// permissions are governed by the -v23.permissions.{file,literal} flags.
 	d.registry["blesser/google"] = entry{
-		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag, googleUserSufixFlag)),
+		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag, strings.Split(googleUserSufixFlag, ","))),
 		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}
 	if ec2BlesserRoleFlag != "" {
@@ -219,7 +217,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	}
 
 	for k, v := range cfg {
-		auth := googleGroupsAuthorizer(v.Perms, jwtConfig, googleAdminNameFlag, googleUserSufixFlag, googleGroupSufixFlag)
+		auth := googleGroupsAuthorizer(v.Perms, jwtConfig, googleAdminNameFlag)
 		vlog.Infof("registry add: %q perms: %+v", k, auth)
 		parts := strings.Split(k, "/")
 		n := d.root
