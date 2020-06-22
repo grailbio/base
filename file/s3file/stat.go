@@ -34,6 +34,8 @@ func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path
 	if err != nil {
 		return nil, errors.E(errors.Invalid, "could not parse", path, err)
 	}
+	metric := metrics.Op("stat").Start()
+	defer metric.Done()
 	for {
 		var ids s3RequestIDs
 		output, err := policy.client().HeadObjectWithContext(ctx,
@@ -44,6 +46,7 @@ func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path
 			ids.captureOption(),
 		)
 		if policy.shouldRetry(ctx, err, path) {
+			metric.Retry()
 			continue
 		}
 		if err != nil {

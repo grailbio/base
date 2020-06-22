@@ -288,7 +288,7 @@ func (f *s3File) handleSeek(req request) {
 	req.ch <- response{off: f.position}
 }
 
-func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy) error {
+func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy, metric *metricOpProgress) error {
 	for {
 		if f.bodyReader != nil {
 			panic("get request still active")
@@ -310,6 +310,7 @@ func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy)
 		var ids s3RequestIDs
 		output, err := policy.client().GetObjectWithContext(ctx, input, ids.captureOption())
 		if policy.shouldRetry(ctx, err, f.name) {
+			metric.Retry()
 			continue
 		}
 		if err != nil {
@@ -359,12 +360,14 @@ func (f *s3File) handleRead(req request) {
 		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.read %v", f.name))}
 		return
 	}
+	metric := metrics.Op("read").Start()
+	defer metric.Done()
 	maxRetries := maxRetries(clients)
 	policy := newRetryPolicy(clients, f.opts)
 	retries := 0 // TODO(saito) use retryPolicy instead
 	for len(buf) > 0 {
 		if f.bodyReader == nil {
-			if err = f.startGetObjectRequest(req.ctx, &policy); err != nil {
+			if err = f.startGetObjectRequest(req.ctx, &policy, metric); err != nil {
 				break
 			}
 		}
@@ -384,6 +387,7 @@ func (f *s3File) handleRead(req request) {
 				if retries <= maxRetries {
 					log.Error.Printf("s3read %v: retrying (%d) GetObject after error %v, awsrequestID: %v",
 						f.name, retries, err, requestIDs)
+					metric.Retry()
 					continue
 				}
 			}
@@ -394,6 +398,7 @@ func (f *s3File) handleRead(req request) {
 	if err != nil && err != io.EOF {
 		err = errors.E(err, fmt.Sprintf("s3file.read %v", f.name))
 	}
+	metric.Bytes(totalBytesRead)
 	req.ch <- response{n: totalBytesRead, err: err}
 }
 

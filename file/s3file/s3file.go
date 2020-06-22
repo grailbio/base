@@ -38,6 +38,7 @@ type s3Impl struct {
 // NewImplementation creates a new file.Implementation for S3. The provider is
 // called to create s3 client objects.
 func NewImplementation(provider ClientProvider, opts Options) file.Implementation {
+	metricAutolog()
 	return &s3Impl{provider, opts}
 }
 
