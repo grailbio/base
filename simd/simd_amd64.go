@@ -350,6 +350,30 @@ func UnpackedNibbleLookup(dst, src []byte, tablePtr *NibbleLookupTable) {
 	unpackedNibbleLookupOddSSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), unsafe.Pointer(tablePtr), srcLen)
 }
 
+// UnpackedNibbleLookupS is a variant of UnpackedNibbleLookup() that takes
+// string src.
+func UnpackedNibbleLookupS(dst []byte, src string, tablePtr *NibbleLookupTable) {
+	srcLen := len(src)
+	if len(dst) != srcLen {
+		panic("UnpackedNibbleLookupS() requires len(src) == len(dst).")
+	}
+	if srcLen < 16 {
+		for pos := range src {
+			curByte := src[pos]
+			if curByte < 128 {
+				curByte = tablePtr.Get(curByte & 15)
+			} else {
+				curByte = 0
+			}
+			dst[pos] = curByte
+		}
+		return
+	}
+	srcHeader := (*reflect.StringHeader)(unsafe.Pointer(&src))
+	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
+	unpackedNibbleLookupOddSSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), unsafe.Pointer(tablePtr), srcLen)
+}
+
 // PackedNibbleLookupUnsafe sets the bytes in dst[] as follows:
 //   if pos is even, dst[pos] := table[src[pos / 2] & 15]
 //   if pos is odd, dst[pos] := table[src[pos / 2] >> 4]
