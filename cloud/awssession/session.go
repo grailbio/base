@@ -20,17 +20,23 @@ const (
 	defaultTimeout = 10 * time.Second
 )
 
-// NewWithTicket creates a AWS session using a GRAIL ticket. This is helper
-// that uses inside a Provider with a timeout of 10 seconds. The region will be
-// set to 'us-west-2' and can be overridden by passing an appropriate
-// *aws.Config.
+// NewWithTicket creates an AWS session using a GRAIL ticket. The returned
+// session uses a Provider with a timeout of 10 seconds. The region will be set
+// to 'us-west-2' and can be overridden by passing an appropriate *aws.Config.
 func NewWithTicket(ctx *context.T, ticketPath string, cfgs ...*aws.Config) (*session.Session, error) {
+	cfg := NewConfigWithTicket(ctx, ticketPath)
+	cfgs = append([]*aws.Config{cfg}, cfgs...)
+	return session.NewSession(cfgs...)
+}
+
+// NewConfigWithTicket creates an AWS configuration using a GRAIL ticket. The
+// returned configuration uses a Provider with a timeout of 10 seconds. The
+// region will be set to 'us-west-2'.
+func NewConfigWithTicket(ctx *context.T, ticketPath string) *aws.Config {
 	creds := credentials.NewCredentials(&Provider{
 		Ctx:        ctx,
 		Timeout:    defaultTimeout,
 		TicketPath: ticketPath,
 	})
-	cfg := aws.NewConfig().WithCredentials(creds).WithRegion(region)
-	cfgs = append([]*aws.Config{cfg}, cfgs...)
-	return session.NewSession(cfgs...)
+	return aws.NewConfig().WithCredentials(creds).WithRegion(region)
 }
