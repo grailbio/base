@@ -694,15 +694,6 @@ func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
 	return f.info, nil
 }
 
-func newInfo(path string, output *s3.GetObjectOutput) *s3Info {
-	return &s3Info{
-		name:    filepath.Base(path),
-		size:    *output.ContentLength,
-		modTime: *output.LastModified,
-		etag:    *output.ETag,
-	}
-}
-
 func (f *s3File) handleStat(req request) {
 	ctx := req.ctx
 	clients, err := f.provider.Get(ctx, "GetObject", f.name)
@@ -826,9 +817,6 @@ func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy)
 		}
 		f.bodyReader = output.Body // take ownership
 		f.bodyReaderRequestIDs = ids
-		if f.info == nil {
-			f.info = newInfo(f.name, output)
-		}
 		return nil
 	}
 }
