@@ -27,9 +27,9 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 			return &s3Lister{ctx: ctx, dir: dir, err: clientsErr}
 		}
 		return &s3BucketLister{
-			ctx:    ctx,
-			scheme: scheme,
-			policy: newRetryPolicy(clients, file.Opts{}),
+			ctx:     ctx,
+			scheme:  scheme,
+			clients: clients,
 		}
 	}
 	clients, err := impl.provider.Get(ctx, "ListBucket", dir)
