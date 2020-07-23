@@ -862,6 +862,13 @@ func (n *inode) listDirLocked() (*dirCache, error) {
 	)
 	for lister.Scan() {
 		fileName := getFileName(n, lister.Path())
+		if fileName == "" {
+			// Assume this is a directory marker:
+			// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
+			// s3file's List returns these, but empty filenames seem to cause problems for FUSE.
+			// TODO: Filtering these in s3file, if it's ok for other users.
+			continue
+		}
 		ent := &dirEntry{
 			DirEntry: fuse.DirEntry{
 				Name: fileName,
