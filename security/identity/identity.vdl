@@ -18,3 +18,8 @@ type Ec2Blesser interface {
 type GoogleBlesser interface {
   BlessGoogle(idToken string) (blessing security.WireBlessings | error)  {access.Read}
 }
+
+// K8sBlesser returns a blessing giving the provided Kubernetes service accountop token.
+type K8sBlesser interface {
+  BlessK8s(caCrt string, namespace string, token string, region string) (blessing security.WireBlessings | error)  {access.Read}
+}

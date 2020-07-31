@@ -55,6 +55,11 @@ var (
 	ec2DisableAddrCheckFlag        bool
 	ec2DisableUniquenessCheckFlag  bool
 	ec2DisablePendingTimeCheckFlag bool
+
+	k8sBlesserRoleFlag        string
+	k8sExpirationIntervalFlag time.Duration
+	awsAccountsFlag           string
+	awsRegionsFlag            string
 )
 
 func newCmdRoot() *cmdline.Command {
@@ -84,8 +89,13 @@ certificate + the private key and the URL to reach the Docker daemon.
 	root.Flags.BoolVar(&ec2DisableUniquenessCheckFlag, "danger-danger-danger-ec2-disable-uniqueness-check", false, "Disable the uniqueness check for the EC2-based blessings requests. Only useful for local tests.")
 	root.Flags.BoolVar(&ec2DisablePendingTimeCheckFlag, "danger-danger-danger-ec2-disable-pending-time-check", false, "Disable the pendint time check for the EC2-based blessings requests. Only useful for local tests.")
 
-	root.Flags.StringVar(&googleUserSufixFlag, "google-user-domain", "grailbio.com", "Comma-separated list of email domains used for validating users")
-	root.Flags.StringVar(&googleAdminNameFlag, "google-admin", "admin@grailbio.com", "Google Admin that can read all group memberships - NOTE: all groups will need to match the admin user's domain")
+	root.Flags.StringVar(&googleUserSufixFlag, "google-user-domain", "grailbio.com", "Comma-separated list of email domains used for validating users.")
+	root.Flags.StringVar(&googleAdminNameFlag, "google-admin", "admin@grailbio.com", "Google Admin that can read all group memberships - NOTE: all groups will need to match the admin user's domain.")
+
+	root.Flags.DurationVar(&k8sExpirationIntervalFlag, "k8s-expiration", 365*24*time.Hour, "Expiration caveat for the K8s-based blessings.")
+	root.Flags.StringVar(&k8sBlesserRoleFlag, "k8s-blesser-role", "ticket-server", "What role to use to lookup EKS cluster information on all authorized accounts. The role needs to exist in all the accounts.")
+	root.Flags.StringVar(&awsAccountsFlag, "aws-account-ids", "", "Commma-separated list of AWS account IDs used to populate allow-list of k8s clusters.")
+	root.Flags.StringVar(&awsRegionsFlag, "aws-regions", "us-west-2", "Commma-separated list of AWS regions used to populate allow-list of k8s clusters.")
 
 	return root
 }
@@ -207,6 +217,10 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	// permissions are governed by the -v23.permissions.{file,literal} flags.
 	d.registry["blesser/google"] = entry{
 		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag, strings.Split(googleUserSufixFlag, ","))),
+		auth:    securityflag.NewAuthorizerOrDie(ctx),
+	}
+	d.registry["blesser/k8s"] = entry{
+		service: identity.K8sBlesserServer(newK8sBlesser(awsSession, k8sExpirationIntervalFlag, k8sBlesserRoleFlag, strings.Split(awsAccountsFlag, ","), strings.Split(awsRegionsFlag, ","))),
 		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}
 	if ec2BlesserRoleFlag != "" {
