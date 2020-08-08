@@ -88,9 +88,8 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 		return err
 	}
 
-	jsonOutput := json.Const(vdl.ValueOf(t.Interface()), "", nil)
-
 	if jsonOnlyFlag {
+		jsonOutput := json.Const(vdl.ValueOf(t.Interface()), "", nil)
 		fmt.Println(jsonOutput)
 		return nil
 	}
@@ -146,6 +145,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 		return syscall.Exec(path, args, env)
 	}
 
+	jsonOutput := json.Const(vdl.ValueOf(t.Interface()), "", nil)
 	fmt.Println(jsonOutput)
 	return nil
 }
