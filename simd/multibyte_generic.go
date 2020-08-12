@@ -56,6 +56,17 @@ func RepeatU16(dst []uint16, val uint16) {
 	Memset16Raw(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(&val), dstHeader.Len)
 }
 
+// IndexU16 returns the index of the first instance of val in main, or -1 if
+// val is not present in main.
+func IndexU16(main []uint16, val uint16) int {
+	for i, v := range main {
+		if v == val {
+			return i
+		}
+	}
+	return -1
+}
+
 // (Add a function which has the original little-endian byte-slice semantics if
 // we ever need it.)
 

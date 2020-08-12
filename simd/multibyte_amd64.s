@@ -9,6 +9,68 @@
         GLOBL ·Reverse16<>(SB), 24, $16
         // NOPTR = 16, RODATA = 8
 
+TEXT ·index16SSE2Asm(SB),4,$0-32
+        // index16SSE2Asm scans main[], searching for the first instance of
+        // val.  If no instances are found, it returns -1.
+        // It requires nElem >= 8.
+        // The implementation is based on a loop which uses _mm_cmpeq_epi16()
+        // to scan 8 uint16s in parallel, and _mm_movemask_epi8() to extract
+        // the result of that scan.  It is similar to firstLeq8 in cmp_amd64.s.
+
+        // There's a ~10% benefit from 2x-unrolling the main loop so that only
+        // one test is performed per loop iteration (i.e. just look at the
+        // bitwise-or of the comparison results, and backtrack a bit on a hit).
+        // I'll leave that on the table for now to keep the logic simpler.
+
+        // Register allocation:
+        //   AX: pointer to start of main[]
+        //   BX: nElem - 8
+        //   CX: current index
+        //   X0: vector with 8 copies of val
+        MOVQ    main+0(FP), AX
+
+        // clang compiles _mm_set1_epi16() to this, I'll trust it.
+        MOVQ    val+8(FP), X0
+        PSHUFLW $0xe0, X0, X0
+        PSHUFD  $0, X0, X0
+
+        MOVQ    nElem+16(FP), BX
+        SUBQ    $8, BX
+        XORL    CX, CX
+
+index16SSE2AsmLoop:
+        // Scan 8 elements starting from &(main[CX]).
+        MOVOU   (AX)(CX*2), X1
+        PCMPEQW X0, X1
+        PMOVMSKB        X1, DX
+        // Bits 2k and 2k+1 are now set in DX iff the uint16 at position k
+        // compared equal.
+        TESTQ   DX, DX
+        JNE     index16SSE2AsmFound
+        ADDQ    $8, CX
+        CMPQ    BX, CX
+        JG      index16SSE2AsmLoop
+
+        // Scan the last 8 elements; this may partially overlap with the
+        // previous scan.
+        MOVQ    BX, CX
+        MOVOU   (AX)(CX*2), X1
+        PCMPEQW X0, X1
+        PMOVMSKB        X1, DX
+        TESTQ   DX, DX
+        JNE     index16SSE2AsmFound
+        // No match found, return -1.
+        MOVQ    $-1, ret+24(FP)
+        RET
+
+index16SSE2AsmFound:
+        BSFQ    DX, AX
+        // AX now has the index of the lowest set bit in DX.
+        SHRQ    $1, AX
+        ADDQ    CX, AX
+        MOVQ    AX, ret+24(FP)
+        RET
+
 TEXT ·reverse16InplaceSSSE3Asm(SB),4,$0-16
         // This is only called with nElem > 8.  So we can safely divide this
         // into two cases:

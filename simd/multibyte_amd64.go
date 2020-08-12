@@ -25,6 +25,9 @@ import (
 // *** the following functions are defined in multibyte_amd64.s
 
 //go:noescape
+func index16SSE2Asm(main unsafe.Pointer, val, nElem int) int
+
+//go:noescape
 func reverse16InplaceSSSE3Asm(main unsafe.Pointer, nElem int)
 
 //go:noescape
@@ -91,6 +94,21 @@ func RepeatI16(dst []int16, val int16) {
 func RepeatU16(dst []uint16, val uint16) {
 	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
 	Memset16Raw(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(&val), dstHeader.Len)
+}
+
+// IndexU16 returns the index of the first instance of val in main, or -1 if
+// val is not present in main.
+func IndexU16(main []uint16, val uint16) int {
+	if len(main) < 8 {
+		for i, v := range main {
+			if v == val {
+				return i
+			}
+		}
+		return -1
+	}
+	mainHeader := (*reflect.SliceHeader)(unsafe.Pointer(&main))
+	return index16SSE2Asm(unsafe.Pointer(mainHeader.Data), int(val), mainHeader.Len)
 }
 
 // (Add a function which has the original little-endian byte-slice semantics if

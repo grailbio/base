@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/grailbio/base/simd"
+	"github.com/grailbio/testutil/expect"
 )
 
 // The compiler clearly recognizes this; performance is almost
@@ -26,6 +27,7 @@ func memset32Builtin(dst []uint32, val uint32) {
 func TestMemset32(t *testing.T) {
 	maxSize := 500
 	nIter := 200
+	rand.Seed(1)
 	main1Arr := make([]uint32, maxSize)
 	main2Arr := make([]uint32, maxSize)
 	for iter := 0; iter < nIter; iter++ {
@@ -63,6 +65,7 @@ func memset16Standard(dst []uint16, val uint16) {
 func TestMemset16(t *testing.T) {
 	maxSize := 500
 	nIter := 200
+	rand.Seed(1)
 	main1Arr := make([]uint16, maxSize)
 	main2Arr := make([]uint16, maxSize)
 	for iter := 0; iter < nIter; iter++ {
@@ -148,6 +151,88 @@ func Benchmark_Memset16(b *testing.B) {
 	}
 }
 
+func indexU16Standard(main []uint16, val uint16) int {
+	for i, v := range main {
+		if v == val {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestIndexU16(t *testing.T) {
+	// Generate nOuterIter random length-arrLen []uint16s, and perform nInnerIter
+	// random searches on each slice.
+	arrLen := 50000
+	nOuterIter := 5
+	nInnerIter := 100
+	valLimit := 65536 // maximum uint16 is 65535
+	rand.Seed(1)
+	mainArr := make([]uint16, arrLen)
+	for outerIdx := 0; outerIdx < nOuterIter; outerIdx++ {
+		for i := range mainArr {
+			mainArr[i] = uint16(rand.Intn(valLimit))
+		}
+		for innerIdx := 0; innerIdx < nInnerIter; innerIdx++ {
+			needle := uint16(rand.Intn(valLimit))
+			expected := indexU16Standard(mainArr, needle)
+			actual := simd.IndexU16(mainArr, needle)
+			expect.EQ(t, expected, actual)
+		}
+	}
+}
+
+const indexU16TestLimit = 100
+
+func indexU16SimdSubtask(args interface{}, nIter int) int {
+	a := args.(u16Args)
+	sum := 0
+	needle := uint16(0)
+	for iter := 0; iter < nIter; iter++ {
+		sum += simd.IndexU16(a.main, needle)
+		needle++
+		if needle == indexU16TestLimit {
+			needle = 0
+		}
+	}
+	return sum
+}
+
+func indexU16StandardSubtask(args interface{}, nIter int) int {
+	a := args.(u16Args)
+	sum := 0
+	needle := uint16(0)
+	for iter := 0; iter < nIter; iter++ {
+		sum += indexU16Standard(a.main, needle)
+		needle++
+		if needle == indexU16TestLimit {
+			needle = 0
+		}
+	}
+	return sum
+}
+
+// Single-threaded performance is ~4x as good in my testing.
+func Benchmark_IndexU16(b *testing.B) {
+	funcs := []taggedMultiBenchVarargsFunc{
+		{
+			f:   indexU16SimdSubtask,
+			tag: "SIMD",
+		},
+		{
+			f:   indexU16StandardSubtask,
+			tag: "Standard",
+		},
+	}
+	for _, f := range funcs {
+		multiBenchmarkVarargs(f.f, f.tag+"Long", 50, func() interface{} {
+			return u16Args{
+				main: make([]uint16, 4000000, 4000000+31),
+			}
+		}, b)
+	}
+}
+
 func reverseU16Slow(main []uint16) {
 	nU16 := len(main)
 	nU16Div2 := nU16 >> 1
@@ -159,6 +244,7 @@ func reverseU16Slow(main []uint16) {
 func TestReverse16(t *testing.T) {
 	maxSize := 500
 	nIter := 200
+	rand.Seed(1)
 	main1Arr := make([]uint16, maxSize)
 	main2Arr := make([]uint16, maxSize)
 	main3Arr := make([]uint16, maxSize)
