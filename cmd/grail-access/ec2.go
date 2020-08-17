@@ -16,8 +16,13 @@ import (
 	"v.io/v23/security"
 )
 
+const defaultEc2BlesserFlag = "/ticket-server.eng.grail.com:8102/blesser/ec2"
+
 func fetchEC2Blessings(ctx *context.T) (security.Blessings, error) {
-	stub := identity.Ec2BlesserClient(blesserEc2Flag)
+	if blesserFlag == "" {
+		blesserFlag = defaultEc2BlesserFlag
+	}
+	stub := identity.Ec2BlesserClient(blesserFlag)
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}

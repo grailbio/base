@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -145,7 +146,7 @@ func TestCmd(t *testing.T) {
 			cmd := exec.Command(exe,
 				"-dir", principalDir,
 				"-ec2",
-				"-blesser-ec2", fmt.Sprintf("/%s", blesserEndpoint.Address),
+				"-blesser", fmt.Sprintf("/%s", blesserEndpoint.Address),
 				"-ec2-instance-identity-url", fmt.Sprintf("http://%s/", listener.Addr().String()))
 			cmd.Env = []string{pathEnv}
 			stdout, _ := runAndCapture(t, cmd)
@@ -212,7 +213,7 @@ func TestCmd(t *testing.T) {
 			cmd := exec.Command(exe,
 				"-dir", principalDir,
 				"-browser=false",
-				"-blesser-google", fmt.Sprintf("/%s", blesserEndpoint.Address),
+				"-blesser", fmt.Sprintf("/%s", blesserEndpoint.Address),
 				"-google-oauth2-url", fmt.Sprintf("http://%s", listener.Addr().String()))
 			cmd.Env = []string{pathEnv}
 			cmd.Stdin = bytes.NewReader([]byte("testcode"))
@@ -225,6 +226,87 @@ func TestCmd(t *testing.T) {
 			defaultBlessing, _ := principal.BlessingStore().Default()
 			assert.Contains(t, defaultBlessing.String(), wantClientBlessing)
 		})
+
+		t.Run("k8s", func(t *testing.T) {
+			const (
+				wantCaCrt               = "caCrt"
+				wantNamespace           = "namespace"
+				wantToken               = "token"
+				wantRegion              = "us-west-2"
+				serverBlessingName      = "grail-access-test-blessing-abc123"
+				clientBlessingExtension = "k8s-test"
+				wantClientBlessing      = serverBlessingName + ":" + clientBlessingExtension
+			)
+
+			// Run fake ticket server: accepts (caCrt, namespace, token), returns blessings.
+			var blesserEndpoint naming.Endpoint
+			ctx, blesserEndpoint = runBlesserServer(ctx, t,
+				identity.K8sBlesserServer(fakeK8sBlesser(
+					func(gotCaCrt string, gotNamespace string, gotToken string, gotRegion string, recipient security.PublicKey) security.Blessings {
+						assert.Equal(t, gotCaCrt, wantCaCrt)
+						assert.Equal(t, gotNamespace, wantNamespace)
+						assert.Equal(t, gotToken, wantToken)
+						assert.Equal(t, gotRegion, wantRegion)
+						p := v23.GetPrincipal(ctx)
+						caveat, err := security.NewExpiryCaveat(time.Now().Add(24 * time.Hour))
+						assert.NoError(t, err)
+						localBlessings, err := p.BlessSelf(serverBlessingName)
+						assert.NoError(t, err)
+						b, err := p.Bless(recipient, localBlessings, clientBlessingExtension, caveat)
+						assert.NoError(t, err)
+						return b
+					}),
+				),
+			)
+
+			// Create caCrt, namespace, and token files
+			tmpDir, cleanUp := testutil.TempDir(t, "", "")
+			defer cleanUp()
+
+			assert.NoError(t, ioutil.WriteFile(path.Join(tmpDir, "caCrt"), []byte(wantCaCrt), 0644))
+			assert.NoError(t, ioutil.WriteFile(path.Join(tmpDir, "namespace"), []byte(wantNamespace), 0644))
+			assert.NoError(t, ioutil.WriteFile(path.Join(tmpDir, "token"), []byte(wantToken), 0644))
+
+			// Run grail-access to create a principal and bless it with the k8s flow.
+			principalDir, principalCleanUp := testutil.TempDir(t, "", "")
+			defer principalCleanUp()
+			cmd := exec.Command(exe,
+				"-dir", principalDir,
+				"-blesser", fmt.Sprintf("/%s", blesserEndpoint.Address),
+				"-k8s",
+				"-ca-crt", path.Join(tmpDir, "caCrt"),
+				"-namespace", path.Join(tmpDir, "namespace"),
+				"-token", path.Join(tmpDir, "token"),
+			)
+			cmd.Env = []string{pathEnv}
+			stdout, _ := runAndCapture(t, cmd)
+			assert.Contains(t, stdout, wantClientBlessing)
+
+			// Make sure we got the right blessing.
+			principal, err := libsecurity.LoadPersistentPrincipal(principalDir, nil)
+			assert.NoError(t, err)
+			defaultBlessing, _ := principal.BlessingStore().Default()
+			assert.Contains(t, defaultBlessing.String(), wantClientBlessing)
+		})
+
+		// If any of ca.crt, namespace, or token files are missing, an error should be thrown.
+		t.Run("k8s_missing_file_should_fail", func(t *testing.T) {
+			// Run grail-access to create a principal and bless it with the k8s flow.
+			principalDir, principalCleanUp := testutil.TempDir(t, "", "")
+			defer principalCleanUp()
+			cmd := exec.Command(exe,
+				"-dir", principalDir,
+				"-k8s",
+			)
+			cmd.Env = []string{pathEnv}
+			var stderrBuf strings.Builder
+			cmd.Stderr = &stderrBuf
+			err := cmd.Run()
+			assert.Error(t, err)
+			wantStderr := "no such file or directory"
+			assert.True(t, strings.Contains(stderrBuf.String(), wantStderr))
+		})
+
 	})
 }
 
@@ -246,6 +328,12 @@ func (f fakeBlesser) BlessEc2(_ *context.T, call rpc.ServerCall, s string) (secu
 
 func (f fakeBlesser) BlessGoogle(_ *context.T, call rpc.ServerCall, s string) (security.Blessings, error) {
 	return f(s, call.Security().RemoteBlessings().PublicKey()), nil
+}
+
+type fakeK8sBlesser func(arg1, arg2, arg3, arg4 string, recipientKey security.PublicKey) security.Blessings
+
+func (f fakeK8sBlesser) BlessK8s(_ *context.T, call rpc.ServerCall, s1, s2, s3, s4 string) (security.Blessings, error) {
+	return f(s1, s2, s3, s4, call.Security().RemoteBlessings().PublicKey()), nil
 }
 
 func runBlesserServer(ctx *context.T, t *testing.T, stub interface{}) (*context.T, naming.Endpoint) {

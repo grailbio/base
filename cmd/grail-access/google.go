@@ -24,12 +24,17 @@ import (
 	"v.io/x/lib/vlog"
 )
 
+const defaultGoogleBlesserFlag = "/ticket-server.eng.grail.com:8102/blesser/google"
+
 func fetchGoogleBlessings(ctx *vcontext.T) (security.Blessings, error) {
+	if blesserFlag == "" {
+		blesserFlag = defaultGoogleBlesserFlag
+	}
 	idToken, err := fetchIDToken(ctx)
 	if err != nil {
 		return security.Blessings{}, err
 	}
-	stub := identity.GoogleBlesserClient(blesserGoogleFlag)
+	stub := identity.GoogleBlesserClient(blesserFlag)
 	return stub.BlessGoogle(ctx, idToken)
 }
 

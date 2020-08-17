@@ -34,14 +34,17 @@ const (
 
 var (
 	credentialsDirFlag string
-	ec2Flag            bool
 
-	blesserGoogleFlag string
-	browserFlag       bool
-	googleOauth2Flag  string
-
-	blesserEc2Flag          string
+	blesserFlag             string
+	browserFlag             bool
+	googleOauth2Flag        string
+	ec2Flag                 bool
 	ec2InstanceIdentityFlag string
+	k8sFlag                 bool
+	regionFlag              string
+	caCrtFlag               string
+	namespaceFlag           string
+	tokenFlag               string
 
 	dumpFlag                 bool
 	doNotRefreshDurationFlag time.Duration
@@ -80,17 +83,21 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 'server' is the blessing of the server.
 `,
 	}
-	cmd.Flags.StringVar(&blesserGoogleFlag, "blesser-google", "/ticket-server.eng.grail.com:8102/blesser/google", "Blesser to talk to for the Google-based flow.")
-	cmd.Flags.StringVar(&blesserEc2Flag, "blesser-ec2", "/ticket-server.eng.grail.com:8102/blesser/ec2", "Blesser to talk to for the EC2-based flow.")
 	cmd.Flags.StringVar(&credentialsDirFlag, "dir", defaultCredentialsDir, "Where to store the Vanadium credentials. NOTE: the content will be erased if the credentials are regenerated.")
-	cmd.Flags.BoolVar(&ec2Flag, "ec2", false, "Use the role of the EC2 VM.")
-	cmd.Flags.StringVar(&ec2InstanceIdentityFlag, "ec2-instance-identity-url",
-		"http://169.254.169.254/latest/dynamic/instance-identity/pkcs7",
-		"URL for fetching instance identity document, for testing")
+	cmd.Flags.StringVar(&blesserFlag, "blesser", "", "Flow specific blesser endpoint to use. Defaults to /ticket-server.eng.grail.com:8102/blesser/<flow>.")
 	cmd.Flags.BoolVar(&browserFlag, "browser", os.Getenv("SSH_CLIENT") == "", "Attempt to open a browser.")
 	cmd.Flags.StringVar(&googleOauth2Flag, "google-oauth2-url",
 		"https://accounts.google.com/o/oauth2",
 		"URL for oauth2 API calls, for testing")
+	cmd.Flags.BoolVar(&ec2Flag, "ec2", false, "Use the role of the EC2 VM.")
+	cmd.Flags.StringVar(&ec2InstanceIdentityFlag, "ec2-instance-identity-url",
+		"http://169.254.169.254/latest/dynamic/instance-identity/pkcs7",
+		"URL for fetching instance identity document, for testing")
+	cmd.Flags.BoolVar(&k8sFlag, "k8s", false, "Use the Kubernetes flow.")
+	cmd.Flags.StringVar(&regionFlag, "region", "us-west-2", "AWS EKS region to use for k8s cluster token review.")
+	cmd.Flags.StringVar(&caCrtFlag, "ca-crt", "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "Path to ca.crt file.")
+	cmd.Flags.StringVar(&namespaceFlag, "namespace", "/var/run/secrets/kubernetes.io/serviceaccount/namespace", "Path to namespace file.")
+	cmd.Flags.StringVar(&tokenFlag, "token", "/var/run/secrets/kubernetes.io/serviceaccount/token", "Path to token file.")
 	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
 	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")
 
@@ -140,6 +147,8 @@ func run(*cmdline.Env, []string) error {
 	var blessings security.Blessings
 	if ec2Flag {
 		blessings, err = fetchEC2Blessings(ctx)
+	} else if k8sFlag {
+		blessings, err = fetchK8sBlessings(ctx)
 	} else {
 		blessings, err = fetchGoogleBlessings(ctx)
 	}
