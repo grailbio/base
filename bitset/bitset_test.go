@@ -11,8 +11,43 @@ import (
 	"testing"
 
 	gbitset "github.com/grailbio/base/bitset"
+	"github.com/grailbio/testutil/expect"
 	"github.com/willf/bitset"
 )
+
+func TestSetAndClearIntervals(t *testing.T) {
+	rand.Seed(1)
+	nTrialsPerNWord := 100
+	for nWord := 1; nWord <= 9; nWord++ {
+		bs := make([]uintptr, nWord)
+		nBits := nWord * gbitset.BitsPerWord
+		expectedBits := make([]bool, nBits)
+		for trialIdx := 0; trialIdx < nTrialsPerNWord; trialIdx++ {
+			// We perform a bunch of random SetInterval and ClearInterval operations
+			// on a []uintptr bitset, use for-loops to update the simpler
+			// expectedBits slice to what we expect, and use gbitset.Test to verify
+			// semantic equivalence.
+			startIdx := rand.Intn(nBits)
+			limitIdx := startIdx + rand.Intn(nBits-startIdx)
+			gbitset.SetInterval(bs, startIdx, limitIdx)
+			for i := startIdx; i < limitIdx; i++ {
+				expectedBits[i] = true
+			}
+			for i := 0; i < nBits; i++ {
+				expect.EQ(t, gbitset.Test(bs, i), expectedBits[i])
+			}
+			startIdx = rand.Intn(nBits)
+			limitIdx = startIdx + rand.Intn(nBits-startIdx)
+			gbitset.ClearInterval(bs, startIdx, limitIdx)
+			for i := startIdx; i < limitIdx; i++ {
+				expectedBits[i] = false
+			}
+			for i := 0; i < nBits; i++ {
+				expect.EQ(t, gbitset.Test(bs, i), expectedBits[i])
+			}
+		}
+	}
+}
 
 /*
 Initial benchmark results:

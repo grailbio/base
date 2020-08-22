@@ -18,6 +18,9 @@ import (
 // BitsPerWord is the number of bits in a machine word.
 const BitsPerWord = 64
 
+// Log2BitsPerWord is log_2(BitsPerWord).
+const Log2BitsPerWord = uint(6)
+
 // Set sets the given bit in a []uintptr bitset.
 func Set(data []uintptr, bitIdx int) {
 	// Unsigned division by a power-of-2 constant compiles to a right-shift,
@@ -34,6 +37,79 @@ func Clear(data []uintptr, bitIdx int) {
 // Test returns true iff the given bit is set.
 func Test(data []uintptr, bitIdx int) bool {
 	return (data[uint(bitIdx)/BitsPerWord] & (1 << (uint(bitIdx) % BitsPerWord))) != 0
+}
+
+// SetInterval sets the bits at all positions in [startIdx, limitIdx) in a
+// []uintptr bitset.
+func SetInterval(data []uintptr, startIdx, limitIdx int) {
+	if startIdx >= limitIdx {
+		return
+	}
+	startWordIdx := startIdx >> Log2BitsPerWord
+	startBit := uintptr(1) << uint32(startIdx&(BitsPerWord-1))
+	limitWordIdx := limitIdx >> Log2BitsPerWord
+	limitBit := uintptr(1) << uint32(limitIdx&(BitsPerWord-1))
+	if startWordIdx == limitWordIdx {
+		// We can't fill all bits from startBit on in the first word, since the
+		// limit is also within this word.
+		data[startWordIdx] |= limitBit - startBit
+		return
+	}
+	// Fill all bits from startBit on in the first word.
+	data[startWordIdx] |= -startBit
+	// Fill all bits in intermediate words.
+	// (todo: ensure compiler doesn't insert pointless slice bounds-checks on
+	// every iteration)
+	for wordIdx := startWordIdx + 1; wordIdx < limitWordIdx; wordIdx++ {
+		data[wordIdx] = ^uintptr(0)
+	}
+	// Fill just the bottom bits in the last word, if necessary.
+	if limitBit != 1 {
+		data[limitWordIdx] |= limitBit - 1
+	}
+}
+
+// ClearInterval clears the bits at all positions in [startIdx, limitIdx) in a
+// []uintptr bitset.
+func ClearInterval(data []uintptr, startIdx, limitIdx int) {
+	if startIdx >= limitIdx {
+		return
+	}
+	startWordIdx := startIdx >> Log2BitsPerWord
+	startBit := uintptr(1) << uint32(startIdx&(BitsPerWord-1))
+	limitWordIdx := limitIdx >> Log2BitsPerWord
+	limitBit := uintptr(1) << uint32(limitIdx&(BitsPerWord-1))
+	if startWordIdx == limitWordIdx {
+		// We can't clear all bits from startBit on in the first word, since the
+		// limit is also within this word.
+		data[startWordIdx] &= ^(limitBit - startBit)
+		return
+	}
+	// Clear all bits from startBit on in the first word.
+	data[startWordIdx] &= startBit - 1
+	// Clear all bits in intermediate words.
+	for wordIdx := startWordIdx + 1; wordIdx < limitWordIdx; wordIdx++ {
+		data[wordIdx] = 0
+	}
+	// Clear just the bottom bits in the last word, if necessary.
+	if limitBit != 1 {
+		data[limitWordIdx] &= -limitBit
+	}
+}
+
+// NewClearBits creates a []uintptr bitset with capacity for at least nBit
+// bits, and all bits clear.
+func NewClearBits(nBit int) []uintptr {
+	nWord := (nBit + BitsPerWord - 1) / BitsPerWord
+	return make([]uintptr, nWord)
+}
+
+// NewSetBits creates a []uintptr bitset with capacity for at least nBit bits,
+// and all bits at positions [0, nBit) set.
+func NewSetBits(nBit int) []uintptr {
+	data := NewClearBits(nBit)
+	SetInterval(data, 0, nBit)
+	return data
 }
 
 // NonzeroWordScanner iterates over and clears the set bits in a bitset, with
