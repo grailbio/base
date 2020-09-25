@@ -133,7 +133,7 @@ type winsize struct {
 
 func getWinsize(fd uintptr) (*winsize, error) {
 	w := new(winsize)
-	_, _, err := unix.Syscall(unix.SYS_IOCTL, fd, uintptr(unix.TIOCGWINSZ), uintptr(unsafe.Pointer(w)))
+	_, _, err := unix.Syscall(syscall.SYS_IOCTL, fd, uintptr(unix.TIOCGWINSZ), uintptr(unsafe.Pointer(w)))
 	if err == 0 {
 		return w, nil
 	}

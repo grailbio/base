@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go v0.46.3 // indirect
 	github.com/DataDog/zstd v1.4.1
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5
-	github.com/aws/aws-sdk-go v1.29.24
+	github.com/aws/aws-sdk-go v1.34.31
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cespare/xxhash/v2 v2.1.0
 	github.com/coreos/go-oidc v2.1.0+incompatible
@@ -28,16 +28,16 @@ require (
 	github.com/willf/bitset v1.1.10
 	github.com/yasushi-saito/zlibng v0.0.0-20190922135643-2a860060b80c
 	go.opencensus.io v0.22.1 // indirect
-	golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc
-	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
+	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	golang.org/x/sys v0.0.0-20191008105621-543471e840be
+	golang.org/x/sys v0.0.0-20200923182605-d9f96fdee20d
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd // indirect
 	google.golang.org/grpc v1.24.0 // indirect
 	v.io v0.1.8
-	v.io/x/lib v0.1.4
+	v.io/x/lib v0.1.5
 )
 
 require (

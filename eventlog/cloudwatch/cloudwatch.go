@@ -212,7 +212,7 @@ func (c *CloudWatchEventer) loop(ctx context.Context) {
 		})
 		if err != nil {
 			log.Error.Printf("CloudWatchEventer: PutLogEvents error: %v", err)
-			if aerr, ok := err.(cloudwatchlogs.InvalidSequenceTokenException); ok {
+			if aerr, ok := err.(*cloudwatchlogs.InvalidSequenceTokenException); ok {
 				c.sequenceToken = aerr.ExpectedSequenceToken
 			}
 			return

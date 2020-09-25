@@ -56,7 +56,7 @@ func (f *logsAPIFake) PutLogEventsWithContext(ctx context.Context,
 	var ts *int64
 	for _, event := range input.LogEvents {
 		if ts != nil && *event.Timestamp < *ts {
-			return nil, cloudwatchlogs.InvalidParameterException{}
+			return nil, &cloudwatchlogs.InvalidParameterException{}
 		}
 		ts = event.Timestamp
 	}
@@ -67,7 +67,7 @@ func (f *logsAPIFake) PutLogEventsWithContext(ctx context.Context,
 		if f.sequence != 0 {
 			sequenceToken := fmt.Sprintf("%d", f.sequence)
 			if input.SequenceToken == nil || sequenceToken != *input.SequenceToken {
-				return nil, cloudwatchlogs.InvalidSequenceTokenException{
+				return nil, &cloudwatchlogs.InvalidSequenceTokenException{
 					ExpectedSequenceToken: &sequenceToken,
 				}
 			}
