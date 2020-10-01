@@ -4,7 +4,7 @@ go:
 os:
   - linux
   - osx
-dist: trusty
+dist: xenial
 sudo: false
 install: true
 script:
