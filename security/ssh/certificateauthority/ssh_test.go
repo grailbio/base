@@ -64,11 +64,21 @@ func TestAuthority(t *testing.T) {
 	cmd := exec.Command("ssh-keygen", "-L", "-f", "-")
 	cmd.Stdin = bytes.NewBuffer([]byte(preCreatedUserCert))
 	preCreatedOutput, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			t.Logf("stderr of %v: %s", cmd, string(exitErr.Stderr))
+		}
+	}
 	assert.NoError(t, err)
 
 	cmd = exec.Command("ssh-keygen", "-L", "-f", "-")
 	cmd.Stdin = bytes.NewBuffer([]byte(sshCert))
 	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			t.Logf("stderr of %v: %s", cmd, string(exitErr.Stderr))
+		}
+	}
 	assert.NoError(t, err)
 
 	if string(preCreatedOutput) != string(output) {
