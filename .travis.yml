@@ -1,11 +1,10 @@
 language: go
 go:
-  - 1.12.x
   - 1.13.x
 os:
   - linux
   - osx
-dist: trusty
+dist: xenial
 sudo: false
 install: true
 script:
