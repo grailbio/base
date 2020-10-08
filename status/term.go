@@ -109,33 +109,15 @@ func (t *term) Clear(w io.Writer) {
 
 // Dim returns the current dimensions of the terminal.
 func (t *term) Dim() (width, height int) {
-	ws, err := getWinsize(t.fd)
+	ws, err := unix.IoctlGetWinsize(int(t.fd), unix.TIOCGWINSZ)
 	if err != nil {
 		return 80, 20
 	}
-	return int(ws.Width), int(ws.Height)
+	return int(ws.Col), int(ws.Row)
 }
 
 func isTerminal(fd uintptr) bool {
 	var t syscall.Termios
 	_, _, err := syscall.Syscall6(syscall.SYS_IOCTL, uintptr(fd), termios, uintptr(unsafe.Pointer(&t)), 0, 0, 0)
 	return err == 0
-}
-
-type winsize struct {
-	Height, Width uint16
-	// We pad the struct to give us plenty of headroom. (In practice,
-	// darwin only has 8 additional bytes.) The proper way to do this
-	// would be to use cgo to get the proper struct definition, but I'd
-	// like to avoid this if possible.
-	Pad [128]byte
-}
-
-func getWinsize(fd uintptr) (*winsize, error) {
-	w := new(winsize)
-	_, _, err := unix.Syscall(unix.SYS_IOCTL, fd, uintptr(unix.TIOCGWINSZ), uintptr(unsafe.Pointer(w)))
-	if err == 0 {
-		return w, nil
-	}
-	return w, err
 }
