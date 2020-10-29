@@ -50,8 +50,10 @@ var Parallel = T{Limit: 2 * runtime.GOMAXPROCS(0)}
 // for 0 <= i < n, managing concurrency and error propagation. Each
 // returns when the all invocations have completed, or after the
 // first invocation fails, in which case the first invocation error
-// is returned. Each also propagates panics from underlying
-// invocations to the caller.
+// is returned. Each also propagates panics from underlying invocations
+// to the caller. Note that if a function panics and doesn't release
+// shared resources that fn might need in a traverse child, this could
+// lead to deadlock.
 func (t T) Each(n int, fn func(i int) error) error {
 	if t.Reporter != nil {
 		t.Reporter.Init(n)
