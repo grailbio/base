@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -32,6 +33,7 @@ import (
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/base/file/s3file"
+	"github.com/grailbio/base/file/s3file/s3transport"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/retry"
 	"github.com/grailbio/testutil/assert"
@@ -455,20 +457,25 @@ func TestNotExist(t *testing.T) {
 	assert.True(t, errors.Is(errors.NotExist, err))
 }
 
-func TestOverwriteWhileReadingAWS(t *testing.T) {
+func realBucketProviderOrSkip(t *testing.T) s3file.ClientProvider {
 	if *s3BucketFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket to run the test.")
 	}
-	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+	client := s3transport.Client()
+	return s3file.NewDefaultProvider(session.Options{
+		Config:  *aws.NewConfig().WithHTTPClient(client),
+		Profile: *profileFlag,
+	})
+}
+
+func TestOverwriteWhileReadingAWS(t *testing.T) {
+	provider := realBucketProviderOrSkip(t)
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testOverwriteWhileReading(t, impl, fmt.Sprintf("s3://%s/tmp/testoverwrite", *s3BucketFlag))
 }
 
 func TestPresignRequestsAWS(t *testing.T) {
-	if *s3BucketFlag == "" {
-		t.Skip("Skipping. Set -s3-bucket to run the test.")
-	}
-	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+	provider := realBucketProviderOrSkip(t)
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	ctx := context.Background()
 	const content = "file for testing presigned URLs\n"
@@ -527,22 +534,19 @@ func TestPresignRequestsAWS(t *testing.T) {
 }
 
 func TestAWS(t *testing.T) {
-	if *s3BucketFlag == "" {
-		t.Skip("Skipping. Set -s3-bucket to run the test.")
-	}
-	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+	provider := realBucketProviderOrSkip(t)
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testutil.TestAll(ctx, t, impl, "s3://"+*s3BucketFlag+"/tmp")
 }
 
-func TestConcurrentUploads(t *testing.T) {
-	if *s3BucketFlag == "" || *s3DirFlag == "" {
-		t.Skip("Skipping. Set -s3-bucket and -s3-dir to run the test.")
-	}
-	provider := s3file.NewDefaultProvider(session.Options{Profile: *profileFlag})
+func TestConcurrentUploadsAWS(t *testing.T) {
+	provider := realBucketProviderOrSkip(t)
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 
+	if *s3DirFlag == "" {
+		t.Skip("Skipping. Set -s3-bucket and -s3-dir to run the test.")
+	}
 	path := fmt.Sprintf("s3://%s/%s/test.txt", *s3BucketFlag, *s3DirFlag)
 	ctx := context.Background()
 

@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
-	"github.com/grailbio/base/log"
 )
 
 // s3File implements file.File interface.
@@ -378,15 +377,12 @@ func (f *s3File) handleRead(req request) {
 			f.position += int64(n)
 		}
 		if err != nil {
-			requestIDs := f.bodyReaderRequestIDs
 			f.bodyReader.Close() // nolint: errcheck
 			f.bodyReader = nil
 			f.bodyReaderRequestIDs = s3RequestIDs{}
 			if err != io.EOF {
 				retries++
 				if retries <= maxRetries {
-					log.Error.Printf("s3read %v: retrying (%d) GetObject after error %v, awsrequestID: %v",
-						f.name, retries, err, requestIDs)
 					metric.Retry()
 					continue
 				}

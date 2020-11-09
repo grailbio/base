@@ -1,29 +1,21 @@
 package s3file
 
 import (
-	"context"
 	"expvar"
 	"flag"
 	"fmt"
 	"io"
-	"log"
-	"net"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/grailbio/base/log"
 )
 
 var (
 	metricAutologOnce   sync.Once
 	metricAutologPeriod = flag.Duration("s3file.metric_log_period", 0,
 		"Interval for logging S3 operation metrics. Zero disables logging.")
-	metricHTTPAddr = flag.Bool("s3file.metric_http_addr", false,
-		"Modifies the S3 client HTTP transport to add remote IP address metrics. "+
-			"Not for production. See s3file/internal/cmd/resolvetest/main.go")
 )
 
 func metricAutolog() {
@@ -143,7 +135,6 @@ func logMetricsLoop(period time.Duration) {
 	ticker := time.NewTicker(period)
 	defer ticker.Stop()
 	var buf strings.Builder
-	remoteAddrCounts := make([]int, 16)
 	for {
 		select {
 		case <-ticker.C:
@@ -153,87 +144,6 @@ func logMetricsLoop(period time.Duration) {
 				_, _ = metrics.Write(&buf, period)
 				log.Print(buf.String())
 			})
-			if *metricHTTPAddr {
-				buf.Reset()
-				for i := range remoteAddrCounts {
-					remoteAddrCounts[i] = 0
-				}
-				fmt.Fprint(&buf, "s3file metrics: op:dial ")
-				metricRemoteAddrs.Do(func(kv expvar.KeyValue) {
-					count := int(kv.Value.(*expvar.Int).Value())
-					for i, old := range remoteAddrCounts {
-						if count <= old {
-							continue
-						}
-						copy(remoteAddrCounts[i+1:], remoteAddrCounts[i:])
-						remoteAddrCounts[i] = count
-						break
-					}
-				})
-				for i, count := range remoteAddrCounts {
-					if i > 0 {
-						fmt.Fprint(&buf, "/")
-					}
-					fmt.Fprint(&buf, count)
-				}
-				log.Print(buf.String())
-			}
 		}
 	}
-}
-
-// metricInstrumentedTransports is a cache mapping seen transports to their instrumented clones.
-// This avoids 1) modifying input transports that may be used elsewhere, 2) cloning transports
-// unnecessarily, which can distort results by separating connection pools.
-//
-// This is never released. Users accept this cost by opting in to *metricHTTPAddr.
-var metricInstrumentedTransports sync.Map
-
-type metricInstrumentedTransport struct{ *http.Transport }
-
-func makeMetricHTTPClient(c *http.Client) *http.Client {
-	roundTripper := c.Transport
-	if roundTripper == nil {
-		roundTripper = http.DefaultTransport
-	}
-	switch transport := roundTripper.(type) {
-	default:
-		log.Printf("s3file metrics: unrecognized transport %T, dial logging disabled for this client", c.Transport)
-		return c
-	case metricInstrumentedTransport:
-		return c
-	case *http.Transport:
-		cached, ok := metricInstrumentedTransports.Load(transport)
-		if !ok {
-			instrumented := metricInstrumentedTransport{transport.Clone()}
-			defaultDialContext := instrumented.DialContext
-			instrumented.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				conn, err := defaultDialContext(ctx, network, addr)
-				if err == nil {
-					metricRemoteAddrs.Add(conn.RemoteAddr().String(), 1)
-				}
-				return conn, err
-			}
-			metricInstrumentedTransports.Store(transport, instrumented)
-			cached = instrumented
-		}
-		return &http.Client{cached.(http.RoundTripper), c.CheckRedirect, c.Jar, c.Timeout}
-	}
-}
-
-type metricClientProvider struct{ ClientProvider }
-
-func (m metricClientProvider) Get(ctx context.Context, op, path string) ([]s3iface.S3API, error) {
-	clients, err := m.ClientProvider.Get(ctx, op, path)
-	if err != nil {
-		return clients, err
-	}
-	for _, client := range clients {
-		s3Client, ok := client.(*s3.S3)
-		if !ok {
-			continue
-		}
-		s3Client.Client.Config.HTTPClient = makeMetricHTTPClient(s3Client.Client.Config.HTTPClient)
-	}
-	return clients, err
 }

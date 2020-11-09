@@ -39,9 +39,6 @@ type s3Impl struct {
 // called to create s3 client objects.
 func NewImplementation(provider ClientProvider, opts Options) file.Implementation {
 	metricAutolog()
-	if *metricHTTPAddr {
-		provider = metricClientProvider{provider}
-	}
 	return &s3Impl{provider, opts}
 }
 
