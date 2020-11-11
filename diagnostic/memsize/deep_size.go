@@ -47,7 +47,7 @@ type memoryAndKind struct {
 }
 
 func getMemoryAndType(x reflect.Value) memoryAndKind {
-	start := int64(x.UnsafeAddr())
+	start := x.UnsafeAddr()
 	size := int64(x.Type().Size())
 	kind := x.Kind()
 	return memoryAndKind{
@@ -84,7 +84,7 @@ func (s *memoryScanner) scan(x reflect.Value, includeX bool) (unaddressableBytes
 	case reflect.String:
 		m := x.String()
 		hdr := (*reflect.StringHeader)(unsafe.Pointer(&m))
-		s.memory.add(interval{int64(hdr.Data), int64(hdr.Len)})
+		s.memory.add(interval{hdr.Data, int64(hdr.Len)})
 	case reflect.Array:
 		if containsPointers(x.Type()) { // must scan each element individually
 			for i := 0; i < x.Len(); i++ {
@@ -98,7 +98,7 @@ func (s *memoryScanner) scan(x reflect.Value, includeX bool) (unaddressableBytes
 					unaddressableBytes += s.scan(x.Index(i), true)
 				}
 			} else { // add the content of the slice to the memory counter
-				start := int64(x.Pointer())
+				start := x.Pointer()
 				size := int64(x.Index(0).Type().Size()) * int64(x.Len())
 				s.memory.add(interval{start: start, length: size})
 			}
