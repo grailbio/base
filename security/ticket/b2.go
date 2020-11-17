@@ -10,18 +10,18 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/security/keycrypt"
-	"v.io/x/lib/vlog"
 )
 
 const (
 	b2AuthorizeURL = "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"
 )
 
-func (b *B2AccountAuthorizationBuilder) newB2Ticket() (TicketB2Ticket, error) {
-	vlog.Infof("B2AccountAuthorizationBuilder: %+v", b)
+func (b *B2AccountAuthorizationBuilder) newB2Ticket(ctx *TicketContext) (TicketB2Ticket, error) {
+	log.Info(ctx.ctx, "Creating BackBlaze ticket.", "B2AccountAuthorizationBuilder", b)
 
-	b2Ticket, err := b.genB2Ticket()
+	b2Ticket, err := b.genB2Ticket(ctx)
 	if err != nil {
 		return TicketB2Ticket{}, err
 	}
@@ -31,7 +31,7 @@ func (b *B2AccountAuthorizationBuilder) newB2Ticket() (TicketB2Ticket, error) {
 	}, nil
 }
 
-func (b *B2AccountAuthorizationBuilder) genB2Ticket() (*B2Ticket, error) {
+func (b *B2AccountAuthorizationBuilder) genB2Ticket(ctx *TicketContext) (*B2Ticket, error) {
 	secret, err := keycrypt.Lookup(b.ApplicationKey)
 	if err != nil {
 		return nil, err
@@ -46,14 +46,14 @@ func (b *B2AccountAuthorizationBuilder) genB2Ticket() (*B2Ticket, error) {
 
 	req, err := http.NewRequest("GET", b2AuthorizeURL, nil)
 	if err != nil {
-		vlog.Errorf("Cannot create new request: %s (%s)", b2AuthorizeURL, err)
+		log.Error(ctx.ctx, "Failed to create new request.", "b2AuthorizeURL", b2AuthorizeURL, "err", err.Error())
 		return nil, err
 	}
 	req.Header.Set("Authorization", headerForAuthorizeAccount)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		vlog.Errorf("Cannot authorize: %s (%s)", b2AuthorizeURL, err)
+		log.Error(ctx.ctx, "Failed to authorize.", "b2AuthorizeURL", b2AuthorizeURL, "err", err.Error())
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -66,17 +66,17 @@ func (b *B2AccountAuthorizationBuilder) genB2Ticket() (*B2Ticket, error) {
 		}
 		var er ErrorResponse
 		if err := json.NewDecoder(resp.Body).Decode(&er); err != nil {
-			vlog.Errorf("Cannot decode: %v (%s)", er, err)
+			log.Error(ctx.ctx, "Failed to decode response.", "errResponse", er, "err", err.Error())
 			return nil, err
 		}
-		err := fmt.Errorf("Status %d: %s", er.Status, er.Message)
-		vlog.Error(err)
+		err := fmt.Errorf("status %d: %s", er.Status, er.Message)
+		log.Error(ctx.ctx, "Request failed.", "err", err.Error())
 		return nil, err
 	}
 
 	var b2Ticket B2Ticket
 	if err := json.NewDecoder(resp.Body).Decode(&b2Ticket); err != nil {
-		vlog.Errorf("Cannot decode: %v (%s)", b2Ticket, err)
+		log.Error(ctx.ctx, "Failed to decode BackBlaze ticket.", "b2Ticket", b2Ticket, "err", err.Error())
 		return nil, err
 	}
 	return &b2Ticket, nil

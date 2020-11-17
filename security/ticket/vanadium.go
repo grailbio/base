@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"v.io/v23"
+	"github.com/grailbio/base/common/log"
+	v23 "v.io/v23"
 	"v.io/v23/security"
 	"v.io/v23/vom"
-	"v.io/x/lib/vlog"
 )
 
 const requiredSuffix = security.ChainSeparator + "_role"
@@ -53,7 +53,7 @@ func (b *VanadiumBuilder) newVanadiumTicket(ctx *TicketContext) (TicketVanadiumT
 		return empty, err
 	}
 
-	vlog.VI(1).Infof("resultBlessings: %#v", ctx.remoteBlessings)
+	log.Infof(ctx.ctx, "resultBlessings: %+v", resultBlessings)
 
 	s, err := base64urlVomEncode(resultBlessings)
 	if err != nil {

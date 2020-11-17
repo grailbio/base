@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/grailbio/base/cmd/ticket-server/config"
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/security/identity"
 	_ "github.com/grailbio/base/security/keycrypt/file"
 	_ "github.com/grailbio/base/security/keycrypt/keychain"
@@ -31,7 +32,6 @@ import (
 	"v.io/v23/rpc"
 	"v.io/v23/security"
 	"v.io/x/lib/cmdline"
-	"v.io/x/lib/vlog"
 	"v.io/x/ref/lib/security/securityflag"
 	"v.io/x/ref/lib/signals"
 	"v.io/x/ref/lib/v23cmd"
@@ -110,29 +110,25 @@ type node struct {
 var _ rpc.AllGlobber = (*node)(nil)
 
 func (n *node) Glob__(ctx *context.T, call rpc.GlobServerCall, g *glob.Glob) error { // nolint: golint
-	vlog.Infof("Glob: %+v len: %d tail: %+v recursive: %+v restricted: %+v", g, g.Len(), g.Tail(), g.Recursive(), g.Restricted())
+	log.Info(ctx, "Processing glob request.", "glob", g)
 
 	sender := call.SendStream()
 	element := g.Head()
 
 	// The key is the path to a node.
 	children := map[string]interface{}{"": n}
-	vlog.VI(1).Infof("children: %+v", children)
 	for g.Len() != 0 {
 		children = descent(children)
 		matches := map[string]interface{}{}
 		for k, v := range children {
 			v := v.(*node)
-			vlog.VI(1).Infof("k: %+v name: %+v", k, v.name)
 			if element.Match(v.name) {
 				matches[k] = v
 			}
 		}
-		vlog.VI(1).Infof("matches: %+v", matches)
 		children = matches
 		g = g.Tail()
 		element = g.Head()
-		vlog.VI(1).Infof("glob: %+v len: %d tail: %+v recursive: %+v restricted: %+v", g, g.Len(), g.Tail(), g.Recursive(), g.Restricted())
 	}
 
 	if g.String() == "..." {
@@ -154,7 +150,6 @@ func (n *node) Glob__(ctx *context.T, call rpc.GlobServerCall, g *glob.Glob) err
 		case *entry:
 			isLeaf = true
 		}
-		vlog.VI(1).Infof("send: %q isLeaf: %+v", k, isLeaf)
 		sender.Send(naming.GlobReplyEntry{
 			Value: naming.MountEntry{
 				Name:   strings.TrimLeft(k, "/"),
@@ -216,8 +211,9 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	// Note that the blesser/ endpoints are not exposed via Glob__ and the
 	// permissions are governed by the -v23.permissions.{file,literal} flags.
 	d.registry["blesser/google"] = entry{
-		service: identity.GoogleBlesserServer(newGoogleBlesser(googleExpirationIntervalFlag, strings.Split(googleUserSufixFlag, ","))),
-		auth:    securityflag.NewAuthorizerOrDie(ctx),
+		service: identity.GoogleBlesserServer(newGoogleBlesser(ctx, googleExpirationIntervalFlag,
+			strings.Split(googleUserSufixFlag, ","))),
+		auth: securityflag.NewAuthorizerOrDie(ctx),
 	}
 	d.registry["blesser/k8s"] = entry{
 		service: identity.K8sBlesserServer(newK8sBlesser(awsSession, k8sExpirationIntervalFlag, k8sBlesserRoleFlag, strings.Split(awsAccountsFlag, ","), strings.Split(awsRegionsFlag, ","))),
@@ -231,8 +227,8 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 	}
 
 	for k, v := range cfg {
-		auth := googleGroupsAuthorizer(v.Perms, jwtConfig, googleAdminNameFlag)
-		vlog.Infof("registry add: %q perms: %+v", k, auth)
+		auth := googleGroupsAuthorizer(ctx, v.Perms, jwtConfig, googleAdminNameFlag)
+		log.Info(ctx, "Adding service to dispatcher registry.", "name", k, "perms", v.Perms)
 		parts := strings.Split(k, "/")
 		n := d.root
 		for _, p := range parts {
@@ -262,7 +258,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 
 // Lookup implements the Dispatcher interface from v.io/v23/rpc.
 func (d *dispatcher) Lookup(ctx *context.T, suffix string) (interface{}, security.Authorizer, error) {
-	vlog.Infof("suffix: %q ctx: %+v", suffix, ctx)
+	log.Info(ctx, "Performing service looking.", "name", suffix)
 	if s, ok := d.registry[suffix]; ok {
 		return s.service, s.auth, nil
 	}
@@ -278,7 +274,6 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	vlog.Infof("ticketConfig:\n%#v", ticketConfig)
 
 	if dryrunFlag {
 		return nil
@@ -289,7 +284,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	blessings, _ := v23.GetPrincipal(ctx).BlessingStore().Default()
-	vlog.Infof("default blessings: %+v", blessings)
+	log.Info(ctx, "Using default blessing.", "blessing", blessings)
 
 	awsSession, err := session.NewSession(aws.NewConfig().WithRegion(regionFlag))
 	if err != nil {
@@ -312,7 +307,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	for _, endpoint := range s.Status().Endpoints {
-		vlog.Infof("ENDPOINT=%s\n", endpoint.Name())
+		log.Info(ctx, "Server endpoint.", "addr", endpoint.Name())
 	}
 	<-signals.ShutdownOnSignals(ctx) // Wait forever.
 	return nil

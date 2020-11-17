@@ -7,6 +7,7 @@ package main
 import (
 	"testing"
 
+	"github.com/grailbio/base/vcontext"
 	"github.com/stretchr/testify/assert"
 	"v.io/v23/security"
 	"v.io/v23/security/access"
@@ -17,22 +18,24 @@ var (
 )
 
 func TestInit(t *testing.T) {
+	ctx := vcontext.Background()
 	f := func() {
 		hostedDomains = nil
-		googleGroupsInit("admin@grailbio.com")
+		googleGroupsInit(ctx, "admin@grailbio.com")
 	}
 	assert.PanicsWithValue(t, "hostedDomains not initialized", f)
 
 	f = func() {
 		googleBlesserInit([]string{})
-		googleGroupsInit("admin@grailbio.com")
+		googleGroupsInit(ctx, "admin@grailbio.com")
 	}
 	assert.PanicsWithValue(t, "hostedDomains not initialized", f)
 }
 
 func TestEmail(t *testing.T) {
+	ctx := vcontext.Background()
 	googleBlesserInit(testDomainList)
-	googleGroupsInit("admin@grailbio.com")
+	googleGroupsInit(ctx, "admin@grailbio.com")
 
 	cases := []struct {
 		blessing string
@@ -62,8 +65,9 @@ func TestEmail(t *testing.T) {
 }
 
 func TestGroup(t *testing.T) {
+	ctx := vcontext.Background()
 	googleBlesserInit(testDomainList)
-	googleGroupsInit("admin@grailbio.com")
+	googleGroupsInit(ctx, "admin@grailbio.com")
 
 	cases := []struct {
 		blessing string
@@ -83,7 +87,7 @@ func TestGroup(t *testing.T) {
 
 	prefix := "v23.grail.com"
 	for _, c := range cases {
-		got, want := extractGroupEmailFromBlessing(c.blessing, prefix), c.email
+		got, want := extractGroupEmailFromBlessing(ctx, c.blessing, prefix), c.email
 		if got != want {
 			t.Errorf("email(%q, %q): got %q, want %q", c.blessing, prefix, got, want)
 		}
@@ -91,8 +95,9 @@ func TestGroup(t *testing.T) {
 }
 
 func TestAclIncludes(t *testing.T) {
+	ctx := vcontext.Background()
 	googleBlesserInit(testDomainList)
-	googleGroupsInit("admin@grailbio.com")
+	googleGroupsInit(ctx, "admin@grailbio.com")
 
 	cases := []struct {
 		acl  access.AccessList
@@ -164,7 +169,7 @@ func TestAclIncludes(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		got := a.aclIncludes(c.acl, blessings, prefix)
+		got := a.aclIncludes(ctx, c.acl, blessings, prefix)
 		if got != c.want {
 			t.Errorf("aclIncludes(%+v, %v): got %v, want %v", c.acl, blessings, got, c.want)
 		}

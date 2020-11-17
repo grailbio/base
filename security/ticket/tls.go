@@ -10,9 +10,9 @@ import (
 	"encoding/pem"
 	"time"
 
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/security/keycrypt"
 	"github.com/grailbio/base/security/tls/certificateauthority"
-	"v.io/x/lib/vlog"
 )
 
 const tlsDriftMargin = 10 * time.Minute
@@ -88,11 +88,11 @@ func (b *TlsCertAuthorityBuilder) newDockerClientTicket(ctx *TicketContext) (Tic
 }
 
 func (b *TlsCertAuthorityBuilder) genTlsCredentials(ctx *TicketContext) (TlsCredentials, error) {
+	log.Info(ctx.ctx, "Generating TLS credentials.", "TlsCertAuthorityBuilder", b)
 	return b.genTlsCredentialsWithKeyUsage(ctx, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 }
 
 func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(ctx *TicketContext, keyUsage []x509.ExtKeyUsage) (TlsCredentials, error) {
-	vlog.Infof("TlsCertAuthorityBuilder: %+v", b)
 	empty := TlsCredentials{}
 
 	secret, err := keycrypt.Lookup(b.Authority)

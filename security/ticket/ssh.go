@@ -7,9 +7,9 @@ package ticket
 import (
 	"time"
 
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/security/keycrypt"
 	"github.com/grailbio/base/security/ssh/certificateauthority"
-	"v.io/x/lib/vlog"
 )
 
 const sshDriftMargin = 10 * time.Minute
@@ -29,7 +29,7 @@ func (b *SshCertAuthorityBuilder) newSshCertificateTicket(ctx *TicketContext) (T
 }
 
 func (b *SshCertAuthorityBuilder) genSshCertWithKeyUsage(ctx *TicketContext) (SshCert, error) {
-	vlog.Infof("SshCertAuthorityBuilder: %+v", b)
+	log.Info(ctx.ctx, "Generating SSH certificate.", "SshCertAuthorityBuilder", b)
 	empty := SshCert{}
 
 	CaPrivateKey, err := keycrypt.Lookup(b.CaPrivateKey)

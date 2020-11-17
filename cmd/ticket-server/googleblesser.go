@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	oidc "github.com/coreos/go-oidc"
+	"github.com/coreos/go-oidc"
+	"github.com/grailbio/base/common/log"
 	v23context "v.io/v23/context"
 	"v.io/v23/rpc"
 	"v.io/v23/security"
-	"v.io/x/lib/vlog"
 )
 
 const (
@@ -58,12 +58,12 @@ type googleBlesser struct {
 	expirationInterval time.Duration
 }
 
-func newGoogleBlesser(expiration time.Duration, domains []string) *googleBlesser {
+func newGoogleBlesser(ctx *v23context.T, expiration time.Duration, domains []string) *googleBlesser {
 	googleBlesserInit(domains)
 
 	provider, err := oidc.NewProvider(context.Background(), issuer)
 	if err != nil {
-		vlog.Fatal(err)
+		log.Error(ctx, err.Error())
 	}
 	return &googleBlesser{
 		verifier:           provider.Verifier(&oidc.Config{ClientID: audience}),
@@ -73,20 +73,18 @@ func newGoogleBlesser(expiration time.Duration, domains []string) *googleBlesser
 
 func (blesser *googleBlesser) BlessGoogle(ctx *v23context.T, call rpc.ServerCall, idToken string) (security.Blessings, error) {
 	remoteAddress := call.RemoteEndpoint().Address
-	vlog.Infof("idtoken(%s): %d bytes", remoteAddress, len(idToken))
-	vlog.VI(1).Infof("idtoken(%s): %v", remoteAddress, idToken)
+	log.Info(ctx, "Blessing Google.", "remoteAddr", remoteAddress, "idToken", idToken, "idTokenLen", len(idToken))
 	var empty security.Blessings
 
 	oidcIDToken, err := blesser.verifier.Verify(ctx, idToken)
 	if err != nil {
 		return empty, err
 	}
-	vlog.VI(1).Infof("oidcIDToken: %+v", oidcIDToken)
 	var claims claims
 	if err := oidcIDToken.Claims(&claims); err != nil {
 		return empty, nil
 	}
-	vlog.VI(1).Infof("claims: %+v", claims)
+	log.Info(ctx, "Blessing Google.", "oidcIDToken", oidcIDToken, "claims", claims)
 
 	if err := claims.checkClaims(); err != nil {
 		return empty, err

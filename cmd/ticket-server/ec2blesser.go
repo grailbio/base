@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -18,10 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/grailbio/base/cloud/ec2util"
+	"github.com/grailbio/base/common/log"
 	"v.io/v23/context"
 	"v.io/v23/rpc"
 	"v.io/v23/security"
-	"v.io/x/lib/vlog"
 )
 
 const pendingTimeWindow = time.Hour
@@ -37,7 +38,7 @@ const pendingTimeWindow = time.Hour
 //   IdentityDocument: (string) JSON of the IdentityDocument from the request
 //   DescribeInstance: (string) JSON response for the DescribeInstance call
 //   Timestamp: (string) Timestamp in RFC3339Nano when the record was created
-func setupEc2Blesser(s *session.Session, table string) {
+func setupEc2Blesser(ctx *context.T, s *session.Session, table string) {
 	if table == "" {
 		return
 	}
@@ -48,13 +49,14 @@ func setupEc2Blesser(s *session.Session, table string) {
 	})
 
 	if err == nil {
-		vlog.Infof("DynamoDB table already exists:\n%+v", out)
+		log.Info(ctx, "DynamoDB table already exists", "table", out)
 		return
 	}
 
 	want := dynamodb.ErrCodeResourceNotFoundException
 	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != want {
-		vlog.Fatalf("unexpected error: got %+v, want %+v", err, want)
+		log.Error(ctx, "Unexpected DynamoDB error.", "got", err, "want", want)
+		os.Exit(255)
 	}
 
 	_, err = client.CreateTable(&dynamodb.CreateTableInput{
@@ -77,14 +79,16 @@ func setupEc2Blesser(s *session.Session, table string) {
 		},
 	})
 	if err != nil {
-		vlog.Fatal(err)
+		log.Error(ctx, err.Error())
+		os.Exit(255)
 	}
-	vlog.Infof("%q DynamoDB table was created", table)
+	log.Info(ctx, "DynamoDB table was created.", "table", table)
 	// TODO(razvanm): wait for the table to reach ACTIVE state?
 	// TODO(razvanm): enable the auto scaling?
 }
 
 type ec2Blesser struct {
+	ctx                context.T
 	expirationInterval time.Duration
 	role               string
 	table              string
@@ -92,8 +96,9 @@ type ec2Blesser struct {
 }
 
 func newEc2Blesser(ctx *context.T, s *session.Session, expiration time.Duration, role string, table string) *ec2Blesser {
-	setupEc2Blesser(s, ec2DynamoDBTableFlag)
+	setupEc2Blesser(ctx, s, ec2DynamoDBTableFlag)
 	return &ec2Blesser{
+		ctx:                *ctx,
 		expirationInterval: expiration,
 		role:               role,
 		table:              table,
@@ -101,7 +106,7 @@ func newEc2Blesser(ctx *context.T, s *session.Session, expiration time.Duration,
 	}
 }
 
-func (blesser *ec2Blesser) checkUniqueness(doc *ec2util.IdentityDocument, remoteAddr string, jsonDoc string, jsonInstance string) error {
+func (blesser *ec2Blesser) checkUniqueness(ctx *context.T, doc *ec2util.IdentityDocument, remoteAddr string, jsonDoc string, jsonInstance string) error {
 	if blesser.table == "" {
 		return nil
 	}
@@ -110,7 +115,7 @@ func (blesser *ec2Blesser) checkUniqueness(doc *ec2util.IdentityDocument, remote
 		return err
 	}
 	key := strings.Join([]string{doc.AccountID, doc.Region, doc.InstanceID, ipAddr}, "/")
-	vlog.Infof("DynamoDB key(%s): %q", remoteAddr, key)
+	log.Info(ctx, "DynamoDB info.", "key", key, "remoteAddr", remoteAddr)
 	cond := aws.String("attribute_not_exists(ID)")
 	if ec2DisableUniquenessCheckFlag {
 		cond = nil
@@ -140,18 +145,17 @@ func (blesser *ec2Blesser) BlessEc2(ctx *context.T, call rpc.ServerCall, pkcs7b6
 	var empty security.Blessings
 
 	remoteAddress := call.RemoteAddr().String()
-	vlog.Infof("remote endpoint: %+v", call.RemoteEndpoint().Addr())
-	vlog.Infof("pkcs7(%s): %d bytes", remoteAddress, len(pkcs7b64))
 	doc, jsonDoc, err := ec2util.ParseAndVerifyIdentityDocument(pkcs7b64)
-	vlog.Infof("doc(%s): %+v", remoteAddress, doc)
+	log.Info(ctx, "Blessing EC2.", "remoteAddress", remoteAddress, "remoteEndpoint", call.RemoteEndpoint().Addr(),
+		"pkcs7b64Bytes", len(pkcs7b64), "doc", doc)
 	if err != nil {
-		vlog.Infof("error(%s): %+v", remoteAddress, err)
+		log.Error(ctx, "Error parsing and verifying identity document.", "err", err)
 		return empty, err
 	}
 
 	if !ec2DisablePendingTimeCheckFlag {
 		if err := checkPendingTime(doc); err != nil {
-			vlog.Infof("error(%s): %+v", remoteAddress, err)
+			log.Error(ctx, err.Error())
 			return empty, err
 		}
 	}
@@ -172,18 +176,18 @@ func (blesser *ec2Blesser) BlessEc2(ctx *context.T, call rpc.ServerCall, pkcs7b6
 	})
 
 	if err != nil {
-		vlog.Infof("error(%s): %+v", remoteAddress, err)
+		log.Error(ctx, err.Error())
 		return empty, err
 	}
 
 	role, err := ec2util.ValidateInstance(output, *doc, validateRemoteAddr)
 	if err != nil {
-		vlog.Infof("error(%s): %+v", remoteAddress, err)
+		log.Error(ctx, err.Error())
 		return empty, err
 	}
 
-	if err := blesser.checkUniqueness(doc, remoteAddress, jsonDoc, output.String()); err != nil {
-		vlog.Infof("error(%s): %+v", remoteAddress, err)
+	if err = blesser.checkUniqueness(ctx, doc, remoteAddress, jsonDoc, output.String()); err != nil {
+		log.Error(ctx, err.Error())
 		return empty, err
 	}
 

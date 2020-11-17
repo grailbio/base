@@ -81,13 +81,22 @@ func newConfig() zap.Config {
 		},
 		Encoding:         "json",
 		EncoderConfig:    newEncoderConfig(),
-		OutputPaths:      []string{"stdout"},
+		OutputPaths:      []string{"stdout", "stderr"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
 }
 
-func withCallerAndTimestamp(callerSkip int, t time.Time, keysAndValues ...interface{}) []interface{} {
-	return append([]interface{}{"caller", getCaller(callerSkip), "ts", t}, keysAndValues...)
+func withDefaultFields(ctx context.Context, callerSkip int, t time.Time,
+	keysAndValues ...interface{}) []interface{} {
+	defaultFields := []interface{}{
+		"caller", getCaller(callerSkip),
+		"ts", t,
+	}
+	// TODO(noah): Uncomment after v.io upgrade.
+	// if requestID := v23.GetRequestID(vcontext.FromGoContext(ctx)); requestID != uuid.Nil {
+	// 	defaultFields = append(defaultFields, "requestID", requestID)
+	// }
+	return append(defaultFields, keysAndValues...)
 }
 
 func log(ctx context.Context, level zapcore.Level, callerSkip int, msg string, keysAndValues []interface{}) {
@@ -97,12 +106,12 @@ func log(ctx context.Context, level zapcore.Level, callerSkip int, msg string, k
 	if len(keysAndValues)%2 != 0 {
 		danglingKey := keysAndValues[len(keysAndValues)-1]
 		keysAndValues = keysAndValues[:len(keysAndValues)-1]
-		errLog := withCallerAndTimestamp(callerSkip, t, "ignored", danglingKey)
+		errLog := withDefaultFields(ctx, callerSkip, t, "ignored", danglingKey)
 		logErr := levelToLogger[ErrorLevel]
 		logErr("Ignored key without a value.", errLog...)
 	}
 	// Add caller and timestamp fields
-	prefix := withCallerAndTimestamp(callerSkip, t)
+	prefix := withDefaultFields(ctx, callerSkip, t)
 	// Add context logged fields
 	if ctx != nil {
 		for k, v := range contextFields {

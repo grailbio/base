@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/ttlcache"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/jwt"
@@ -18,7 +19,6 @@ import (
 	"v.io/v23/security"
 	"v.io/v23/security/access"
 	"v.io/v23/vdl"
-	"v.io/x/lib/vlog"
 )
 
 type cacheKey struct {
@@ -39,9 +39,10 @@ var (
 	adminLookupDomain string
 )
 
-func googleGroupsInit(groupLookupName string) {
+func googleGroupsInit(ctx *v23context.T, groupLookupName string) {
 	if hostedDomains == nil || len(hostedDomains) == 0 {
-		vlog.Panic("hostedDomains not initialized")
+		log.Error(ctx, "hostedDomains not initialized.")
+		panic("hostedDomains not initialized")
 	}
 
 	// Extract the domain of the admin account to filter users in the same Google Domain
@@ -69,8 +70,8 @@ func verifyAndExtractEmailFromBlessing(blessing string, prefix string) string {
 //
 // For example, for 'v23.grail.com:googlegroups:eng@grailbio.com' the return
 // string should be 'eng@grailbio.com'.
-func extractGroupEmailFromBlessing(blessing string, prefix string) string {
-	vlog.Infof("blessing %q %q", blessing, prefix)
+func extractGroupEmailFromBlessing(ctx *v23context.T, blessing string, prefix string) string {
+	log.Info(ctx, "Extracting group email from blessing.", "blessing", blessing, "prefix", prefix)
 	if strings.HasPrefix(blessing, prefix) {
 		m := groupRE.FindStringSubmatch(blessing[len(prefix)+1:])
 
@@ -88,18 +89,23 @@ type authorizer struct {
 	isMember func(user, group string) bool
 }
 
-func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, groupLookupName string) security.Authorizer {
-	googleGroupsInit(groupLookupName)
+func (a *authorizer) String() string {
+	return fmt.Sprintf("%+v", a.perms)
+}
+
+func googleGroupsAuthorizer(ctx *v23context.T, perms access.Permissions, jwtConfig *jwt.Config,
+	groupLookupName string) security.Authorizer {
+	googleGroupsInit(ctx, groupLookupName)
 	return &authorizer{
 		perms:   perms,
 		tagType: access.TypicalTagType(),
 		isMember: func(user, group string) bool {
 			key := cacheKey{user, group}
 			if v, ok := cache.Get(key); ok {
-				vlog.VI(1).Infof("cache hit for %+v", key)
+				log.Info(ctx, "Google groups lookup cache hit.", "key", key)
 				return v.(bool)
 			}
-			vlog.VI(1).Infof("cache miss for %+v", key)
+			log.Info(ctx, "Google groups lookup cache miss.", "key", key)
 
 			config := *jwtConfig
 			// This needs to be a Super Admin of the domain.
@@ -107,7 +113,7 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 
 			service, err := admin.New(config.Client(context.Background()))
 			if err != nil {
-				vlog.Info(err)
+				log.Error(ctx, err.Error())
 				return false
 			}
 
@@ -117,24 +123,21 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 			if adminLookupDomain != emailDomain(user) {
 				member, member_err := admin.NewMembersService(service).Get(group, user).Do()
 				if member_err != nil {
-					vlog.Info(member_err)
+					log.Error(ctx, member_err.Error())
 					return false
 				}
-				vlog.Infof("member: %+v", member)
+				log.Info(ctx, "Adding member to cache.", "member", member, "key", key)
 				isMember := member.Status == "ACTIVE"
-				vlog.VI(1).Infof("add to cache %+v", key)
 				cache.Set(key, isMember)
 				return isMember
 			}
 
 			result, err := admin.NewMembersService(service).HasMember(group, user).Do()
 			if err != nil {
-				vlog.Info(err)
+				log.Error(ctx, err.Error())
 				return false
 			}
-			vlog.Infof("hasMember: %+v", result)
-
-			vlog.VI(1).Infof("add to cache %+v", key)
+			log.Info(ctx, "Adding member to cache.", "hasMember", result, "key", key)
 			cache.Set(key, result.IsMember)
 
 			return result.IsMember
@@ -142,7 +145,7 @@ func googleGroupsAuthorizer(perms access.Permissions, jwtConfig *jwt.Config, gro
 	}
 }
 
-func (a *authorizer) pruneBlessingslist(acl access.AccessList, blessings []string, localBlessings string) []string {
+func (a *authorizer) pruneBlessingslist(ctx *v23context.T, acl access.AccessList, blessings []string, localBlessings string) []string {
 	if len(acl.NotIn) == 0 {
 		return blessings
 	}
@@ -155,11 +158,12 @@ func (a *authorizer) pruneBlessingslist(acl access.AccessList, blessings []strin
 				break
 			}
 			userEmail := verifyAndExtractEmailFromBlessing(b, localBlessings)
-			groupEmail := extractGroupEmailFromBlessing(bp, localBlessings)
-			vlog.Infof("%q %q", userEmail, groupEmail)
+			groupEmail := extractGroupEmailFromBlessing(ctx, bp, localBlessings)
+			log.Info(ctx, "Pruning blessings list.", "userEmail", userEmail, "groupEmail", groupEmail)
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {
-					vlog.Infof("%q is a member of %q (NotIn blessing pattern %q)", userEmail, groupEmail, bp)
+					log.Info(ctx, "User is a member of group.", "userEmail", userEmail, "groupEmail", groupEmail,
+						"blessingPattern", bp)
 					inDenyList = true
 					break
 				}
@@ -172,19 +176,21 @@ func (a *authorizer) pruneBlessingslist(acl access.AccessList, blessings []strin
 	return filtered
 }
 
-func (a *authorizer) aclIncludes(acl access.AccessList, blessings []string, localBlessings string) bool {
-	blessings = a.pruneBlessingslist(acl, blessings, localBlessings)
-	for _, pattern := range acl.In {
-		if pattern.MatchedBy(blessings...) {
+func (a *authorizer) aclIncludes(ctx *v23context.T, acl access.AccessList, blessings []string,
+	localBlessings string) bool {
+	blessings = a.pruneBlessingslist(ctx, acl, blessings, localBlessings)
+	for _, bp := range acl.In {
+		if bp.MatchedBy(blessings...) {
 			return true
 		}
 		for _, b := range blessings {
 			userEmail := verifyAndExtractEmailFromBlessing(b, localBlessings)
-			groupEmail := extractGroupEmailFromBlessing(string(pattern), localBlessings)
-			vlog.Infof("%q %q", userEmail, groupEmail)
+			groupEmail := extractGroupEmailFromBlessing(ctx, string(bp), localBlessings)
+			log.Info(ctx, "Checking access list.", "userEmail", userEmail, "groupEmail", groupEmail)
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {
-					vlog.Infof("%q is a member of %q (In blessing pattern %q)", userEmail, groupEmail, pattern)
+					log.Info(ctx, "User is a member of group.", "userEmail", userEmail, "groupEmail", groupEmail,
+						"blessingPattern", bp)
 					return true
 				}
 			}
@@ -195,11 +201,12 @@ func (a *authorizer) aclIncludes(acl access.AccessList, blessings []string, loca
 
 func (a *authorizer) Authorize(ctx *v23context.T, call security.Call) error {
 	blessings, invalid := security.RemoteBlessingNames(ctx, call)
-	vlog.Infof("RemoteBlessingNames: %q Tags: %q", blessings, call.MethodTags())
+	log.Info(ctx, "Authorizing via Google flow.", "blessings", blessings, "tags", call.MethodTags())
 
 	for _, tag := range call.MethodTags() {
 		if tag.Type() == a.tagType {
-			if acl, exists := a.perms[tag.RawString()]; !exists || !a.aclIncludes(acl, blessings, call.LocalBlessings().String()) {
+			if acl, exists := a.perms[tag.RawString()]; !exists || !a.aclIncludes(ctx, acl, blessings,
+				call.LocalBlessings().String()) {
 				return access.NewErrNoPermissions(ctx, blessings, invalid, tag.RawString())
 			}
 		}

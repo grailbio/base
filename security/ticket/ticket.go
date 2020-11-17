@@ -7,14 +7,15 @@ package ticket
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/security/keycrypt"
 	"v.io/v23/context"
 	"v.io/v23/security"
-	"v.io/x/lib/vlog"
 )
 
 // TicketContext wraps the informations that needs to carry around between
@@ -77,7 +78,7 @@ func (t TicketAwsTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error
 		}
 		t.Value.AwsSessionBuilder = nil
 	}
-	r = *mergeOrDie(&r, &t).(*TicketAwsTicket)
+	r = *mergeOrDie(ctx, &r, &t).(*TicketAwsTicket)
 	err = r.Value.AwsCredentials.kmsInterpolate()
 
 	return r, err
@@ -110,7 +111,7 @@ func (t TicketS3Ticket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error)
 		}
 		t.Value.AwsSessionBuilder = nil
 	}
-	r = *mergeOrDie(&r, &t).(*TicketS3Ticket)
+	r = *mergeOrDie(ctx, &r, &t).(*TicketS3Ticket)
 	err = r.Value.AwsCredentials.kmsInterpolate()
 	return r, err
 }
@@ -152,8 +153,8 @@ func (t TicketSshCertificateTicket) Build(ctx *TicketContext, parameters []Param
 		t.Value.SshCertAuthorityBuilder = nil
 	}
 
-	r := *mergeOrDie(&rCompute, &rSsh).(*TicketSshCertificateTicket)
-	return *mergeOrDie(&r, &t).(*TicketSshCertificateTicket), nil
+	r := *mergeOrDie(ctx, &rCompute, &rSsh).(*TicketSshCertificateTicket)
+	return *mergeOrDie(ctx, &r, &t).(*TicketSshCertificateTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -167,7 +168,7 @@ func (t TicketEcrTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error
 		}
 		t.Value.AwsAssumeRoleBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketEcrTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketEcrTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -181,7 +182,7 @@ func (t TicketTlsServerTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket,
 		}
 		t.Value.TlsCertAuthorityBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketTlsServerTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketTlsServerTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -195,7 +196,7 @@ func (t TicketTlsClientTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket,
 		}
 		t.Value.TlsCertAuthorityBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketTlsClientTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketTlsClientTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -209,7 +210,7 @@ func (t TicketDockerTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, er
 		}
 		t.Value.TlsCertAuthorityBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketDockerTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketDockerTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -223,7 +224,7 @@ func (t TicketDockerServerTicket) Build(ctx *TicketContext, _ []Parameter) (Tick
 		}
 		t.Value.TlsCertAuthorityBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketDockerServerTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketDockerServerTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -237,21 +238,21 @@ func (t TicketDockerClientTicket) Build(ctx *TicketContext, _ []Parameter) (Tick
 		}
 		t.Value.TlsCertAuthorityBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketDockerClientTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketDockerClientTicket), nil
 }
 
 // Build builds a Ticket by running all the builders.
-func (t TicketB2Ticket) Build(_ *TicketContext, _ []Parameter) (Ticket, error) {
+func (t TicketB2Ticket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketB2Ticket{}
 	if t.Value.B2AccountAuthorizationBuilder != nil {
 		var err error
-		r, err = t.Value.B2AccountAuthorizationBuilder.newB2Ticket()
+		r, err = t.Value.B2AccountAuthorizationBuilder.newB2Ticket(ctx)
 		if err != nil {
 			return r, err
 		}
 		t.Value.B2AccountAuthorizationBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketB2Ticket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketB2Ticket), nil
 }
 
 // Build builds a Ticket by running all the builders.
@@ -265,13 +266,13 @@ func (t TicketVanadiumTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, 
 		}
 		t.Value.VanadiumBuilder = nil
 	}
-	return *mergeOrDie(&r, &t).(*TicketVanadiumTicket), nil
+	return *mergeOrDie(ctx, &r, &t).(*TicketVanadiumTicket), nil
 }
 
 // Build builds a Ticket.
-func (t TicketGenericTicket) Build(_ *TicketContext, _ []Parameter) (Ticket, error) {
+func (t TicketGenericTicket) Build(ctx *TicketContext, _ []Parameter) (Ticket, error) {
 	r := TicketGenericTicket{}
-	r = *mergeOrDie(&r, &t).(*TicketGenericTicket)
+	r = *mergeOrDie(ctx, &r, &t).(*TicketGenericTicket)
 	var err error
 	r.Value.Data, err = kmsInterpolationBytes(r.Value.Data)
 	return r, err
@@ -280,14 +281,15 @@ func (t TicketGenericTicket) Build(_ *TicketContext, _ []Parameter) (Ticket, err
 // merge i2 in i1 by overwriting in i1 all the non-zero fields in i2. The i1
 // and i2 needs to be references to the same type. Only simple types (bool,
 // numeric, string) and string are supported.
-func mergeOrDie(i1, i2 interface{}) interface{} {
+func mergeOrDie(ctx *TicketContext, i1, i2 interface{}) interface{} {
 	if reflect.DeepEqual(i1, i2) {
 		return i1
 	}
 	v1, v2 := reflect.ValueOf(i1).Elem(), reflect.ValueOf(i2).Elem()
 	k1, k2 := v1.Kind(), v2.Kind()
 	if k1 != k2 {
-		vlog.Fatalf("different types in merge: %+v (%s) vs %v (%s)", v1, v1.Kind(), v2, v2.Kind())
+		log.Error(ctx.ctx, "different types in merge: %+v (%s) vs %v (%s)", v1, v1.Kind(), v2, v2.Kind())
+		os.Exit(255)
 	}
 	switch k1 {
 	case reflect.Struct:
@@ -296,7 +298,7 @@ func mergeOrDie(i1, i2 interface{}) interface{} {
 			if !f1.CanSet() {
 				continue
 			}
-			v := mergeOrDie(f1.Addr().Interface(), f2.Addr().Interface())
+			v := mergeOrDie(ctx, f1.Addr().Interface(), f2.Addr().Interface())
 			f1.Set(reflect.Indirect(reflect.ValueOf(v)))
 		}
 	case reflect.Map:

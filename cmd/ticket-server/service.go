@@ -8,11 +8,11 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/security/ticket"
 	"v.io/v23/context"
 	"v.io/v23/rpc"
 	"v.io/v23/security/access"
-	"v.io/x/lib/vlog"
 )
 
 type service struct {
@@ -24,13 +24,12 @@ type service struct {
 }
 
 func (s *service) Get(ctx *context.T, call rpc.ServerCall) (ticket.Ticket, error) {
+	log.Info(ctx, "Fetching ticket.", "call", call)
 	// use an empty parameters list
-	return (s.GetWithParameters(ctx, call, nil))
-
+	return s.GetWithParameters(ctx, call, nil)
 }
 
 func (s *service) GetWithParameters(ctx *context.T, call rpc.ServerCall, parameters []ticket.Parameter) (ticket.Ticket, error) {
-	vlog.Infof("Get: ctx: %+v call: %+v", ctx, call)
 	remoteBlessings := call.Security().RemoteBlessings()
 	ticketCtx := ticket.NewTicketContext(ctx, s.awsSession, remoteBlessings)
 	switch t := s.ticket.(type) {

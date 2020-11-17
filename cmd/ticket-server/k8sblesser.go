@@ -19,11 +19,11 @@ import (
 	awssigner "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/service/eks"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/errors"
 	v23context "v.io/v23/context"
 	"v.io/v23/rpc"
 	"v.io/v23/security"
-	"v.io/x/lib/vlog"
 )
 
 type k8sBlesser struct {
@@ -48,7 +48,7 @@ func (blesser *k8sBlesser) BlessK8s(ctx *v23context.T, call rpc.ServerCall, caCr
 	// TODO(noah): If performance becomes an issue, populate allow-list of clusters on ticket-server startup.
 	var cluster *eks.Cluster
 	caCrtData := base64.StdEncoding.EncodeToString([]byte(caCrt))
-	for _, c := range blesser.getClusters(region) {
+	for _, c := range blesser.getClusters(ctx, region) {
 		if caCrtData == *c.CertificateAuthority.Data {
 			cluster = c
 			break
@@ -123,7 +123,7 @@ func (blesser *k8sBlesser) BlessK8s(ctx *v23context.T, call rpc.ServerCall, caCr
 }
 
 // Get allow-list of clusters and their info.
-func (blesser *k8sBlesser) getClusters(region string) []*eks.Cluster {
+func (blesser *k8sBlesser) getClusters(ctx *v23context.T, region string) []*eks.Cluster {
 	var clusters []*eks.Cluster
 	for _, r := range blesser.awsRegions {
 		if r == region {
@@ -137,15 +137,13 @@ func (blesser *k8sBlesser) getClusters(region string) []*eks.Cluster {
 				input := &eks.ListClustersInput{}
 				listClusterOutput, err := svc.ListClusters(input)
 				if err != nil {
-					errMsg := fmt.Sprintf("unable to fetch list of clusters (roleARN: %s, region: %s): ", roleARN, region)
-					vlog.Info(errMsg, err)
+					log.Error(ctx, "Unable to fetch list of clusters.", "roleARN", roleARN, "region", region)
 				}
 				for _, name := range listClusterOutput.Clusters {
 					describeClusterInput := eks.DescribeClusterInput{Name: name}
 					describeClusterOutput, err := svc.DescribeCluster(&describeClusterInput)
 					if err != nil {
-						errMsg := fmt.Sprintf("unable to describe cluster (cluster name: %s): ", *name)
-						vlog.Info(errMsg, err)
+						log.Error(ctx, "Unable to describe cluster.", "clusterName", *name)
 					}
 					clusters = append(clusters, describeClusterOutput.Cluster)
 				}

@@ -18,8 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecr"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/grailbio/base/cloud/ec2util"
+	"github.com/grailbio/base/common/log"
 	"github.com/grailbio/base/ttlcache"
-	"v.io/x/lib/vlog"
 )
 
 type cacheKey struct {
@@ -69,12 +69,12 @@ func (b *AwsAssumeRoleBuilder) newEcrTicket(ctx *TicketContext) (TicketEcrTicket
 	}
 
 	return TicketEcrTicket{
-		Value: newEcrTicket(awsCredentials),
+		Value: newEcrTicket(ctx, awsCredentials),
 	}, nil
 }
 
 func (b *AwsAssumeRoleBuilder) genAwsCredentials(ctx *TicketContext) (AwsCredentials, error) {
-	vlog.Infof("AwsAssumeRoleBuilder: %+v", b)
+	log.Info(ctx.ctx, "Generating AWS credentials.", "AwsAssumeRoleBuilder", b)
 	empty := AwsCredentials{}
 
 	sessionName := strings.Replace(ctx.remoteBlessings.String(), ":", ",", -1)
@@ -89,10 +89,10 @@ func (b *AwsAssumeRoleBuilder) genAwsCredentials(ctx *TicketContext) (AwsCredent
 	}
 	key := cacheKey{b.Region, b.Role, sessionName}
 	if v, ok := cache.Get(key); ok {
-		vlog.VI(1).Infof("cache hit for %+v", key)
+		log.Info(ctx.ctx, "AWS credentials lookup cache hit.", "key", key)
 		return v.(AwsCredentials), nil
 	}
-	vlog.VI(1).Infof("cache miss for %+v", key)
+	log.Info(ctx.ctx, "AWS credentials lookup cache miss.", "key", key)
 
 	s := ctx.session
 	if aws.StringValue(s.Config.Region) != b.Region {
@@ -100,6 +100,7 @@ func (b *AwsAssumeRoleBuilder) genAwsCredentials(ctx *TicketContext) (AwsCredent
 		var err error
 		s, err = session.NewSession(s.Config.WithRegion(b.Region))
 		if err != nil {
+			log.Error(ctx.ctx, "Error creating AWS session.", "err", err.Error())
 			return empty, err
 		}
 	}
@@ -119,6 +120,7 @@ func (b *AwsAssumeRoleBuilder) genAwsCredentials(ctx *TicketContext) (AwsCredent
 
 	assumeRoleOutput, err := client.AssumeRole(assumeRoleInput)
 	if err != nil {
+		log.Error(ctx.ctx, "Error in AssumeRole API call.", "key", key)
 		return empty, err
 	}
 
@@ -130,7 +132,7 @@ func (b *AwsAssumeRoleBuilder) genAwsCredentials(ctx *TicketContext) (AwsCredent
 		Expiration:      assumeRoleOutput.Credentials.Expiration.Format(time.RFC3339Nano),
 	}
 
-	vlog.VI(1).Infof("add to cache %+v", key)
+	log.Info(ctx.ctx, "Adding AWS credentials to cache.", "key", key)
 	cache.Set(key, result)
 
 	return result, nil
@@ -165,7 +167,7 @@ func (b *AwsSessionBuilder) newS3Ticket(ctx *TicketContext) (TicketS3Ticket, err
 }
 
 func (b *AwsSessionBuilder) genAwsSession(ctx *TicketContext) (AwsCredentials, error) {
-	vlog.Infof("AwsSessionBuilder: %s", b.AwsCredentials.AccessKeyId)
+	log.Info(ctx.ctx, "Generating AWS session.", "AwsAssumeRoleBuilder", b.AwsCredentials.AccessKeyId)
 	empty := AwsCredentials{}
 	awsCredentials := b.AwsCredentials
 
@@ -181,10 +183,10 @@ func (b *AwsSessionBuilder) genAwsSession(ctx *TicketContext) (AwsCredentials, e
 	}
 	key := cacheKey{awsCredentials.Region, awsCredentials.AccessKeyId, sessionName}
 	if v, ok := cache.Get(key); ok {
-		vlog.VI(1).Infof("cache hit for %+v", key)
+		log.Info(ctx.ctx, "AWS session lookup cache hit.", "key", key)
 		return v.(AwsCredentials), nil
 	}
-	vlog.VI(1).Infof("cache miss for %+v", key)
+	log.Info(ctx.ctx, "AWS session lookup cache miss.", "key", key)
 	s, err := session.NewSession(&aws.Config{
 		Region: aws.String(awsCredentials.Region),
 		Credentials: credentials.NewStaticCredentials(
@@ -214,13 +216,13 @@ func (b *AwsSessionBuilder) genAwsSession(ctx *TicketContext) (AwsCredentials, e
 		Expiration:      sessionTokenOutput.Credentials.Expiration.Format(time.RFC3339Nano),
 	}
 
-	vlog.VI(1).Infof("add to cache %+v", key)
+	log.Info(ctx.ctx, "Adding AWS session to cache.", "key", key)
 	cache.Set(key, result)
 
 	return result, nil
 }
 
-func newEcrTicket(awsCredentials AwsCredentials) EcrTicket {
+func newEcrTicket(ctx *TicketContext, awsCredentials AwsCredentials) EcrTicket {
 	empty := EcrTicket{}
 	s, err := session.NewSession(&aws.Config{
 		Region: aws.String(awsCredentials.Region),
@@ -230,21 +232,21 @@ func newEcrTicket(awsCredentials AwsCredentials) EcrTicket {
 			awsCredentials.SessionToken),
 	})
 	if err != nil {
-		vlog.Error(err)
+		log.Error(ctx.ctx, "Error creating AWS session.", "err", err.Error())
 		return empty
 	}
 	r, err := ecr.New(s).GetAuthorizationToken(&ecr.GetAuthorizationTokenInput{})
 	if err != nil {
-		vlog.Error(err)
+		log.Error(ctx.ctx, "Error fetching ECR authorization token.", "err", err.Error())
 		return empty
 	}
 	if len(r.AuthorizationData) == 0 {
-		vlog.Errorf("no authorization data from ECR")
+		log.Error(ctx.ctx, "No authorization data from ECR.")
 		return empty
 	}
 	auth := r.AuthorizationData[0]
 	if auth.AuthorizationToken == nil || auth.ProxyEndpoint == nil || auth.ExpiresAt == nil {
-		vlog.Errorf("bad authorization data from ECR")
+		log.Error(ctx.ctx, "Bad authorization data from ECR.")
 		return empty
 	}
 	return EcrTicket{
@@ -273,7 +275,7 @@ func AwsEc2InstanceLookup(ctx *TicketContext, builder *AwsComputeInstancesBuilde
 
 	s, err := session.NewSession(&config)
 	if err != nil {
-		vlog.Infof("error: %+v", err)
+		log.Error(ctx.ctx, "Error creating AWS session.", "err", err.Error())
 		return instances, err
 	}
 
@@ -302,7 +304,7 @@ func AwsEc2InstanceLookup(ctx *TicketContext, builder *AwsComputeInstancesBuilde
 		Filters: filters,
 	})
 	if err != nil {
-		vlog.Error(err)
+		log.Error(ctx.ctx, "Error describing EC2 instance.", "err", err.Error())
 		return instances, err
 	}
 
@@ -311,19 +313,19 @@ func AwsEc2InstanceLookup(ctx *TicketContext, builder *AwsComputeInstancesBuilde
 			var params []Parameter
 			publicIp, err := ec2util.GetPublicIPAddress(instance)
 			if err != nil {
-				vlog.Error(err)
+				log.Error(ctx.ctx, "Error fetching EC2 public IP address. Continuing anyways.", "err", err.Error())
 				continue // parse error skip
 			}
 
 			privateIp, err := ec2util.GetPrivateIPAddress(instance)
 			if err != nil {
-				vlog.Error(err)
+				log.Error(ctx.ctx, "Error fetching EC2 private IP address. Continuing anyways.", "err", err.Error())
 				continue // parse error skip
 			}
 
 			ec2Tags, err := ec2util.GetTags(instance)
 			if err != nil {
-				vlog.Error(err)
+				log.Error(ctx.ctx, "Error fetching EC2 tags. Continuing anyways.", "err", err.Error())
 				continue // parse error skip
 			}
 			for _, tag := range ec2Tags {
@@ -336,7 +338,7 @@ func AwsEc2InstanceLookup(ctx *TicketContext, builder *AwsComputeInstancesBuilde
 
 			instanceId, err := ec2util.GetInstanceId(instance)
 			if err != nil {
-				vlog.Error(err)
+				log.Error(ctx.ctx, "Error fetching EC2 instance ID. Continuing anyways.", "err", err.Error())
 				continue // parse error skip
 			}
 
@@ -350,6 +352,6 @@ func AwsEc2InstanceLookup(ctx *TicketContext, builder *AwsComputeInstancesBuilde
 		}
 	}
 
-	vlog.Infof("instances %+v", instances)
+	log.Info(ctx.ctx, "AWS EC2 instances.", "instances", instances)
 	return instances, nil
 }

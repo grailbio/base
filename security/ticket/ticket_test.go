@@ -7,10 +7,15 @@ package ticket
 import (
 	"reflect"
 	"testing"
+
+	"github.com/grailbio/base/vcontext"
 )
 
 func TestMerge(t *testing.T) {
-	got := mergeOrDie(&S3Ticket{Endpoint: "xxx"}, &S3Ticket{Bucket: "yyy"})
+	ctx := &TicketContext{
+		ctx: vcontext.Background(),
+	}
+	got := mergeOrDie(ctx, &S3Ticket{Endpoint: "xxx"}, &S3Ticket{Bucket: "yyy"})
 	want := &S3Ticket{
 		Endpoint: "xxx",
 		Bucket:   "yyy",
