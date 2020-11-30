@@ -21,6 +21,8 @@ var contextFields = map[string]interface{}{
 }
 
 const (
+	// DebugLevel logs are typically voluminous.
+	DebugLevel = zapcore.DebugLevel
 	// InfoLevel is the default logging priority.
 	InfoLevel = zapcore.InfoLevel
 	// WarnLevel logs are more important than Info, but don't need individual human review.
@@ -33,6 +35,7 @@ const (
 var (
 	coreLogger    = mustBuildLogger(zap.AddCallerSkip(2))
 	levelToLogger = map[zapcore.Level]func(msg string, keysAndValues ...interface{}){
+		DebugLevel: coreLogger.Debugw,
 		InfoLevel:  coreLogger.Infow,
 		WarnLevel:  coreLogger.Warnw,
 		ErrorLevel: coreLogger.Errorw,
@@ -73,7 +76,7 @@ func newEncoderConfig() zapcore.EncoderConfig {
 // to better fit our needs.
 func newConfig() zap.Config {
 	return zap.Config{
-		Level:       zap.NewAtomicLevelAt(zap.InfoLevel),
+		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
 		Development: false,
 		Sampling: &zap.SamplingConfig{
 			Initial:    100,
@@ -126,50 +129,90 @@ func log(ctx context.Context, level zapcore.Level, callerSkip int, msg string, k
 	logLevel(msg, keysAndValues...)
 }
 
-// Info logs a message, certain values from ctx, and variadic key-value pairs.
+// Debug logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func Debug(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	Debugv(ctx, 1, msg, keysAndValues...)
+}
+
+// Info logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Info(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	Infov(ctx, 1, msg, keysAndValues...)
 }
 
-// Warn logs a message, certain values from ctx, and variadic key-value pairs.
+// Warn logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Warn(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	Warnv(ctx, 1, msg, keysAndValues...)
 }
 
-// Error logs a message, certain values from ctx, and variadic key-value pairs.
+// Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Error(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	Errorv(ctx, 1, msg, keysAndValues...)
 }
 
-// Infof uses fmt.Sprintf to log a templated message.
+// Debugf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func Debugf(ctx context.Context, fs string, args ...interface{}) {
+	Debugv(ctx, 1, fmt.Sprintf(fs, args...))
+}
+
+// Infof uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Infof(ctx context.Context, fs string, args ...interface{}) {
 	Infov(ctx, 1, fmt.Sprintf(fs, args...))
 }
 
-// Warnf uses fmt.Sprintf to log a templated message.
+// Warnf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Warnf(ctx context.Context, fs string, args ...interface{}) {
 	Warnv(ctx, 1, fmt.Sprintf(fs, args...))
 }
 
-// Errorf uses fmt.Sprintf to log a templated message.
+// Errorf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Errorf(ctx context.Context, fs string, args ...interface{}) {
 	Errorv(ctx, 1, fmt.Sprintf(fs, args...))
 }
 
-// Infov logs a message, certain values from ctx, and variadic key-value pairs.
+// Debugv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // Caller is skipped by skip.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func Debugv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
+	log(ctx, DebugLevel, skip, msg, keysAndValues)
+}
+
+// Infov logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// Caller is skipped by skip.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Infov(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
 	log(ctx, InfoLevel, skip, msg, keysAndValues)
 }
 
-// Warnv logs a message, certain values from ctx, and variadic key-value pairs.
+// Warnv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // Caller is skipped by skip.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Warnv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
 	log(ctx, WarnLevel, skip, msg, keysAndValues)
 }
 
-// Errorv logs a message, certain values from ctx, and variadic key-value pairs.
+// Errorv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // Caller is skipped by skip.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
 func Errorv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
 	log(ctx, ErrorLevel, skip, msg, keysAndValues)
 }
