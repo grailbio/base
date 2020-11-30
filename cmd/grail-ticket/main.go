@@ -44,13 +44,15 @@ identified using a Vanadium name.
 
 Examples:
 
-  grail ticket ticket/reflow/gdc/aws
-  grail ticket /127.0.0.1:8000/reflow/gdc/aws
+  grail-ticket tickets/eng/dev/aws
+  grail-ticket /127.0.0.1:8000/eng/dev/aws
 
 Note that tickets can be enumerated using the 'namespace' Vanadium tool:
 
+  namespace glob tickets/...
+  namespace glob tickets/eng/...
   namespace glob /127.0.0.1:8000/...
-  namespace glob /127.0.0.1:8000/reflow/...
+  namespace glob /127.0.0.1:8000/eng/...
 `,
 		ArgsName: "<ticket>",
 		LookPath: false,
