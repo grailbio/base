@@ -247,8 +247,8 @@ func parse(r io.Reader) (instances, error) {
 		log.Printf("%s: %s", s.Position, msg)
 	}
 	p.scanner.Init(r)
-	if instances, ok := p.toplevel(); ok {
-		return instances, nil
+	if insts, ok := p.toplevel(); ok {
+		return insts, nil
 	}
 	switch len(p.errors) {
 	case 0:

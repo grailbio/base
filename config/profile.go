@@ -146,7 +146,9 @@ import (
 
 func init() {
 	http.HandleFunc("/debug/profile", func(w http.ResponseWriter, r *http.Request) {
-		Application().PrintTo(w)
+		if err := Application().PrintTo(w); err != nil {
+			http.Error(w, fmt.Sprintf("writing profile: %v", err), http.StatusInternalServerError)
+		}
 	})
 }
 

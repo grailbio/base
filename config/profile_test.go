@@ -45,7 +45,9 @@ func TestProfileDefault(t *testing.T) {
 	}
 
 	p = New()
-	p.Set("test/custom.x", "-100")
+	if err := p.Set("test/custom.x", "-100"); err != nil {
+		t.Fatal(err)
+	}
 	if err := p.Instance("test/1", &x); err != nil {
 		t.Fatal(err)
 	}
@@ -76,14 +78,14 @@ instance testx test/1 (
 	}
 
 	var x int
-	if err := p.Instance("test/1", &x); err != nil {
+	if err = p.Instance("test/1", &x); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := x, 1000; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if err := p.Instance("testx", &x); err != nil {
+	if err = p.Instance("testx", &x); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := x, 1099; got != want {

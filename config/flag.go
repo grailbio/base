@@ -9,6 +9,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/grailbio/base/backgroundcontext"
+	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/file"
 )
 
 type listFlag struct {
@@ -63,23 +67,24 @@ func (p *Profile) NeedProcessFlags() bool {
 // ProcessFlags processes the flags as registered by RegisterFlags,
 // and is documented by that method.
 func (p *Profile) ProcessFlags() error {
+	ctx := backgroundcontext.Get()
 	if len(p.flagPaths) == 0 && p.flagDefaultPath != "" {
-		if f, err := os.Open(p.flagDefaultPath); err == nil {
-			defer f.Close()
-			if err := p.Parse(f); err != nil {
+		if f, err := file.Open(ctx, p.flagDefaultPath); err == nil {
+			defer f.Close(ctx)
+			if err = p.Parse(f.Reader(ctx)); err != nil {
 				return err
 			}
-		} else if !os.IsNotExist(err) {
+		} else if !errors.Is(errors.NotExist, err) {
 			return err
 		}
 	}
 	for _, path := range p.flagPaths {
-		f, err := os.Open(path)
+		f, err := file.Open(ctx, path)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		if err := p.Parse(f); err != nil {
+		defer f.Close(ctx)
+		if err := p.Parse(f.Reader(ctx)); err != nil {
 			return err
 		}
 	}
