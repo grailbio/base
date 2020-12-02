@@ -96,9 +96,11 @@ func withDefaultFields(ctx context.Context, callerSkip int, t time.Time,
 		"ts", t,
 	}
 	// TODO(noah): Uncomment after v.io upgrade.
-	// if requestID := v23.GetRequestID(vcontext.FromGoContext(ctx)); requestID != uuid.Nil {
-	// 	defaultFields = append(defaultFields, "requestID", requestID)
-	// }
+	//if ctx != nil {
+	//	if requestID := v23.GetRequestID(vcontext.FromGoContext(ctx)); requestID != uuid.Nil {
+	//		defaultFields = append(defaultFields, "requestID", requestID)
+	//	}
+	//}
 	return append(defaultFields, keysAndValues...)
 }
 
@@ -215,6 +217,26 @@ func Warnv(ctx context.Context, skip int, msg string, keysAndValues ...interface
 // If ctx does not contain a key in contextFields, that field will be omitted.
 func Errorv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
 	log(ctx, ErrorLevel, skip, msg, keysAndValues)
+}
+
+// DebugNoCtx logs a message and variadic key-value pairs.
+func DebugNoCtx(msg string, keysAndValues ...interface{}) {
+	Debugv(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+}
+
+// InfoNoCtx logs a message and variadic key-value pairs.
+func InfoNoCtx(msg string, keysAndValues ...interface{}) {
+	Infov(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+}
+
+// WarnNoCtx logs a message and variadic key-value pairs.
+func WarnNoCtx(msg string, keysAndValues ...interface{}) {
+	Warnv(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+}
+
+// ErrorNoCtx logs a message and variadic key-value pairs.
+func ErrorNoCtx(msg string, keysAndValues ...interface{}) {
+	Errorv(nil, 1, msg, keysAndValues...) // nolint: staticcheck
 }
 
 func getCaller(skip int) string {

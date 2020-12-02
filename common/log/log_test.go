@@ -147,17 +147,38 @@ func ExampleErrorv() {
 	// {"level":"error","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:145","ts":"2000-01-01T00:00:00.000000000Z","requestID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
 }
 
+func ExampleDebugNoCtx() {
+	setup()
+	DebugNoCtx("Hello, world!")
+	// Output:
+	// {"level":"debug","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:152","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
+func ExampleInfoNoCtx() {
+	setup()
+	InfoNoCtx("Hello, world!")
+	// Output:
+	// {"level":"info","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:159","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
+func ExampleWarnNoCtx() {
+	setup()
+	WarnNoCtx("Hello, world!")
+	// Output:
+	// {"level":"warn","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:166","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
+func ExampleErrorNoCtx() {
+	setup()
+	ErrorNoCtx("Hello, world!")
+	// Output:
+	// {"level":"error","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:173","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
 func Example_danglingKey() {
 	setup()
 	Info(context.Background(), "Hello, world!", "myDanglingKey")
 	// Output:
-	// {"level":"error","msg":"Ignored key without a value.","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:152","ts":"2000-01-01T00:00:00.000000000Z","ignored":"myDanglingKey"}
-	// {"level":"info","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:152","ts":"2000-01-01T00:00:00.000000000Z"}
-}
-
-func Example_nilCtx() {
-	setup()
-	Info(nil, "Hello, world!", "foo", "bar") // nolint: staticcheck
-	// Output:
-	// {"level":"info","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:160","ts":"2000-01-01T00:00:00.000000000Z","foo":"bar"}
+	// {"level":"error","msg":"Ignored key without a value.","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:180","ts":"2000-01-01T00:00:00.000000000Z","ignored":"myDanglingKey"}
+	// {"level":"info","msg":"Hello, world!","caller":"go/src/github.com/grailbio/base/common/log/log_test.go:180","ts":"2000-01-01T00:00:00.000000000Z"}
 }
