@@ -221,22 +221,26 @@ func Errorv(ctx context.Context, skip int, msg string, keysAndValues ...interfac
 
 // DebugNoCtx logs a message and variadic key-value pairs.
 func DebugNoCtx(msg string, keysAndValues ...interface{}) {
-	Debugv(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+	// context.Background() is a singleton and gets initialized once
+	Debugv(context.Background(), 1, msg, keysAndValues...)
 }
 
 // InfoNoCtx logs a message and variadic key-value pairs.
 func InfoNoCtx(msg string, keysAndValues ...interface{}) {
-	Infov(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+	// context.Background() is a singleton and gets initialized once
+	Infov(context.Background(), 1, msg, keysAndValues...)
 }
 
 // WarnNoCtx logs a message and variadic key-value pairs.
 func WarnNoCtx(msg string, keysAndValues ...interface{}) {
-	Warnv(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+	// context.Background() is a singleton and gets initialized once
+	Warnv(context.Background(), 1, msg, keysAndValues...)
 }
 
 // ErrorNoCtx logs a message and variadic key-value pairs.
 func ErrorNoCtx(msg string, keysAndValues ...interface{}) {
-	Errorv(nil, 1, msg, keysAndValues...) // nolint: staticcheck
+	// context.Background() is a singleton and gets initialized once
+	Errorv(context.Background(), 1, msg, keysAndValues...)
 }
 
 func getCaller(skip int) string {
