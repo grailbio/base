@@ -22,14 +22,10 @@ import (
 	"v.io/v23/naming"
 	"v.io/v23/rpc"
 	"v.io/v23/security"
-	"v.io/x/ref"
 	libsecurity "v.io/x/ref/lib/security"
 )
 
 func TestCmd(t *testing.T) {
-	ctx, v23CleanUp := v23.Init()
-	defer v23CleanUp()
-	assert.NoError(t, ref.EnvClearCredentials())
 	exe := testutil.GoExecutable(t, "//go/src/github.com/grailbio/base/cmd/grail-access/grail-access")
 
 	// Preserve the test environment's PATH. On Darwin, Vanadium's agentlib uses `ioreg` from the
@@ -103,6 +99,8 @@ func TestCmd(t *testing.T) {
 	})
 
 	t.Run("fake_v23_servers", func(t *testing.T) {
+		ctx, v23CleanUp := v23.Init()
+		defer v23CleanUp()
 
 		t.Run("ec2", func(t *testing.T) {
 			const (

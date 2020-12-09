@@ -19,6 +19,7 @@ import (
 	"v.io/x/lib/cmdline"
 	"v.io/x/ref"
 	libsecurity "v.io/x/ref/lib/security"
+	"v.io/x/ref/services/agent/agentlib"
 )
 
 const (
@@ -115,14 +116,16 @@ func run(*cmdline.Env, []string) error {
 		fmt.Printf("*******************************************************\n\n")
 		fmt.Printf("How to fix this in bash: export %s=%s\n\n", ref.EnvCredentials, credentialsDirFlag)
 	}
-	principal, err := libsecurity.LoadPersistentPrincipal(credentialsDirFlag, nil)
+
+	principal, err := agentlib.LoadPrincipal(credentialsDirFlag)
 	if err != nil {
 		log.Printf("INFO: Couldn't load principal from %s. Creating new one...", credentialsDirFlag)
+		// TODO(josh): Do we need to kill the v23agentd?
 		_, createErr := libsecurity.CreatePersistentPrincipal(credentialsDirFlag, nil)
 		if createErr != nil {
-			return errors.E(fmt.Sprintf("failed to create new principal: %v, after load error: %v", createErr, err))
+			return fmt.Errorf("failed to create new principal: %w, after load error: %v", createErr, err)
 		}
-		principal, err = libsecurity.LoadPersistentPrincipal(credentialsDirFlag, nil)
+		principal, err = agentlib.LoadPrincipal(credentialsDirFlag)
 	}
 	if err != nil {
 		return errors.E("failed to load principal", err)
@@ -167,6 +170,9 @@ func run(*cmdline.Env, []string) error {
 	fmt.Println("Successfully applied new blessing:")
 	dump(principal)
 
+	if err := principal.Close(); err != nil {
+		return errors.E("failed to close agent principal", err)
+	}
 	return nil
 }
 
