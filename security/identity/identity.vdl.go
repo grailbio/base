@@ -2,10 +2,11 @@
 // Package: identity
 
 // Package identity defines interfaces for Vanadium identity providers.
+//nolint:golint
 package identity
 
 import (
-	"v.io/v23"
+	v23 "v.io/v23"
 	"v.io/v23/context"
 	"v.io/v23/rpc"
 	"v.io/v23/security"
@@ -13,10 +14,10 @@ import (
 	"v.io/v23/vdl"
 )
 
-var _ = __VDLInit() // Must be first; see __VDLInit comments for details.
+var _ = initializeVDL() // Must be first; see initializeVDL comments for details.
 
-//////////////////////////////////////////////////
 // Interface definitions
+// =====================
 
 // Ec2BlesserClientMethods is the client interface
 // containing Ec2Blesser methods.
@@ -29,10 +30,10 @@ type Ec2BlesserClientMethods interface {
 	BlessEc2(_ *context.T, pkcs7b64 string, _ ...rpc.CallOpt) (blessing security.Blessings, _ error)
 }
 
-// Ec2BlesserClientStub adds universal methods to Ec2BlesserClientMethods.
+// Ec2BlesserClientStub embeds Ec2BlesserClientMethods and is a
+// placeholder for additional management operations.
 type Ec2BlesserClientStub interface {
 	Ec2BlesserClientMethods
-	rpc.UniversalServiceMethods
 }
 
 // Ec2BlesserClient returns a client stub for Ec2Blesser.
@@ -69,7 +70,7 @@ type Ec2BlesserServerStubMethods Ec2BlesserServerMethods
 // Ec2BlesserServerStub adds universal methods to Ec2BlesserServerStubMethods.
 type Ec2BlesserServerStub interface {
 	Ec2BlesserServerStubMethods
-	// Describe the Ec2Blesser interfaces.
+	// DescribeInterfaces the Ec2Blesser interfaces.
 	Describe__() []rpc.InterfaceDesc
 }
 
@@ -120,10 +121,10 @@ var descEc2Blesser = rpc.InterfaceDesc{
 			Name: "BlessEc2",
 			Doc:  "// BlessEc2 uses the provided EC2 instance identity document in PKCS#7\n// format to return a blessing to the client.",
 			InArgs: []rpc.ArgDesc{
-				{"pkcs7b64", ``}, // string
+				{Name: "pkcs7b64", Doc: ``}, // string
 			},
 			OutArgs: []rpc.ArgDesc{
-				{"blessing", ``}, // security.Blessings
+				{Name: "blessing", Doc: ``}, // security.Blessings
 			},
 			Tags: []*vdl.Value{vdl.ValueOf(access.Tag("Read"))},
 		},
@@ -138,10 +139,10 @@ type GoogleBlesserClientMethods interface {
 	BlessGoogle(_ *context.T, idToken string, _ ...rpc.CallOpt) (blessing security.Blessings, _ error)
 }
 
-// GoogleBlesserClientStub adds universal methods to GoogleBlesserClientMethods.
+// GoogleBlesserClientStub embeds GoogleBlesserClientMethods and is a
+// placeholder for additional management operations.
 type GoogleBlesserClientStub interface {
 	GoogleBlesserClientMethods
-	rpc.UniversalServiceMethods
 }
 
 // GoogleBlesserClient returns a client stub for GoogleBlesser.
@@ -175,7 +176,7 @@ type GoogleBlesserServerStubMethods GoogleBlesserServerMethods
 // GoogleBlesserServerStub adds universal methods to GoogleBlesserServerStubMethods.
 type GoogleBlesserServerStub interface {
 	GoogleBlesserServerStubMethods
-	// Describe the GoogleBlesser interfaces.
+	// DescribeInterfaces the GoogleBlesser interfaces.
 	Describe__() []rpc.InterfaceDesc
 }
 
@@ -225,10 +226,10 @@ var descGoogleBlesser = rpc.InterfaceDesc{
 		{
 			Name: "BlessGoogle",
 			InArgs: []rpc.ArgDesc{
-				{"idToken", ``}, // string
+				{Name: "idToken", Doc: ``}, // string
 			},
 			OutArgs: []rpc.ArgDesc{
-				{"blessing", ``}, // security.Blessings
+				{Name: "blessing", Doc: ``}, // security.Blessings
 			},
 			Tags: []*vdl.Value{vdl.ValueOf(access.Tag("Read"))},
 		},
@@ -243,10 +244,10 @@ type K8sBlesserClientMethods interface {
 	BlessK8s(_ *context.T, caCrt string, namespace string, token string, region string, _ ...rpc.CallOpt) (blessing security.Blessings, _ error)
 }
 
-// K8sBlesserClientStub adds universal methods to K8sBlesserClientMethods.
+// K8sBlesserClientStub embeds K8sBlesserClientMethods and is a
+// placeholder for additional management operations.
 type K8sBlesserClientStub interface {
 	K8sBlesserClientMethods
-	rpc.UniversalServiceMethods
 }
 
 // K8sBlesserClient returns a client stub for K8sBlesser.
@@ -280,7 +281,7 @@ type K8sBlesserServerStubMethods K8sBlesserServerMethods
 // K8sBlesserServerStub adds universal methods to K8sBlesserServerStubMethods.
 type K8sBlesserServerStub interface {
 	K8sBlesserServerStubMethods
-	// Describe the K8sBlesser interfaces.
+	// DescribeInterfaces the K8sBlesser interfaces.
 	Describe__() []rpc.InterfaceDesc
 }
 
@@ -330,26 +331,26 @@ var descK8sBlesser = rpc.InterfaceDesc{
 		{
 			Name: "BlessK8s",
 			InArgs: []rpc.ArgDesc{
-				{"caCrt", ``},     // string
-				{"namespace", ``}, // string
-				{"token", ``},     // string
-				{"region", ``},    // string
+				{Name: "caCrt", Doc: ``},     // string
+				{Name: "namespace", Doc: ``}, // string
+				{Name: "token", Doc: ``},     // string
+				{Name: "region", Doc: ``},    // string
 			},
 			OutArgs: []rpc.ArgDesc{
-				{"blessing", ``}, // security.Blessings
+				{Name: "blessing", Doc: ``}, // security.Blessings
 			},
 			Tags: []*vdl.Value{vdl.ValueOf(access.Tag("Read"))},
 		},
 	},
 }
 
-var __VDLInitCalled bool
+var initializeVDLCalled bool
 
-// __VDLInit performs vdl initialization.  It is safe to call multiple times.
+// initializeVDL performs vdl initialization.  It is safe to call multiple times.
 // If you have an init ordering issue, just insert the following line verbatim
 // into your source files in this package, right after the "package foo" clause:
 //
-//    var _ = __VDLInit()
+//    var _ = initializeVDL()
 //
 // The purpose of this function is to ensure that vdl initialization occurs in
 // the right order, and very early in the init sequence.  In particular, vdl
@@ -358,11 +359,11 @@ var __VDLInitCalled bool
 //
 // This function returns a dummy value, so that it can be used to initialize the
 // first var in the file, to take advantage of Go's defined init order.
-func __VDLInit() struct{} {
-	if __VDLInitCalled {
+func initializeVDL() struct{} {
+	if initializeVDLCalled {
 		return struct{}{}
 	}
-	__VDLInitCalled = true
+	initializeVDLCalled = true
 
 	return struct{}{}
 }

@@ -53,7 +53,8 @@ func Load(dir string) (map[string]ticketConfig, error) {
 		}
 
 		errors := vdlutil.Errors{}
-		packages := build.TransitivePackagesForConfig(path, f, build.Opts{}, &errors)
+		warnings := vdlutil.Errors{}
+		packages := build.TransitivePackagesForConfig(path, f, build.Opts{}, &errors, &warnings)
 		env := compile.NewEnv(100)
 		for _, p := range packages {
 			vlog.VI(1).Infof("building package: %+v", p.Path)
