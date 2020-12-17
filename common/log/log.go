@@ -6,8 +6,11 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	v23 "v.io/v23"
+	vcontext "v.io/v23/context"
 )
 
 // RFC3339TrailingNano is RFC3339 format with trailing nanoseconds precision.
@@ -95,12 +98,13 @@ func withDefaultFields(ctx context.Context, callerSkip int, t time.Time,
 		"caller", getCaller(callerSkip),
 		"ts", t,
 	}
-	// TODO(noah): Uncomment after v.io upgrade.
-	//if ctx != nil {
-	//	if requestID := v23.GetRequestID(vcontext.FromGoContext(ctx)); requestID != uuid.Nil {
-	//		defaultFields = append(defaultFields, "requestID", requestID)
-	//	}
-	//}
+	if ctx != nil {
+		if vctx, ok := ctx.(*vcontext.T); ok {
+			if requestID := v23.GetRequestID(vctx); requestID != uuid.Nil {
+				defaultFields = append(defaultFields, "v23RequestID", requestID)
+			}
+		}
+	}
 	return append(defaultFields, keysAndValues...)
 }
 
