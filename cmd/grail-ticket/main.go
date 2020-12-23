@@ -31,6 +31,7 @@ var (
 	certFlag          string
 	keyFlag           string
 	jsonOnlyFlag      bool
+	listFlag          bool
 )
 
 func newCmdRoot() *cmdline.Command {
@@ -57,8 +58,9 @@ Note that tickets can be enumerated using the 'namespace' Vanadium tool:
 		ArgsName: "<ticket>",
 		LookPath: false,
 	}
-	root.Flags.DurationVar(&timeoutFlag, "timeout", 10*time.Second, "Timeout for the requests to the ticket-server")
+	root.Flags.DurationVar(&timeoutFlag, "timeout", 90*time.Second, "Timeout for the requests to the ticket-server")
 	root.Flags.BoolVar(&jsonOnlyFlag, "json-only", false, "Force a JSON output even for the tickets that have special handling")
+	root.Flags.BoolVar(&listFlag, "list", false, "List accessible tickets")
 	root.Flags.StringVar(&authorityCertFlag, "authority-cert", "", "PEM file to store the CA cert for a TLS-based ticket")
 	root.Flags.StringVar(&certFlag, "cert", "", "PEM file to store the cert for a TLS-based ticket")
 	root.Flags.StringVar(&keyFlag, "key", "", "PEM file to store the private key for a TLS-based ticket")
@@ -81,6 +83,19 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	ticketPath := args[0]
+	if listFlag {
+		fmt.Println("Listing all accessible tickets (this may take up to 90 seconds)...")
+		client := ticket.ListServiceClient(ticketPath)
+		tickets, err := client.List(ctx)
+		if err != nil {
+			return err
+		}
+		for _, t := range tickets {
+			fmt.Println(t)
+		}
+		return nil
+	}
+
 	client := ticket.TicketServiceClient(ticketPath)
 	ctx, cancel := context.WithTimeout(ctx, timeoutFlag)
 	defer cancel()

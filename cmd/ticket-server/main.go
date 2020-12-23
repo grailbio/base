@@ -200,10 +200,10 @@ type dispatcher struct {
 	root     *node
 }
 
-var _ rpc.Dispatcher = (*dispatcher)(nil)
+var d *dispatcher
 
 func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Config, jwtConfig *jwt.Config) rpc.Dispatcher {
-	d := &dispatcher{
+	d = &dispatcher{
 		registry: make(map[string]entry),
 		root:     &node{},
 	}
@@ -224,6 +224,10 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 			service: identity.Ec2BlesserServer(newEc2Blesser(ctx, awsSession, ec2ExpirationIntervalFlag, ec2BlesserRoleFlag, ec2DynamoDBTableFlag)),
 			auth:    securityflag.NewAuthorizerOrDie(ctx),
 		}
+	}
+	d.registry[""] = entry{
+		service: ticket.ListServiceServer(newList(ctx)),
+		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}
 
 	for k, v := range cfg {

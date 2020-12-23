@@ -306,3 +306,7 @@ type TicketService interface {
     Get() (Ticket | error) {access.Read}
     GetWithParameters(parameters []Parameter) (Ticket | error) {access.Read}
 }
+
+type ListService interface {
+    List() ([]string | error) {access.Read}
+}

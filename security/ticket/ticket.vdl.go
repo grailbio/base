@@ -3550,6 +3550,103 @@ var descTicketService = rpc.InterfaceDesc{
 	},
 }
 
+// ListServiceClientMethods is the client interface
+// containing ListService methods.
+type ListServiceClientMethods interface {
+	List(*context.T, ...rpc.CallOpt) ([]string, error)
+}
+
+// ListServiceClientStub embeds ListServiceClientMethods and is a
+// placeholder for additional management operations.
+type ListServiceClientStub interface {
+	ListServiceClientMethods
+}
+
+// ListServiceClient returns a client stub for ListService.
+func ListServiceClient(name string) ListServiceClientStub {
+	return implListServiceClientStub{name}
+}
+
+type implListServiceClientStub struct {
+	name string
+}
+
+func (c implListServiceClientStub) List(ctx *context.T, opts ...rpc.CallOpt) (o0 []string, err error) {
+	err = v23.GetClient(ctx).Call(ctx, c.name, "List", nil, []interface{}{&o0}, opts...)
+	return
+}
+
+// ListServiceServerMethods is the interface a server writer
+// implements for ListService.
+type ListServiceServerMethods interface {
+	List(*context.T, rpc.ServerCall) ([]string, error)
+}
+
+// ListServiceServerStubMethods is the server interface containing
+// ListService methods, as expected by rpc.Server.
+// There is no difference between this interface and ListServiceServerMethods
+// since there are no streaming methods.
+type ListServiceServerStubMethods ListServiceServerMethods
+
+// ListServiceServerStub adds universal methods to ListServiceServerStubMethods.
+type ListServiceServerStub interface {
+	ListServiceServerStubMethods
+	// DescribeInterfaces the ListService interfaces.
+	Describe__() []rpc.InterfaceDesc
+}
+
+// ListServiceServer returns a server stub for ListService.
+// It converts an implementation of ListServiceServerMethods into
+// an object that may be used by rpc.Server.
+func ListServiceServer(impl ListServiceServerMethods) ListServiceServerStub {
+	stub := implListServiceServerStub{
+		impl: impl,
+	}
+	// Initialize GlobState; always check the stub itself first, to handle the
+	// case where the user has the Glob method defined in their VDL source.
+	if gs := rpc.NewGlobState(stub); gs != nil {
+		stub.gs = gs
+	} else if gs := rpc.NewGlobState(impl); gs != nil {
+		stub.gs = gs
+	}
+	return stub
+}
+
+type implListServiceServerStub struct {
+	impl ListServiceServerMethods
+	gs   *rpc.GlobState
+}
+
+func (s implListServiceServerStub) List(ctx *context.T, call rpc.ServerCall) ([]string, error) {
+	return s.impl.List(ctx, call)
+}
+
+func (s implListServiceServerStub) Globber() *rpc.GlobState {
+	return s.gs
+}
+
+func (s implListServiceServerStub) Describe__() []rpc.InterfaceDesc {
+	return []rpc.InterfaceDesc{ListServiceDesc}
+}
+
+// ListServiceDesc describes the ListService interface.
+var ListServiceDesc rpc.InterfaceDesc = descListService
+
+// descListService hides the desc to keep godoc clean.
+var descListService = rpc.InterfaceDesc{
+	Name:    "ListService",
+	PkgPath: "github.com/grailbio/base/security/ticket",
+	Methods: []rpc.MethodDesc{
+		{
+			Name: "List",
+			OutArgs: []rpc.ArgDesc{
+				{Name: "", Doc: ``}, // []string
+			},
+			Tags: []*vdl.Value{vdl.ValueOf(access.Tag("Read"))},
+		},
+	},
+}
+
 // Hold type definitions in package-level variables, for better performance.
 //nolint:unused
 var (
