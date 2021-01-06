@@ -225,7 +225,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 			auth:    securityflag.NewAuthorizerOrDie(ctx),
 		}
 	}
-	d.registry[""] = entry{
+	d.registry["list"] = entry{
 		service: ticket.ListServiceServer(newList(ctx)),
 		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}

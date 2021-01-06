@@ -85,7 +85,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	ticketPath := args[0]
 	if listFlag {
 		fmt.Println("Listing all accessible tickets (this may take up to 90 seconds)...")
-		client := ticket.ListServiceClient(ticketPath)
+		client := ticket.ListServiceClient(ticketPath + "/list")
 		tickets, err := client.List(ctx)
 		if err != nil {
 			return err

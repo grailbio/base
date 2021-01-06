@@ -16,7 +16,7 @@ func newList(ctx *context.T) *list {
 
 func (l *list) List(ctx *context.T, call rpc.ServerCall) ([]string, error) {
 	var result []string
-	ignored := regexp.MustCompile("blesser/*")
+	ignored := regexp.MustCompile("blesser/*|list")
 	for t, e := range d.registry {
 		if ignore := ignored.MatchString(t); !ignore {
 			if err := e.auth.Authorize(ctx, call.Security()); err == nil {
