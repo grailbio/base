@@ -247,6 +247,10 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 	return nil
 }
 
+// EmptyReadErrStr is the error-string returned by Read() when the file is
+// empty, and at least a header line was expected.
+const EmptyReadErrStr = "empty file: could not read the header row"
+
 // Read reads the next TSV row into a go struct.  The argument must be a pointer
 // to a struct. It parses each column in the row into the matching struct
 // fields.
@@ -292,7 +296,7 @@ func (r *Reader) Read(v interface{}) error {
 		headerRow, err := r.Reader.Read()
 		if err != nil {
 			if err == io.EOF {
-				err = errors.E("empty file: could not read the header row")
+				err = errors.E(EmptyReadErrStr)
 			}
 			return err
 		}
