@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -258,5 +259,7 @@ func getCaller(skip int) string {
 	if frame.PC == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%s:%d", frame.File, frame.Line)
+	parts := strings.Split(frame.File, "/")
+	file := parts[len(parts)-1]
+	return fmt.Sprintf("%s:%d", file, frame.Line)
 }
