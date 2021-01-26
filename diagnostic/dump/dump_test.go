@@ -43,6 +43,9 @@ func makeDumpError(errC chan<- error, s string) Func {
 	}
 }
 
+func dumpSkipPart(_ context.Context, _ io.Writer) error {
+	return ErrSkipPart
+}
 func TestShellQuote(t *testing.T) {
 	for _, c := range []struct {
 		s    string
@@ -144,6 +147,7 @@ func TestServeHTTPFailedParts(t *testing.T) {
 	// Note that the following dump part funcs will return an error.
 	reg.Register("bar", makeDumpError(dumpFuncErrC, "bar-contents"))
 	reg.Register("baz", makeDumpError(dumpFuncErrC, "baz-contents"))
+	reg.Register("skip", dumpSkipPart)
 
 	mux := http.NewServeMux()
 	mux.Handle("/dump", reg)

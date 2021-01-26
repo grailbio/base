@@ -188,7 +188,7 @@ func dumpPprofProfile(ctx context.Context, w io.Writer) error {
 	case <-time.After(30 * time.Second):
 	case <-ctx.Done():
 		d := time.Since(startTime)
-		log.Printf("dump: CPU profile cut short to %s", d.String())
+		log.Debug.Printf("dump: CPU profile cut short to %s", d.String())
 	}
 	return nil
 }

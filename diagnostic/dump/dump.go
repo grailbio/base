@@ -27,6 +27,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -54,6 +55,13 @@ func init() {
 	Register("vars", dumpVars)
 	http.Handle("/debug/dump", DefaultRegistry)
 }
+
+// ErrSkipPart signals that we should skip a part. Return this from your
+// Func to silently ignore the part for the current dump. If your Func
+// returns anything else non-nil, it will be logged as an error. This is
+// mostly useful for keeping logs quiet for parts that are sometimes
+// unavailable for non-error reasons.
+var ErrSkipPart = errors.New("skip part")
 
 // part is one part of a dump. It is ultimately expressed as a single file that
 // is part the tarball archive dump.
@@ -136,6 +144,9 @@ func processPart(ctx context.Context, part part) partFile {
 	}
 	if err := part.f(ctx, tmpfile); err != nil {
 		_ = tmpfile.Close()
+		if err == ErrSkipPart {
+			return partFile{part: part, err: err}
+		}
 		return partFile{
 			part: part,
 			err:  fmt.Errorf("error writing part contents: %v", err),
@@ -178,6 +189,9 @@ func writeTar(name string, f *os.File, tw *tar.Writer) error {
 // to the part name to construct the full path of the entry in the archive.
 func writePart(pfx string, p partFile, tw *tar.Writer) (err error) {
 	if p.err != nil {
+		if p.err == ErrSkipPart {
+			return nil
+		}
 		return fmt.Errorf("error dumping %s: %v", p.part.name, p.err)
 	}
 	defer func() {
