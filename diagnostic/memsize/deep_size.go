@@ -21,7 +21,7 @@ import (
 // The implementation relies on the Go garbage collector being non-compacting (not
 // moving values in memory), due to thread non-safety noted above. This is true as
 // of Go 1.13, but could change in the future.
-func DeepSize(x interface{}) (bytes int) {
+func DeepSize(x interface{}) (numBytes int) {
 	if x == nil {
 		return 0
 	}
