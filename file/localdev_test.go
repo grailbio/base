@@ -1,3 +1,5 @@
+//+build !unit
+
 package file_test
 
 import (
@@ -22,8 +24,8 @@ func TestStdout(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"/dev/stdout", // works on linux
 		"/dev/tty",    // works on darwin
+		"/dev/stdout", // works on linux
 	} {
 		ctx := context.Background()
 		var w file.File
