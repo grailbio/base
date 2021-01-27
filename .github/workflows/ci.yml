@@ -23,7 +23,7 @@ jobs:
     - name: Check out
       uses: actions/checkout@v2
     - name: Test
-      run: go test ./...
+      run: go test -tags=unit ./...
   golangci:
     name: Lint
     runs-on: ubuntu-latest
