@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [1.13, 1.14, 1.15]
+        os: [ubuntu-latest, macos-latest]
+    name: Build & Test
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Set up Go ${{ matrix.go }}
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go }}
+    - name: Check out
+      uses: actions/checkout@v2
+    - name: Test
+      run: go test -tags=unit ./...
+  golangci:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out
+      uses: actions/checkout@v2
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v2
+      with:
+        version: v1.29
+        only-new-issues: true
+        args: --timeout=5m

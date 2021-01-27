@@ -3,7 +3,7 @@ other grailbio Go packages:
 
 - API documentation: [godoc.org/github.com/grailbio/base](https://godoc.org/github.com/grailbio/base)
 - Issue tracker: [github.com/grailbio/base/issues](https://github.com/grailbio/base/issues)
-- Travis CI: [![Travis CI](https://travis-ci.org/grailbio/base.svg) https://travis-ci.org/grailbio/base](https://travis-ci.org/grailbio/base)
+- [![CI](https://github.com/grailbio/base/workflows/CI/badge.svg)](https://github.com/grailbio/base/actions?query=workflow%3ACI)
 
 - [recordio](https://godoc.org/github.com/grailbio/base/recordio): encrypted and compressed record oriented files with indexing support
 - [file](https://godoc.org/github.com/grailbio/base/file): unified file API for the local file system and S3
