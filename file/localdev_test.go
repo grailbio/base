@@ -22,8 +22,8 @@ func TestStdout(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"/dev/tty",    // works on darwin
 		"/dev/stdout", // works on linux
+		"/dev/tty",    // works on darwin
 	} {
 		ctx := context.Background()
 		var w file.File
