@@ -52,5 +52,9 @@ type Eventer interface {
 // Nop is a no-op Eventer.
 type Nop struct{}
 
+func (Nop) String() string {
+	return "disabled"
+}
+
 // Event implements Eventer.
 func (Nop) Event(_ string, _ ...interface{}) {}

@@ -122,6 +122,10 @@ func NewCloudWatchEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, s
 	return eventer
 }
 
+func (c *CloudWatchEventer) String() string {
+	return fmt.Sprintf("CloudWatch Logs: %s/%s", c.group, c.stream)
+}
+
 // Event implements Eventer.
 func (c *CloudWatchEventer) Event(typ string, fieldPairs ...interface{}) {
 	select {
