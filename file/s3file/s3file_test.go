@@ -461,9 +461,8 @@ func realBucketProviderOrSkip(t *testing.T) s3file.ClientProvider {
 	if *s3BucketFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket to run the test.")
 	}
-	client := s3transport.Client()
 	return s3file.NewDefaultProvider(session.Options{
-		Config:  *aws.NewConfig().WithHTTPClient(client),
+		Config:  *aws.NewConfig().WithHTTPClient(s3transport.DefaultClient),
 		Profile: *profileFlag,
 	})
 }

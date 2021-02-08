@@ -1,7 +1,6 @@
 package s3transport
 
 import (
-	"context"
 	"flag"
 	"net"
 	"sync"
@@ -99,7 +98,7 @@ func (s *expiringMap) logOnce(time.Time) {
 // runPeriodic runs the given func with the given period.
 type runPeriodic func(time.Duration, func(time.Time))
 
-func runPeriodicUntilCancel(ctx context.Context) runPeriodic {
+func runPeriodicForever() runPeriodic {
 	return func(period time.Duration, tick func(time.Time)) {
 		ticker := time.NewTicker(period)
 		defer ticker.Stop()
@@ -107,8 +106,6 @@ func runPeriodicUntilCancel(ctx context.Context) runPeriodic {
 			select {
 			case now := <-ticker.C:
 				tick(now)
-			case <-ctx.Done():
-				return
 			}
 		}
 	}

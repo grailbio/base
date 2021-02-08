@@ -8,11 +8,12 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/grailbio/base/backgroundcontext"
 )
 
+// T is an http.RoundTripper specialized for S3. See https://github.com/aws/aws-sdk-go/issues/3739.
 type T struct {
+	factory func() *http.Transport
+
 	hostRTsMu sync.Mutex
 	hostRTs   map[string]http.RoundTripper
 
@@ -20,8 +21,8 @@ type T struct {
 }
 
 var (
-	httpDefaultTransport = http.DefaultTransport.(*http.Transport)
-	httpTransport        = &http.Transport{
+	stdDefaultTransport = http.DefaultTransport.(*http.Transport)
+	httpTransport       = &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second, // Copied from http.DefaultTransport.
 			KeepAlive: 30 * time.Second, // Copied from same.
@@ -31,21 +32,24 @@ var (
 		MaxIdleConnsPerHost:   4,                               // But limit connections to each.
 		IdleConnTimeout:       expireAfter + 2*expireLoopEvery, // Keep until we forget the peer.
 		TLSClientConfig:       &tls.Config{},
-		TLSHandshakeTimeout:   httpDefaultTransport.TLSHandshakeTimeout,
-		ExpectContinueTimeout: httpDefaultTransport.ExpectContinueTimeout,
+		TLSHandshakeTimeout:   stdDefaultTransport.TLSHandshakeTimeout,
+		ExpectContinueTimeout: stdDefaultTransport.ExpectContinueTimeout,
 	}
-	defaultOnce   sync.Once
-	defaultClient *http.Client
+
+	// Default is an http.RoundTripper with recommended settings.
+	Default = New(httpTransport.Clone)
+	// DefaultClient uses Default (suitable for general use, analogous to "net/http".DefaultClient).
+	DefaultClient = &http.Client{Transport: Default}
 )
 
-func Client() *http.Client {
-	defaultOnce.Do(func() {
-		defaultClient = &http.Client{Transport: &T{
-			hostRTs: map[string]http.RoundTripper{},
-			hostIPs: newExpiringMap(runPeriodicUntilCancel(backgroundcontext.Get()), time.Now),
-		}}
-	})
-	return defaultClient
+// New constructs *T using factory to create internal transports. Each call to factory()
+// must return a separate http.Transport and they must not share TLSClientConfig.
+func New(factory func() *http.Transport) *T {
+	return &T{
+		factory: factory,
+		hostRTs: map[string]http.RoundTripper{},
+		hostIPs: newExpiringMap(runPeriodicForever(), time.Now),
+	}
 }
 
 func (t *T) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -72,9 +76,12 @@ func (t *T) hostRoundTripper(host string) http.RoundTripper {
 	if rt, ok := t.hostRTs[host]; ok {
 		return rt
 	}
-	transport := httpTransport.Clone()
+	transport := t.factory()
 	// We modify request URL to contain an IP, but server certificates list hostnames, so we
 	// configure our client to check against original hostname.
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	}
 	transport.TLSClientConfig.ServerName = host
 	t.hostRTs[host] = transport
 	return transport
