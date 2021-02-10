@@ -7,6 +7,7 @@
 package webutil
 
 import (
+	"os"
 	"os/exec"
 	"runtime"
 )
@@ -16,9 +17,14 @@ import (
 func StartBrowser(url string) bool {
 	// try to start the browser
 	var args []string
+	aws_env := os.Getenv("AWS_ENV")
 	switch runtime.GOOS {
 	case "darwin":
-		args = []string{"open"}
+		if aws_env != "" {
+			args = []string{"open", "-na", "Google Chrome", "--args", "--profile-directory=" + aws_env, "--new-window"}
+		} else {
+			args = []string{"open"}
+		}
 	case "windows":
 		args = []string{"cmd", "/c", "start"}
 	default:
