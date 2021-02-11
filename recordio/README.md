@@ -86,11 +86,10 @@ Each chunk contains a 28 byte header.
     chunk :=
         magic (8 bytes)
         CRC32 (4 bytes LE)
-        flag (4bytes LE)
+        flag (4 bytes LE)
         chunk payload size (4 bytes LE)
         totalChunks (4 bytes LE)
         chunk index (4 bytes LE)
-        flag (4 bytes LE)
         payload (bytes)
 
 - The 8-byte magic header tells whether the chunk is part of header, body, or a trailer.
@@ -99,7 +98,7 @@ Each chunk contains a 28 byte header.
   MagicPacked, and MagicTrailer.
 
 
-- The chunk payload size is (32768 - 32), unless it is for the final chunk of a
+- The chunk payload size is (32768 - 28), unless it is for the final chunk of a
   block. For the final chunk, the "chunk payload size" stores the size of the
   block contents, and the chunk is filled with garbage to make it 32KiB at rest.
 
