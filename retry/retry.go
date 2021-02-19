@@ -96,7 +96,7 @@ type jitter struct {
 // returned  by the provided policy.  For example, setting frac to 1.0 and 0.5
 // will implement "full jitter" and "equal jitter" approaches respectively.
 // These approaches are describer here:
-//
+// https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 func Jitter(policy Policy, frac float64) Policy {
 	return &jitter{policy, frac}
 }
