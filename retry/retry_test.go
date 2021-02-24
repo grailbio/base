@@ -104,6 +104,32 @@ func TestBackoffWithEqualJitter(t *testing.T) {
 	}
 }
 
+func TestBackoffWithTimeout(t *testing.T) {
+	policy := BackoffWithTimeout(time.Second, 10*time.Second, 2)
+	expect := []time.Duration{
+		time.Second,
+		2 * time.Second,
+		4 * time.Second,
+		8 * time.Second,
+	}
+	var retries = 0
+	for _, wait := range expect {
+		keepgoing, dur := policy.Retry(retries)
+		if !keepgoing {
+			t.Fatal("!keepgoing")
+		}
+		if got, want := dur, wait; got != want {
+			t.Errorf("retry %d: got %v, want %v", retries, got, want)
+		}
+		retries++
+	}
+	keepgoing, _ := policy.Retry(retries)
+	if keepgoing {
+		t.Errorf("keepgoing: got %v, want %v", keepgoing, false)
+	}
+
+}
+
 func TestWaitCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	policy := Backoff(time.Hour, time.Hour, 1)

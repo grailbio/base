@@ -84,6 +84,37 @@ func (b *backoff) Retry(retries int) (bool, time.Duration) {
 	return true, time.Duration(int64(nsfloat64))
 }
 
+type backoffWithTimeout struct {
+	factor       float64
+	initial, max time.Duration
+}
+
+// Backoff returns a Policy that initially waits for the amount of
+// time specified by parameter initial; on each try this value is
+// multiplied by the provided factor, up to the max duration.
+// After the max duration, the Policy will timeout and return an error.
+func BackoffWithTimeout(initial, max time.Duration, factor float64) Policy {
+	if max > MaxBackoffMax {
+		panic("max > MaxBackoffMax")
+	}
+	return &backoffWithTimeout{
+		initial: initial,
+		max:     max,
+		factor:  factor,
+	}
+}
+
+func (b *backoffWithTimeout) Retry(retries int) (bool, time.Duration) {
+	if retries < 0 {
+		panic("retries < 0")
+	}
+	nsfloat64 := float64(b.initial) * math.Pow(b.factor, float64(retries))
+	if nsfloat64 > float64(b.max) {
+		return false, time.Duration(int64(nsfloat64))
+	}
+	return true, time.Duration(int64(nsfloat64))
+}
+
 type jitter struct {
 	policy Policy
 	// frac is the fraction of the wait time to "jitter".
