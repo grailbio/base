@@ -126,6 +126,28 @@ func TestReadInt(t *testing.T) {
 	}
 }
 
+func TestReadFmt(t *testing.T) {
+	r := tsv.NewReader(bytes.NewReader([]byte(`"""helloworld"""	05.20	true	0a`)))
+	type row struct {
+		ColA string  `tsv:",fmt=q"`
+		ColB float64 `tsv:",fmt=1.2f"`
+		ColC bool    `tsv:",fmt=t"`
+		ColD int     `tsv:",fmt=x"`
+	}
+	var v row
+	assert.NoError(t, r.Read(&v))
+	assert.EQ(t, v, row{`helloworld`, 5.2, true, 10})
+}
+
+func TestReadFmtWithSpace(t *testing.T) {
+	r := tsv.NewReader(bytes.NewReader([]byte(`"hello world"`)))
+	type row struct {
+		ColA string `tsv:",fmt=s"`
+	}
+	var v row
+	expect.Regexp(t, r.Read(&v), "value with fmt option can not have whitespace")
+}
+
 func TestReadWithoutHeader(t *testing.T) {
 	type row struct {
 		ColA string
@@ -295,7 +317,9 @@ func ExampleReader_withTag() {
 		ColA    string  `tsv:"key"`
 		ColB    float64 `tsv:"col1"`
 		Skipped int     `tsv:"-"`
-		ColC    int     `tsv:"col0"`
+		ColC    int     `tsv:"col0,fmt=d"`
+		Hex     int     `tsv:",fmt=x"`
+		Hyphen  int     `tsv:"-,"`
 	}
 	readRow := func(r *tsv.Reader) row {
 		var v row
@@ -305,9 +329,9 @@ func ExampleReader_withTag() {
 		return v
 	}
 
-	r := tsv.NewReader(bytes.NewReader([]byte(`key	col0	col1
-key0	0	0.5
-key1	1	1.5
+	r := tsv.NewReader(bytes.NewReader([]byte(`key	col0	col1	Hex	-
+key0	0	0.5	a	1
+key1	1	1.5	f	2
 `)))
 	r.HasHeaderRow = true
 	r.UseHeaderNames = true
@@ -319,8 +343,8 @@ key1	1	1.5
 		panic(err)
 	}
 	// Output:
-	// {ColA:key0 ColB:0.5 Skipped:0 ColC:0}
-	// {ColA:key1 ColB:1.5 Skipped:0 ColC:1}
+	// {ColA:key0 ColB:0.5 Skipped:0 ColC:0 Hex:10 Hyphen:1}
+	// {ColA:key1 ColB:1.5 Skipped:0 ColC:1 Hex:15 Hyphen:2}
 }
 
 func BenchmarkReader(b *testing.B) {

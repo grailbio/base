@@ -35,6 +35,14 @@ func NewRowWriter(w io.Writer) *RowWriter {
 // On first Write, a TSV header row is written using v's type.
 // Subsequent Write()s may pass v of different type, but no guarantees are made
 // about consistent column ordering with different types.
+//
+// By default, the column name is the struct's field name, but you can
+// override it by setting `tsv:"columnname"` tag in the field.
+//
+// You can optionally specify an fmt option in the tag which will control how
+// to format the value using the fmt package. Note that the reader may not
+// support all the verbs. Without the fmt option, formatting options are preset
+// for each type. Using the fmt option may lead to slower performance.
 func (w *RowWriter) Write(v interface{}) error {
 	typ := reflect.TypeOf(v)
 	if typ != w.cachedRowType {
@@ -67,8 +75,18 @@ func (w *RowWriter) writeHeader() error {
 }
 
 func (w *RowWriter) writeRow(v interface{}) error {
+	typ := reflect.TypeOf(v).Elem()
 	p := unsafe.Pointer(reflect.ValueOf(v).Pointer())
 	for _, col := range w.cachedRowFormat {
+		if col.fmt != "" {
+			var (
+				typ1 = typ.FieldByIndex(col.fieldIdx).Type
+				p1   = unsafe.Pointer(uintptr(p) + col.offset)
+				v    = reflect.Indirect(reflect.NewAt(typ1, p1))
+			)
+			w.w.WriteString(fmt.Sprintf("%"+col.fmt, v))
+			continue
+		}
 		switch col.kind {
 		case reflect.Bool:
 			v := *(*bool)(unsafe.Pointer(uintptr(p) + col.offset))

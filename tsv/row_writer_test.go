@@ -6,6 +6,7 @@ package tsv_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/grailbio/base/tsv"
@@ -55,4 +56,32 @@ false	def	0	0	0	0	2	0	0	0	0	0	0	1e+300
 	if got != want {
 		t.Errorf("got: %q, want %q", got, want)
 	}
+}
+
+func ExampleRowWriter() {
+	type rowTyp struct {
+		Foo float64 `tsv:"foo,fmt=.2f"`
+		Bar float64 `tsv:"bar,fmt=.3f"`
+		Baz float64
+	}
+	rows := []rowTyp{
+		{Foo: 0.1234, Bar: 0.4567, Baz: 0.9876},
+		{Foo: 1.1234, Bar: 1.4567, Baz: 1.9876},
+	}
+	var buf bytes.Buffer
+	w := tsv.NewRowWriter(&buf)
+	for i := range rows {
+		if err := w.Write(&rows[i]); err != nil {
+			panic(err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		panic(err)
+	}
+	fmt.Print(string(buf.Bytes()))
+
+	// Output:
+	// foo	bar	Baz
+	// 0.12	0.457	0.9876
+	// 1.12	1.457	1.9876
 }

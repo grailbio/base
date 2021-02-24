@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"unsafe"
 
 	"github.com/grailbio/base/errors"
@@ -14,8 +15,10 @@ import (
 
 type columnFormat struct {
 	fieldName  string       // Go struct field name.
+	fieldIdx   []int        // Go struct field index.
 	columnName string       // expected column name in TSV. Defaults to fieldName unless `tsv:"colname"` tag is set.
 	kind       reflect.Kind // type of the column.
+	fmt        string       // Optional format directive for writing this value.
 	index      int          // index of this column in a row, 0-based.
 	offset     uintptr      // byte offset of this field within the Go struct.
 }
@@ -106,16 +109,27 @@ func parseRowFormat(typ reflect.Type) (rowFormat, error) {
 			continue
 		}
 		columnName := f.Name
+		var fmt string
 		if tag := f.Tag.Get("tsv"); tag != "" {
 			if tag == "-" {
 				continue
 			}
-			columnName = tag
+			tagArray := strings.Split(tag, ",")
+			if tagArray[0] != "" {
+				columnName = tagArray[0]
+			}
+			for _, tag := range tagArray[1:] {
+				if strings.HasPrefix(tag, "fmt=") {
+					fmt = tag[4:]
+				}
+			}
 		}
 		format = append(format, columnFormat{
 			fieldName:  f.Name,
+			fieldIdx:   f.Index,
 			columnName: columnName,
 			kind:       f.Type.Kind(),
+			fmt:        fmt,
 			index:      len(format),
 			offset:     f.Offset,
 		})
@@ -136,6 +150,7 @@ func (r *Reader) wrapError(err error, col columnFormat) error {
 // fillRow fills Go struct fields from the TSV row.  dest is the pointer to the
 // struct, and format defines the struct format.
 func (r *Reader) fillRow(val interface{}, row []string) error {
+	typ := reflect.TypeOf(val).Elem()
 	p := unsafe.Pointer(reflect.ValueOf(val).Pointer())
 	if r.RequireParseAllColumns && len(r.cachedRowFormat) != len(row) { // check this for headerless TSVs
 		return fmt.Errorf("extra columns found in %+v", r.cachedRowFormat)
@@ -146,6 +161,33 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 			return r.wrapError(fmt.Errorf("row has only %d columns", len(row)), col)
 		}
 		colVal := row[col.index]
+		if col.fmt != "" {
+			// Not all format directives are recognized while scanning. Try to
+			// standardize some of the common options.
+			colfmt := col.fmt
+			if strings.ContainsAny(colfmt, "efg") {
+				// Standardize all base 10 floating point number formats to 'g', and
+				// drop precision and width which are not supported while scanning.
+				colfmt = "g"
+			}
+			if len(strings.Fields(colVal)) != 1 {
+				// Scanf functions tokenize by space.
+				return r.wrapError(fmt.Errorf("value with fmt option can not have whitespace"), col)
+			}
+			var (
+				typ1   = typ.FieldByIndex(col.fieldIdx).Type
+				p1     = unsafe.Pointer(uintptr(p) + col.offset)
+				v      = reflect.NewAt(typ1, p1).Interface()
+				n, err = fmt.Sscanf(colVal, "%"+colfmt, v)
+			)
+			if err != nil {
+				return r.wrapError(err, col)
+			}
+			if n != 1 {
+				return r.wrapError(fmt.Errorf("%d objects scanned for %s; expected 1", n, colVal), col)
+			}
+			continue
+		}
 		switch col.kind {
 		case reflect.Bool:
 			var v bool
@@ -267,30 +309,38 @@ const EmptyReadErrStr = "empty file: could not read the header row"
 //  err := r.Read(&v)
 //
 //
-// - If !Reader.HasHeaderRow or !Reader.UseHeaderNames, the N-th column (base
-//   zero) will be parsed into the N-th field in the struct.
+// If !Reader.HasHeaderRow or !Reader.UseHeaderNames, the N-th column (base
+// zero) will be parsed into the N-th field in the struct.
 //
-// - If Reader.HasHeaderRow and Reader.UseHeaderNames, then the struct's field
-//   name must match one of the column names listed in the first row in the TSV
-//   input. The contents of the column with the matching name will be parsed
-//   into the struct field. By default, the column name is the struct's field
-//   name, but you can override it by setting `tsv:"columnname"` tag in the
-//   field. Imagine the following row type:
+// If Reader.HasHeaderRow and Reader.UseHeaderNames, then the struct's field
+// name must match one of the column names listed in the first row in the TSV
+// input. The contents of the column with the matching name will be parsed
+// into the struct field.
+//
+// By default, the column name is the struct's field name, but you can override
+// it by setting `tsv:"columnname"` tag in the field. The struct tag may also
+// take an fmt option to specify how to parse the value using the fmt package.
+// This is useful for parsing numbers written in a different base. Note that
+// not all verbs are supported with the scanning functions in the fmt package.
+// Using the fmt option may lead to slower performance.
+// Imagine the following row type:
 //
 //   type row struct {
-//      Chr string `tsv:"chromo"`
-//      Start int `tsv:"pos"`
+//      Chr    string `tsv:"chromo"`
+//      Start  int    `tsv:"pos"`
 //      Length int
+//      Score  int    `tsv:"score,fmt=x"`
 //   }
 //
-//   and the following TSV file:
+// and the following TSV file:
 //
-//   | chromo | length | pos
-//   | chr1   | 1000   | 10
-//   | chr2   | 950    | 20
+//   | chromo | Length | pos | score
+//   | chr1   | 1000   | 10  | 0a
+//   | chr2   | 950    | 20  | ff
 //
-//   The first Read() will return row{"chr1", 10, 1000}.
-//   The second Read() will return row{"chr2", 20, 950}.
+// The first Read() will return row{"chr1", 10, 1000, 10}.
+//
+// The second Read() will return row{"chr2", 20, 950, 15}.
 func (r *Reader) Read(v interface{}) error {
 	if r.nRow == 0 && r.HasHeaderRow {
 		headerRow, err := r.Reader.Read()
