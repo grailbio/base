@@ -14,6 +14,7 @@ import (
 
 	"github.com/grailbio/base/recordio"
 	"github.com/grailbio/base/recordio/deprecated"
+	"github.com/grailbio/base/recordio/internal"
 	"github.com/grailbio/base/recordio/recordioiov"
 	"github.com/grailbio/base/recordio/recordiozstd"
 	"github.com/grailbio/testutil/assert"
@@ -21,9 +22,6 @@ import (
 )
 
 func init() { recordiozstd.Init() }
-
-// The recordio chunk size
-const chunkSize = 32 << 10
 
 func marshalString(scratch []byte, v interface{}) ([]byte, error) {
 	return []byte(v.(string)), nil
@@ -83,7 +81,7 @@ func TestEmptyBody(t *testing.T) {
 	buf := &bytes.Buffer{}
 	wr := recordio.NewWriter(buf, recordio.WriterOpts{Marshal: marshalString})
 	assert.NoError(t, wr.Finish())
-	assert.EQ(t, len(buf.Bytes()), chunkSize) // one header chunk
+	assert.EQ(t, len(buf.Bytes()), internal.ChunkSize) // one header chunk
 	header, body, trailer := readAllV2(t, buf)
 	assert.EQ(t, recordio.ParsedHeader(nil), header)
 	assert.EQ(t, []string(nil), body)
@@ -106,7 +104,7 @@ func TestV2NonEmptyHeaderEmptyBody(t *testing.T) {
 	wr := recordio.NewWriter(buf, recordio.WriterOpts{Marshal: marshalString})
 	wr.AddHeader("Foo", "Hah")
 	assert.NoError(t, wr.Finish())
-	assert.EQ(t, len(buf.Bytes()), chunkSize) // one header chunk
+	assert.EQ(t, len(buf.Bytes()), internal.ChunkSize) // one header chunk
 	header, body, trailer := readAllV2(t, buf)
 	assert.EQ(t, recordio.ParsedHeader{recordio.KeyValue{"Foo", "Hah"}}, header)
 	assert.EQ(t, []string(nil), body)
@@ -119,7 +117,7 @@ func TestV2EmptyBodyNonEmptyTrailer(t *testing.T) {
 	wr.AddHeader(recordio.KeyTrailer, true)
 	wr.SetTrailer([]byte("TTT"))
 	assert.NoError(t, wr.Finish())
-	assert.EQ(t, len(buf.Bytes()), 2*chunkSize) // header+trailer
+	assert.EQ(t, len(buf.Bytes()), 2*internal.ChunkSize) // header+trailer
 	header, body, trailer := readAllV2(t, buf)
 	assert.EQ(t, recordio.ParsedHeader{recordio.KeyValue{recordio.KeyTrailer, true}}, header)
 	assert.EQ(t, []string(nil), body)
@@ -133,7 +131,7 @@ func TestV2LargeTrailer(t *testing.T) {
 	wr.Append("XX")
 
 	rnd := rand.New(rand.NewSource(0))
-	largeData := randomString(chunkSize*10+100, rnd)
+	largeData := randomString(internal.ChunkSize*10+100, rnd)
 	wr.SetTrailer([]byte(largeData))
 	assert.NoError(t, wr.Finish())
 	header, body, trailer := readAllV2(t, buf)

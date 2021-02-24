@@ -18,9 +18,14 @@ import (
 type chunkFlag uint32
 
 const (
-	chunkHeaderSize     = 28
-	chunkSize           = 32 << 10
-	maxChunkPayloadSize = chunkSize - chunkHeaderSize
+	// ChunkHeaderSize is the fixed header size for a chunk.
+	ChunkHeaderSize = 28
+
+	// ChunkSize is the fixed size of a chunk, including its header.
+	ChunkSize = 32 << 10
+
+	// MaxChunkPayloadSize is the maximum size of payload a chunk can carry.
+	MaxChunkPayloadSize = ChunkSize - ChunkHeaderSize
 )
 
 // Chunk layout:
@@ -35,7 +40,7 @@ const (
 //   padding [32768 - 28 - size]
 //
 // magic: one of MagicHeader, MagicPacked, MagicTrailer.
-// size: size of the chunk payload (data). size <=  (32<<10) - 24
+// size: size of the chunk payload (data). size <=  (32<<10) - 28
 // padding: garbage data added to make the chunk size exactly 32768B.
 //
 // total: the total # of chunks in the blocks.
@@ -45,7 +50,7 @@ const (
 //
 // crc: IEEE CRC32 of of the succeeding fields: size, index, flag, and data.
 //  Note: padding is not included in the CRC.
-type chunkHeader [chunkHeaderSize]byte
+type chunkHeader [ChunkHeaderSize]byte
 
 func (h *chunkHeader) TotalChunks() int {
 	return int(binary.LittleEndian.Uint32(h[20:]))
@@ -55,7 +60,7 @@ func (h *chunkHeader) Index() int {
 	return int(binary.LittleEndian.Uint32(h[24:]))
 }
 
-var chunkPadding [maxChunkPayloadSize]byte
+var chunkPadding [MaxChunkPayloadSize]byte
 
 // Seek to "off". Returns nil iff the seek ptr moves to "off".
 func Seek(r io.ReadSeeker, off int64) error {
@@ -97,17 +102,17 @@ func (w *ChunkWriter) Write(magic MagicBytes, payload []byte) {
 	copy(header[:], magic[:])
 
 	chunkIndex := 0
-	totalChunks := (len(payload)-1)/maxChunkPayloadSize + 1
+	totalChunks := (len(payload)-1)/MaxChunkPayloadSize + 1
 	for {
 		var chunkPayload []byte
 		lastChunk := false
-		if len(payload) <= maxChunkPayloadSize {
+		if len(payload) <= MaxChunkPayloadSize {
 			lastChunk = true
 			chunkPayload = payload
 			payload = nil
 		} else {
-			chunkPayload = payload[:maxChunkPayloadSize]
-			payload = payload[maxChunkPayloadSize:]
+			chunkPayload = payload[:MaxChunkPayloadSize]
+			payload = payload[MaxChunkPayloadSize:]
 		}
 		binary.LittleEndian.PutUint32(header[12:], uint32(0))
 		binary.LittleEndian.PutUint32(header[16:], uint32(len(chunkPayload)))
@@ -123,7 +128,7 @@ func (w *ChunkWriter) Write(magic MagicBytes, payload []byte) {
 		w.doWrite(chunkPayload)
 		chunkIndex++
 		if lastChunk {
-			paddingSize := maxChunkPayloadSize - len(chunkPayload)
+			paddingSize := MaxChunkPayloadSize - len(chunkPayload)
 			if paddingSize > 0 {
 				w.doWrite(chunkPadding[:paddingSize])
 			}
@@ -194,11 +199,11 @@ func (r *ChunkScanner) LimitShard(start, limit, nshard int) {
 	// Compute the offset and limit for shard-of-nshard.
 	// Invariant: limit is the offset at or after which a new block
 	// should not be scanned.
-	numChunks := (r.fileSize - r.off) / chunkSize
+	numChunks := (r.fileSize - r.off) / ChunkSize
 	chunksPerShard := float64(numChunks) / float64(nshard)
 	startOff := r.off
-	r.off = startOff + int64(float64(start)*chunksPerShard)*chunkSize
-	r.limit = startOff + int64(float64(limit)*chunksPerShard)*chunkSize
+	r.off = startOff + int64(float64(start)*chunksPerShard)*ChunkSize
+	r.limit = startOff + int64(float64(limit)*chunksPerShard)*ChunkSize
 	if start == 0 {
 		// No more work to do. We assume LimitShard is called on a block boundary.
 		return
@@ -226,7 +231,7 @@ func (r *ChunkScanner) LimitShard(start, limit, nshard int) {
 		r.err.Set(errors.New("invalid chunk header"))
 		return
 	}
-	r.off += chunkSize * int64(total-index)
+	r.off += ChunkSize * int64(total-index)
 	r.err.Set(Seek(r.r, r.off))
 }
 
@@ -301,7 +306,7 @@ func (r *ChunkScanner) readChunkHeader(header *chunkHeader) bool {
 		r.err.Set(err)
 		return false
 	}
-	r.off, err = r.r.Seek(-chunkHeaderSize, io.SeekCurrent)
+	r.off, err = r.r.Seek(-ChunkHeaderSize, io.SeekCurrent)
 	r.err.Set(err)
 	return true
 }
@@ -316,7 +321,7 @@ func (r *ChunkScanner) readChunk() (MagicBytes, chunkFlag, int, int, []byte) {
 		r.err.Set(err)
 		return MagicInvalid, chunkFlag(0), 0, 0, nil
 	}
-	header := chunkBuf[:chunkHeaderSize]
+	header := chunkBuf[:ChunkHeaderSize]
 
 	var magic MagicBytes
 	copy(magic[:], header[:])
@@ -325,13 +330,13 @@ func (r *ChunkScanner) readChunk() (MagicBytes, chunkFlag, int, int, []byte) {
 	size := binary.LittleEndian.Uint32(header[16:])
 	totalChunks := int(binary.LittleEndian.Uint32(header[20:]))
 	index := int(binary.LittleEndian.Uint32(header[24:]))
-	if size > maxChunkPayloadSize {
+	if size > MaxChunkPayloadSize {
 		r.err.Set(fmt.Errorf("Invalid chunk size %d", size))
 		return MagicInvalid, chunkFlag(0), 0, 0, nil
 	}
 
-	chunkPayload := chunkBuf[chunkHeaderSize : chunkHeaderSize+size]
-	actualCsum := crc32.Checksum(chunkBuf[12:chunkHeaderSize+size], IEEECRC)
+	chunkPayload := chunkBuf[ChunkHeaderSize : ChunkHeaderSize+size]
+	actualCsum := crc32.Checksum(chunkBuf[12:ChunkHeaderSize+size], IEEECRC)
 	if expectedCsum != actualCsum {
 		r.err.Set(fmt.Errorf("Chunk checksum mismatch, expect %d, got %d",
 			actualCsum, expectedCsum))
@@ -359,11 +364,11 @@ func (r *ChunkScanner) resetChunks() {
 
 func (r *ChunkScanner) allocChunk() []byte {
 	for len(r.pool) <= r.unused {
-		r.pool = append(r.pool, make([]byte, chunkSize))
+		r.pool = append(r.pool, make([]byte, ChunkSize))
 	}
 	b := r.pool[r.unused]
 	r.unused++
-	if len(b) != chunkSize {
+	if len(b) != ChunkSize {
 		panic(r)
 	}
 	return b
@@ -374,7 +379,7 @@ func (r *ChunkScanner) allocChunk() []byte {
 // the user must call Seek() explicitly.
 func (r *ChunkScanner) ReadLastBlock() (MagicBytes, [][]byte) {
 	var err error
-	r.off, err = r.r.Seek(-chunkSize, io.SeekEnd)
+	r.off, err = r.r.Seek(-ChunkSize, io.SeekEnd)
 	if err != nil {
 		r.err.Set(err)
 		return MagicInvalid, nil
@@ -389,7 +394,7 @@ func (r *ChunkScanner) ReadLastBlock() (MagicBytes, [][]byte) {
 		return magic, [][]byte{payload}
 	}
 	// Seek to the beginning of the block.
-	r.off, err = r.r.Seek(-int64(index+1)*chunkSize, io.SeekEnd)
+	r.off, err = r.r.Seek(-int64(index+1)*ChunkSize, io.SeekEnd)
 	if err != nil {
 		r.err.Set(err)
 		return MagicInvalid, nil
