@@ -41,9 +41,13 @@ type Logger struct {
 	now           func() time.Time
 }
 
-func NewLogger() *Logger {
+type Config struct {
+	OutputPaths []string
+}
+
+func NewLogger(config Config) *Logger {
 	l := Logger{
-		coreLogger: mustBuildLogger(zap.AddCallerSkip(2)),
+		coreLogger: mustBuildLogger(config, zap.AddCallerSkip(2)),
 		now:        time.Now,
 	}
 	l.levelToLogger = map[zapcore.Level]func(msg string, keysAndValues ...interface{}){
@@ -196,8 +200,8 @@ func rfc3339TrailingNanoTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncod
 	enc.AppendString(t.Format(RFC3339TrailingNano))
 }
 
-func mustBuildLogger(opts ...zap.Option) *zap.SugaredLogger {
-	zapLogger, err := newConfig().Build(opts...)
+func mustBuildLogger(config Config, opts ...zap.Option) *zap.SugaredLogger {
+	zapLogger, err := newConfig(config).Build(opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -221,8 +225,9 @@ func newEncoderConfig() zapcore.EncoderConfig {
 
 // newConfig is similar to Zap's NewProductionConfig with a few modifications
 // to better fit our needs.
-func newConfig() zap.Config {
-	return zap.Config{
+func newConfig(override Config) zap.Config {
+	// Default config
+	config := zap.Config{
 		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
 		Development: false,
 		Sampling: &zap.SamplingConfig{
@@ -231,9 +236,14 @@ func newConfig() zap.Config {
 		},
 		Encoding:         "json",
 		EncoderConfig:    newEncoderConfig(),
-		OutputPaths:      []string{"stdout", "stderr"},
+		OutputPaths:      []string{"stderr"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
+	// Overrides
+	if override.OutputPaths != nil {
+		config.OutputPaths = override.OutputPaths
+	}
+	return config
 }
 
 func withDefaultFields(ctx context.Context, callerSkip int, t time.Time,
