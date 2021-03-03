@@ -43,6 +43,7 @@ type Logger struct {
 
 type Config struct {
 	OutputPaths []string
+	Level       zapcore.Level
 }
 
 func NewLogger(config Config) *Logger {
@@ -242,6 +243,9 @@ func newConfig(override Config) zap.Config {
 	// Overrides
 	if override.OutputPaths != nil {
 		config.OutputPaths = override.OutputPaths
+	}
+	if override.Level != zapcore.DebugLevel {
+		config.Level = zap.NewAtomicLevelAt(override.Level)
 	}
 	return config
 }
