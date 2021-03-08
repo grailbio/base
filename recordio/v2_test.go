@@ -113,8 +113,7 @@ func TestV2NonEmptyHeaderEmptyBody(t *testing.T) {
 
 func TestV2EmptyBodyNonEmptyTrailer(t *testing.T) {
 	buf := &bytes.Buffer{}
-	wr := recordio.NewWriter(buf, recordio.WriterOpts{Marshal: marshalString})
-	wr.AddHeader(recordio.KeyTrailer, true)
+	wr := recordio.NewWriter(buf, recordio.WriterOpts{Marshal: marshalString, KeyTrailer: true})
 	wr.SetTrailer([]byte("TTT"))
 	assert.NoError(t, wr.Finish())
 	assert.EQ(t, len(buf.Bytes()), 2*internal.ChunkSize) // header+trailer
@@ -126,8 +125,7 @@ func TestV2EmptyBodyNonEmptyTrailer(t *testing.T) {
 
 func TestV2LargeTrailer(t *testing.T) {
 	buf := &bytes.Buffer{}
-	wr := recordio.NewWriter(buf, recordio.WriterOpts{Marshal: marshalString})
-	wr.AddHeader(recordio.KeyTrailer, true)
+	wr := recordio.NewWriter(buf, recordio.WriterOpts{Marshal: marshalString, KeyTrailer: true})
 	wr.Append("XX")
 
 	rnd := rand.New(rand.NewSource(0))
@@ -150,8 +148,8 @@ func TestV2WriteRead(t *testing.T) {
 			index[v.(string)] = loc
 			return nil
 		},
+		KeyTrailer: true,
 	})
-	wr.AddHeader(recordio.KeyTrailer, true)
 	wr.AddHeader("hh0", "vv0")
 	wr.AddHeader("hh1", 12345)
 	wr.AddHeader("hh2", uint16(234))
@@ -171,11 +169,11 @@ func TestV2WriteRead(t *testing.T) {
 		recordio.KeyValue{"hh1", int64(12345)},
 		recordio.KeyValue{"hh2", uint64(234)},
 	}, header)
-	expect.EQ(t, "Trailer2", trailer)
-	expect.EQ(t, []string{"F0", "F1", "F2", "F3"}, body)
+	expect.EQ(t, trailer, "Trailer2")
+	expect.EQ(t, body, []string{"F0", "F1", "F2", "F3"})
 
 	// Test seeking
-	expect.EQ(t, 4, len(index))
+	expect.EQ(t, len(index), 4)
 	sc := recordio.NewScanner(bytes.NewReader(buf.Bytes()), recordio.ScannerOpts{
 		Unmarshal: unmarshalString,
 	})
@@ -185,7 +183,73 @@ func TestV2WriteRead(t *testing.T) {
 		sc.Seek(loc)
 		expect.NoError(t, sc.Err())
 		expect.True(t, sc.Scan())
-		expect.EQ(t, value, sc.Get().(string))
+		expect.EQ(t, sc.Get().(string), value)
+	}
+}
+
+func TestV2RestartWithSkipHeader(t *testing.T) {
+	ogBuf := &bytes.Buffer{}
+	index := make(map[string]recordio.ItemLocation)
+
+	writerOpts := recordio.WriterOpts{
+		Marshal: marshalString,
+		Index: func(loc recordio.ItemLocation, v interface{}) error {
+			index[v.(string)] = loc
+			return nil
+		},
+		KeyTrailer: true,
+	}
+
+	wr := recordio.NewWriter(ogBuf, writerOpts)
+	wr.AddHeader("hh0", "vv0")
+	wr.AddHeader("hh1", 12345)
+	wr.AddHeader("hh2", uint16(234))
+	wr.Append("F0")
+	wr.Append("F1")
+	wr.Flush()
+	wr.Append("F2")
+	wr.Flush()
+	wr.Wait()
+
+	bytesWrittenSoFar := uint64(32768 * 3) // 3 blocks have been written, 1 for header, 2 for data
+
+	writerOpts.Index = func(loc recordio.ItemLocation, v interface{}) error {
+		loc.Block += bytesWrittenSoFar
+		index[v.(string)] = loc
+		return nil
+	}
+	writerOpts.SkipHeader = true
+
+	// new buffer with the originally written bytes pre-populated
+	restartBuf := bytes.NewBuffer(ogBuf.Bytes())
+	restartWriter := recordio.NewWriter(restartBuf, writerOpts)
+
+	restartWriter.Append("F3")
+	restartWriter.SetTrailer([]byte("Trailer2"))
+	assert.NoError(t, restartWriter.Finish())
+
+	header, body, trailer := readAllV2(t, restartBuf)
+	expect.EQ(t, recordio.ParsedHeader{
+		recordio.KeyValue{"trailer", true},
+		recordio.KeyValue{"hh0", "vv0"},
+		recordio.KeyValue{"hh1", int64(12345)},
+		recordio.KeyValue{"hh2", uint64(234)},
+	}, header)
+	expect.EQ(t, trailer, "Trailer2")
+	expect.EQ(t, body, []string{"F0", "F1", "F2", "F3"})
+
+	// Test seeking
+	expect.EQ(t, len(index), 4)
+	sc := recordio.NewScanner(bytes.NewReader(restartBuf.Bytes()), recordio.ScannerOpts{
+		Unmarshal: unmarshalString,
+	})
+
+	for _, value := range body {
+		loc := index[value]
+		sc.Seek(loc)
+		expect.NoError(t, sc.Err())
+		expect.True(t, sc.Scan())
+		expect.EQ(t, sc.Get().(string), value)
 	}
 }
 
@@ -225,8 +289,8 @@ func TestV2TransformerError(t *testing.T) {
 	assert.Regexp(t, wr.Err(), "synthetic transformer error")
 }
 
-func TestV2Transformer(t *testing.T) {
-	bytewiseTransform := func(scratch []byte, in [][]byte, tr func(uint8) uint8) ([]byte, error) {
+func getBytewiseTransformFunc() func(scratch []byte, in [][]byte, tr func(uint8) uint8) ([]byte, error) {
+	return func(scratch []byte, in [][]byte, tr func(uint8) uint8) ([]byte, error) {
 		nBytes := recordioiov.TotalBytes(in)
 		out := recordioiov.Slice(scratch, nBytes)
 		n := 0
@@ -238,6 +302,10 @@ func TestV2Transformer(t *testing.T) {
 		}
 		return out, nil
 	}
+}
+
+func TestV2Transformer(t *testing.T) {
+	bytewiseTransform := getBytewiseTransformFunc()
 	var nPlus, nMinus, nXor int32
 
 	// A transformer that adds N to every byte.
@@ -280,17 +348,17 @@ func TestV2Transformer(t *testing.T) {
 	wr := recordio.NewWriter(buf, recordio.WriterOpts{
 		Marshal:      marshalString,
 		Transformers: []string{"testplus 3", "testxor 111"},
+		KeyTrailer:   true,
 	})
 
-	wr.AddHeader(recordio.KeyTrailer, true)
 	wr.Append("F0")
 	wr.Append("F1")
 	wr.Flush()
 	wr.Append("F2")
 	wr.SetTrailer([]byte("Trailer2"))
 	assert.NoError(t, wr.Finish())
-	assert.EQ(t, int32(3), nPlus) // two data + one trailer block
-	assert.EQ(t, int32(3), nXor)
+	assert.EQ(t, nPlus, int32(3)) // two data + one trailer block
+	assert.EQ(t, nXor, int32(3))
 
 	header, body, _ := readAllV2(t, buf)
 	expect.EQ(t, recordio.ParsedHeader{
@@ -298,9 +366,85 @@ func TestV2Transformer(t *testing.T) {
 		recordio.KeyValue{"transformer", "testxor 111"},
 		recordio.KeyValue{"trailer", true},
 	}, header)
-	expect.EQ(t, []string{"F0", "F1", "F2"}, body)
-	assert.EQ(t, int32(3), nPlus)
-	assert.EQ(t, int32(6), nXor)
+	expect.EQ(t, body, []string{"F0", "F1", "F2"})
+	assert.EQ(t, nPlus, int32(3))
+	assert.EQ(t, nXor, int32(6))
+}
+
+func TestV2TransformerWithRestart(t *testing.T) {
+	bytewiseTransform := getBytewiseTransformFunc()
+	var nPlus, nMinus, nXor int32
+
+	// A transformer that adds N to every byte.
+	recordio.RegisterTransformer("testplus",
+		func(config string) (recordio.TransformFunc, error) {
+			delta, err := strconv.Atoi(config)
+			if err != nil {
+				return nil, err
+			}
+			return func(scratch []byte, in [][]byte) ([]byte, error) {
+				atomic.AddInt32(&nPlus, 1)
+				return bytewiseTransform(scratch, in, func(b uint8) uint8 { return b + uint8(delta) })
+			}, nil
+		},
+		func(config string) (recordio.TransformFunc, error) {
+			delta, err := strconv.Atoi(config)
+			if err != nil {
+				return nil, err
+			}
+			return func(scratch []byte, in [][]byte) ([]byte, error) {
+				atomic.AddInt32(&nMinus, 1)
+				return bytewiseTransform(scratch, in, func(b uint8) uint8 { return b - uint8(delta) })
+			}, nil
+		})
+
+	// A transformer that xors every byte.
+	xorTransformerFactory := func(config string) (recordio.TransformFunc, error) {
+		delta, err := strconv.Atoi(config)
+		if err != nil {
+			return nil, err
+		}
+		return func(scratch []byte, in [][]byte) ([]byte, error) {
+			atomic.AddInt32(&nXor, 1)
+			return bytewiseTransform(scratch, in, func(b uint8) uint8 { return b ^ uint8(delta) })
+		}, nil
+	}
+	recordio.RegisterTransformer("testxor", xorTransformerFactory, xorTransformerFactory)
+
+	ogBuf := &bytes.Buffer{}
+	writerOpts := recordio.WriterOpts{
+		Marshal:      marshalString,
+		Transformers: []string{"testplus 3", "testxor 111"},
+		KeyTrailer:   true,
+	}
+	wr := recordio.NewWriter(ogBuf, writerOpts)
+
+	wr.Append("F0")
+	wr.Append("F1")
+	wr.Flush()
+	wr.Wait()
+
+	restartBuf := bytes.NewBuffer(ogBuf.Bytes())
+
+	writerOpts.SkipHeader = true
+	wr = recordio.NewWriter(restartBuf, writerOpts)
+
+	wr.Append("F2")
+	wr.SetTrailer([]byte("Trailer2"))
+	assert.NoError(t, wr.Finish())
+
+	assert.EQ(t, nPlus, int32(3)) // two data + one trailer block
+	assert.EQ(t, nXor, int32(3))
+
+	header, body, _ := readAllV2(t, restartBuf)
+	expect.EQ(t, recordio.ParsedHeader{
+		recordio.KeyValue{"transformer", "testplus 3"},
+		recordio.KeyValue{"transformer", "testxor 111"},
+		recordio.KeyValue{"trailer", true},
+	}, header)
+	expect.EQ(t, body, []string{"F0", "F1", "F2"})
+	assert.EQ(t, nPlus, int32(3))
+	assert.EQ(t, nXor, int32(6))
 }
 
 func randomString(n int, r *rand.Rand) string {

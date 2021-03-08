@@ -96,6 +96,14 @@ type WriterOpts struct {
 	// DefaultMaxFlushParallelism.
 	MaxFlushParallelism uint32
 
+	// REQUIRES: AddHeader(KeyTrailer, true) has been called or the KeyTrailer
+	// option set to true.
+	KeyTrailer bool
+
+	// SkipHeader skips writing out the header and starts in the
+	// `wStateWritingBody` state.
+	SkipHeader bool
+
 	// TODO(saito) Consider providing a flag to allow out-of-order writes, like
 	// ConcurrentPackedWriter.
 }
@@ -282,6 +290,18 @@ func NewWriter(wr io.Writer, opts WriterOpts) Writer {
 		opts:       opts,
 		freeBlocks: make(chan *writerv2Block, opts.MaxFlushParallelism),
 	}
+
+	if opts.SkipHeader {
+		w.state = wStateWritingBody
+	} else {
+		for _, val := range opts.Transformers {
+			w.header = append(w.header, KeyValue{KeyTransformer, val})
+		}
+	}
+	if opts.KeyTrailer {
+		w.header = append(w.header, KeyValue{KeyTrailer, true})
+	}
+
 	w.fq = flushQueue{
 		wr:         internal.NewChunkWriter(wr, &w.err),
 		opts:       opts,
@@ -298,9 +318,6 @@ func NewWriter(wr io.Writer, opts WriterOpts) Writer {
 	var err error
 	if w.fq.transform, err = registry.getTransformer(opts.Transformers); err != nil {
 		w.err.Set(err)
-	}
-	for _, val := range opts.Transformers {
-		w.header = append(w.header, KeyValue{KeyTransformer, val})
 	}
 	return w
 }
