@@ -5,9 +5,8 @@
 package dump
 
 import (
-	"archive/tar"
+	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -72,13 +71,13 @@ func verifyDump(t *testing.T, server *httptest.Server, dumpFuncErrC chan error, 
 		dumpFuncErr = <-dumpFuncErrC
 	}()
 
-	resp, err := http.Get(server.URL + "/dump")
+	resp, err := http.Get(server.URL + "/dump.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	if got, want := resp.StatusCode, http.StatusOK; got != want {
-		t.Errorf("got %v, want %v", got, want)
+		t.Fatalf("got %v, want %v", got, want)
 	}
 	// Read the whole body, so we can immediately make sure that our dump
 	// funcs worked.
@@ -91,26 +90,25 @@ func verifyDump(t *testing.T, server *httptest.Server, dumpFuncErrC chan error, 
 	if dumpFuncErr != nil {
 		t.Fatalf("unexpected error writing dump part: %v", dumpFuncErr)
 	}
-	gzr, err := gzip.NewReader(bytes.NewBuffer(body))
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil {
-		t.Fatalf("gzip.NewReader failed: %v", err)
+		t.Fatal(err)
 	}
-	tr := tar.NewReader(gzr)
 	re := regexp.MustCompile(`.*/`)
 	var names []string
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("error from (*TarReader).Next(): %v", err)
-		}
+	for _, entry := range zr.File {
 		// Strip the prefix to recover the original name.
-		name := re.ReplaceAllString(hdr.Name, "")
+		name := re.ReplaceAllString(entry.Name, "")
 		names = append(names, name)
 		var contents bytes.Buffer
-		if _, err := io.Copy(&contents, tr); err != nil {
+		rc, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(&contents, rc); err != nil {
+			t.Fatal(err)
+		}
+		if err := rc.Close(); err != nil {
 			t.Fatal(err)
 		}
 		// Assume contents are "<name>-contents", matching our known
@@ -134,7 +132,7 @@ func TestServeHTTP(t *testing.T) {
 	reg.Register("baz", makeDumpConst(dumpFuncErrC, "baz-contents"))
 
 	mux := http.NewServeMux()
-	mux.Handle("/dump", reg)
+	mux.Handle("/dump.zip", reg)
 	server := httptest.NewServer(mux)
 
 	verifyDump(t, server, dumpFuncErrC, []string{"foo", "bar", "baz"})
@@ -150,7 +148,7 @@ func TestServeHTTPFailedParts(t *testing.T) {
 	reg.Register("skip", dumpSkipPart)
 
 	mux := http.NewServeMux()
-	mux.Handle("/dump", reg)
+	mux.Handle("/dump.zip", reg)
 	server := httptest.NewServer(mux)
 
 	// Verify that only the successful dump part func is in the dump.

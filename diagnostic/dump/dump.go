@@ -24,8 +24,7 @@
 package dump
 
 import (
-	"archive/tar"
-	"compress/gzip"
+	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
@@ -53,7 +52,7 @@ func init() {
 	Register("pprof-mutex", dumpPprofMutex)
 	Register("pprof-profile", dumpPprofProfile)
 	Register("vars", dumpVars)
-	http.Handle("/debug/dump", DefaultRegistry)
+	http.Handle("/debug/dump.zip", DefaultRegistry)
 }
 
 // ErrSkipPart signals that we should skip a part. Return this from your
@@ -164,30 +163,30 @@ func processPart(ctx context.Context, part part) partFile {
 	return partFile{part: part, file: tmpfile}
 }
 
-// writeTar writes a file to tw with filename name.
-func writeTar(name string, f *os.File, tw *tar.Writer) error {
+// writeFile writes a file to zw with filename name.
+func writeFile(name string, f *os.File, zw *zip.Writer) error {
 	fi, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("error getting file stat of %q: %v", f.Name(), err)
 	}
-	hdr := &tar.Header{
-		Name:    name,
-		Mode:    0600,
-		Size:    fi.Size(),
-		ModTime: time.Now(),
+	hdr, err := zip.FileInfoHeader(fi)
+	if err != nil {
+		return fmt.Errorf("error building zip header of %q: %v", f.Name(), err)
 	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return fmt.Errorf("error writing tar header in diagnostic dump: %v", err)
+	hdr.Name = name
+	zfw, err := zw.CreateHeader(hdr)
+	if err != nil {
+		return fmt.Errorf("error writing zip header in diagnostic dump: %v", err)
 	}
-	if _, err = io.Copy(tw, f); err != nil {
+	if _, err = io.Copy(zfw, f); err != nil {
 		return fmt.Errorf("error writing diagnostic dump: %v", err)
 	}
 	return nil
 }
 
-// writePart writes a single part to tw. pfx is the path that will be prepended
+// writePart writes a single part to zw. pfx is the path that will be prepended
 // to the part name to construct the full path of the entry in the archive.
-func writePart(pfx string, p partFile, tw *tar.Writer) (err error) {
+func writePart(pfx string, p partFile, zw *zip.Writer) (err error) {
 	if p.err != nil {
 		if p.err == ErrSkipPart {
 			return nil
@@ -200,8 +199,8 @@ func writePart(pfx string, p partFile, tw *tar.Writer) (err error) {
 			err = fmt.Errorf("error closing temp file %q: %v", p.file.Name(), closeErr)
 		}
 	}()
-	if tarErr := writeTar(pfx+"/"+p.part.name, p.file, tw); tarErr != nil {
-		return fmt.Errorf("error writing %s to archive: %v", p.part.name, tarErr)
+	if fileErr := writeFile(pfx+"/"+p.part.name, p.file, zw); fileErr != nil {
+		return fmt.Errorf("error writing %s to archive: %v", p.part.name, fileErr)
 	}
 	return nil
 }
@@ -209,19 +208,7 @@ func writePart(pfx string, p partFile, tw *tar.Writer) (err error) {
 // WriteDump writes the dump to w. pfx is prepended to the names of the parts of
 // the dump, e.g. if pfx == "dump-123" and part name == "cpu", "dump-123/cpu"
 // will be written into the archive. It returns no error, as it is best-effort.
-func (reg *Registry) WriteDump(ctx context.Context, pfx string, w io.Writer) {
-	gzw := gzip.NewWriter(w)
-	defer func() {
-		if err := gzw.Close(); err != nil {
-			log.Error.Printf("dump: error closing dump gzip writer: %v", err)
-		}
-	}()
-	tw := tar.NewWriter(gzw)
-	defer func() {
-		if err := tw.Close(); err != nil {
-			log.Error.Printf("dump: error closing dump tar writer: %v", err)
-		}
-	}()
+func (reg *Registry) WriteDump(ctx context.Context, pfx string, zw *zip.Writer) {
 	reg.mu.Lock()
 	// Snapshot reg.parts to release the lock quickly.
 	parts := reg.parts
@@ -243,7 +230,7 @@ func (reg *Registry) WriteDump(ctx context.Context, pfx string, w io.Writer) {
 		}
 	}()
 	for p := range partFileC {
-		if err := writePart(pfx, p, tw); err != nil {
+		if err := writePart(pfx, p, zw); err != nil {
 			log.Error.Printf("dump: error processing part %s: %v", p.part.name, err)
 		}
 	}
@@ -261,12 +248,13 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02dh%02dm%02ds", h, m, s)
 }
 
-// ServeHTTP serves the dump as a tarball, with a Content-Disposition set with
-// a unique filename.
+// ServeHTTP serves the dump with a Content-Disposition set with a unique filename.
 func (reg *Registry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Type", "application/zip")
 	pfx := Name()
-	filename := pfx + ".tar.gz"
+	filename := pfx + ".zip"
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-	reg.WriteDump(r.Context(), pfx, w)
+	zw := zip.NewWriter(w)
+	defer zw.Close() // nolint: errcheck
+	reg.WriteDump(r.Context(), pfx, zw)
 }

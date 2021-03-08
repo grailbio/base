@@ -5,6 +5,7 @@
 package dump
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"expvar"
@@ -34,8 +35,8 @@ func Register(name string, f Func) {
 }
 
 // WriteDump writes a dump of the default registry.
-func WriteDump(ctx context.Context, pfx string, w io.Writer) {
-	DefaultRegistry.WriteDump(ctx, pfx, w)
+func WriteDump(ctx context.Context, pfx string, zw *zip.Writer) {
+	DefaultRegistry.WriteDump(ctx, pfx, zw)
 }
 
 // Name returns the name of the default registry. See (*Registry).Name.
