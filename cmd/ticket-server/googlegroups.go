@@ -71,7 +71,7 @@ func verifyAndExtractEmailFromBlessing(blessing string, prefix string) string {
 // For example, for 'v23.grail.com:googlegroups:eng@grailbio.com' the return
 // string should be 'eng@grailbio.com'.
 func extractGroupEmailFromBlessing(ctx *v23context.T, blessing string, prefix string) string {
-	log.Info(ctx, "Extracting group email from blessing.", "blessing", blessing, "prefix", prefix)
+	log.Debug(ctx, "extracting group email from blessing", "blessing", blessing, "prefix", prefix)
 	if strings.HasPrefix(blessing, prefix) {
 		m := groupRE.FindStringSubmatch(blessing[len(prefix)+1:])
 
@@ -102,10 +102,10 @@ func googleGroupsAuthorizer(ctx *v23context.T, perms access.Permissions, jwtConf
 		isMember: func(user, group string) bool {
 			key := cacheKey{user, group}
 			if v, ok := cache.Get(key); ok {
-				log.Info(ctx, "Google groups lookup cache hit.", "key", key)
+				log.Debug(ctx, "Google groups lookup cache hit", "key", key)
 				return v.(bool)
 			}
-			log.Info(ctx, "Google groups lookup cache miss.", "key", key)
+			log.Debug(ctx, "Google groups lookup cache miss", "key", key)
 
 			config := *jwtConfig
 			// This needs to be a Super Admin of the domain.
@@ -126,7 +126,7 @@ func googleGroupsAuthorizer(ctx *v23context.T, perms access.Permissions, jwtConf
 					log.Error(ctx, member_err.Error())
 					return false
 				}
-				log.Info(ctx, "Adding member to cache.", "member", member, "key", key)
+				log.Debug(ctx, "adding member to cache", "member", member, "key", key)
 				isMember := member.Status == "ACTIVE"
 				cache.Set(key, isMember)
 				return isMember
@@ -137,7 +137,7 @@ func googleGroupsAuthorizer(ctx *v23context.T, perms access.Permissions, jwtConf
 				log.Error(ctx, err.Error())
 				return false
 			}
-			log.Info(ctx, "Adding member to cache.", "hasMember", result, "key", key)
+			log.Debug(ctx, "adding member to cache", "hasMember", result, "key", key)
 			cache.Set(key, result.IsMember)
 
 			return result.IsMember
@@ -159,10 +159,10 @@ func (a *authorizer) pruneBlessingslist(ctx *v23context.T, acl access.AccessList
 			}
 			userEmail := verifyAndExtractEmailFromBlessing(b, localBlessings)
 			groupEmail := extractGroupEmailFromBlessing(ctx, bp, localBlessings)
-			log.Info(ctx, "Pruning blessings list.", "userEmail", userEmail, "groupEmail", groupEmail)
+			log.Debug(ctx, "pruning blessings list", "userEmail", userEmail, "groupEmail", groupEmail)
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {
-					log.Info(ctx, "User is a member of group.", "userEmail", userEmail, "groupEmail", groupEmail,
+					log.Debug(ctx, "user is a member of group", "userEmail", userEmail, "groupEmail", groupEmail,
 						"blessingPattern", bp)
 					inDenyList = true
 					break
@@ -186,10 +186,10 @@ func (a *authorizer) aclIncludes(ctx *v23context.T, acl access.AccessList, bless
 		for _, b := range blessings {
 			userEmail := verifyAndExtractEmailFromBlessing(b, localBlessings)
 			groupEmail := extractGroupEmailFromBlessing(ctx, string(bp), localBlessings)
-			log.Info(ctx, "Checking access list.", "userEmail", userEmail, "groupEmail", groupEmail)
+			log.Debug(ctx, "checking access list", "userEmail", userEmail, "groupEmail", groupEmail)
 			if userEmail != "" && groupEmail != "" {
 				if a.isMember(userEmail, groupEmail) {
-					log.Info(ctx, "User is a member of group.", "userEmail", userEmail, "groupEmail", groupEmail,
+					log.Debug(ctx, "user is a member of group", "userEmail", userEmail, "groupEmail", groupEmail,
 						"blessingPattern", bp)
 					return true
 				}
@@ -201,7 +201,7 @@ func (a *authorizer) aclIncludes(ctx *v23context.T, acl access.AccessList, bless
 
 func (a *authorizer) Authorize(ctx *v23context.T, call security.Call) error {
 	blessings, invalid := security.RemoteBlessingNames(ctx, call)
-	log.Info(ctx, "Authorizing via Google flow.", "blessings", blessings, "tags", call.MethodTags())
+	log.Debug(ctx, "authorizing via Google flow", "blessings", blessings, "tags", call.MethodTags())
 
 	for _, tag := range call.MethodTags() {
 		if tag.Type() == a.tagType {

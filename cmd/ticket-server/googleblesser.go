@@ -73,7 +73,7 @@ func newGoogleBlesser(ctx *v23context.T, expiration time.Duration, domains []str
 
 func (blesser *googleBlesser) BlessGoogle(ctx *v23context.T, call rpc.ServerCall, idToken string) (security.Blessings, error) {
 	remoteAddress := call.RemoteEndpoint().Address
-	log.Info(ctx, "Blessing Google.", "remoteAddr", remoteAddress, "idToken", idToken, "idTokenLen", len(idToken))
+	log.Info(ctx, "bless Google request", "remoteAddr", remoteAddress, "idToken", idToken, "idTokenLen", len(idToken))
 	var empty security.Blessings
 
 	oidcIDToken, err := blesser.verifier.Verify(ctx, idToken)
@@ -84,7 +84,7 @@ func (blesser *googleBlesser) BlessGoogle(ctx *v23context.T, call rpc.ServerCall
 	if err := oidcIDToken.Claims(&claims); err != nil {
 		return empty, nil
 	}
-	log.Info(ctx, "Blessing Google.", "oidcIDToken", oidcIDToken, "claims", claims)
+	log.Debug(ctx, "", "oidcIDToken", oidcIDToken, "claims", claims)
 
 	if err := claims.checkClaims(); err != nil {
 		return empty, err

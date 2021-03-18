@@ -24,7 +24,7 @@ type service struct {
 }
 
 func (s *service) Get(ctx *context.T, call rpc.ServerCall) (ticket.Ticket, error) {
-	log.Info(ctx, "Fetching ticket.", "call", call)
+	log.Info(ctx, "get request", "blessing", call.Security().RemoteBlessings(), "ticket", call.Suffix())
 	// use an empty parameters list
 	return s.GetWithParameters(ctx, call, nil)
 }

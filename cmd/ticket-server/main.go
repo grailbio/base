@@ -110,7 +110,7 @@ type node struct {
 var _ rpc.AllGlobber = (*node)(nil)
 
 func (n *node) Glob__(ctx *context.T, call rpc.GlobServerCall, g *glob.Glob) error { // nolint: golint
-	log.Info(ctx, "Processing glob request.", "glob", g)
+	log.Info(ctx, "glob request", "glob", g, "blessing", call.Security().RemoteBlessings(), "ticket", call.Suffix())
 
 	sender := call.SendStream()
 	element := g.Head()
@@ -232,7 +232,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 
 	for k, v := range cfg {
 		auth := googleGroupsAuthorizer(ctx, v.Perms, jwtConfig, googleAdminNameFlag)
-		log.Info(ctx, "Adding service to dispatcher registry.", "name", k, "perms", v.Perms)
+		log.Debug(ctx, "adding service to dispatcher registry", "name", k, "perms", v.Perms)
 		parts := strings.Split(k, "/")
 		n := d.root
 		for _, p := range parts {
@@ -262,7 +262,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 
 // Lookup implements the Dispatcher interface from v.io/v23/rpc.
 func (d *dispatcher) Lookup(ctx *context.T, suffix string) (interface{}, security.Authorizer, error) {
-	log.Info(ctx, "Performing service looking.", "name", suffix)
+	log.Debug(ctx, "performing service looking", "name", suffix)
 	if s, ok := d.registry[suffix]; ok {
 		return s.service, s.auth, nil
 	}
@@ -288,7 +288,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	blessings, _ := v23.GetPrincipal(ctx).BlessingStore().Default()
-	log.Info(ctx, "Using default blessing.", "blessing", blessings)
+	log.Debug(ctx, "using default blessing", "blessing", blessings)
 
 	awsSession, err := session.NewSession(aws.NewConfig().WithRegion(regionFlag))
 	if err != nil {
@@ -311,7 +311,7 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	}
 
 	for _, endpoint := range s.Status().Endpoints {
-		log.Info(ctx, "Server endpoint.", "addr", endpoint.Name())
+		log.Info(ctx, "server endpoint", "addr", endpoint.Name())
 	}
 	<-signals.ShutdownOnSignals(ctx) // Wait forever.
 	return nil

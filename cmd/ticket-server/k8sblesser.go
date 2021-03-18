@@ -45,6 +45,7 @@ func newK8sBlesser(session *session.Session, expiration time.Duration, role stri
 }
 
 func (blesser *k8sBlesser) BlessK8s(ctx *v23context.T, call rpc.ServerCall, caCrt string, namespace string, k8sSvcAcctToken string, region string) (security.Blessings, error) {
+	log.Info(ctx, "bless K8s request", "namespace", namespace, "region", region, "remoteAddr", call.RemoteEndpoint().Address)
 	// TODO(noah): If performance becomes an issue, populate allow-list of clusters on ticket-server startup.
 	var cluster *eks.Cluster
 	caCrtData := base64.StdEncoding.EncodeToString([]byte(caCrt))

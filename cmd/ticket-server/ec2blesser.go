@@ -49,13 +49,13 @@ func setupEc2Blesser(ctx *context.T, s *session.Session, table string) {
 	})
 
 	if err == nil {
-		log.Info(ctx, "DynamoDB table already exists", "table", out)
+		log.Error(ctx, "DynamoDB table already exists", "table", out)
 		return
 	}
 
 	want := dynamodb.ErrCodeResourceNotFoundException
 	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != want {
-		log.Error(ctx, "Unexpected DynamoDB error.", "got", err, "want", want)
+		log.Error(ctx, "unexpected DynamoDB error", "got", err, "want", want)
 		os.Exit(255)
 	}
 
@@ -82,7 +82,7 @@ func setupEc2Blesser(ctx *context.T, s *session.Session, table string) {
 		log.Error(ctx, err.Error())
 		os.Exit(255)
 	}
-	log.Info(ctx, "DynamoDB table was created.", "table", table)
+	log.Debug(ctx, "created DynamoDB table", "table", table)
 	// TODO(razvanm): wait for the table to reach ACTIVE state?
 	// TODO(razvanm): enable the auto scaling?
 }
@@ -115,7 +115,7 @@ func (blesser *ec2Blesser) checkUniqueness(ctx *context.T, doc *ec2util.Identity
 		return err
 	}
 	key := strings.Join([]string{doc.AccountID, doc.Region, doc.InstanceID, ipAddr}, "/")
-	log.Info(ctx, "DynamoDB info.", "key", key, "remoteAddr", remoteAddr)
+	log.Debug(ctx, "DynamoDB info", "key", key, "remoteAddr", remoteAddr)
 	cond := aws.String("attribute_not_exists(ID)")
 	if ec2DisableUniquenessCheckFlag {
 		cond = nil
@@ -146,7 +146,7 @@ func (blesser *ec2Blesser) BlessEc2(ctx *context.T, call rpc.ServerCall, pkcs7b6
 
 	remoteAddress := call.RemoteAddr().String()
 	doc, jsonDoc, err := ec2util.ParseAndVerifyIdentityDocument(pkcs7b64)
-	log.Info(ctx, "Blessing EC2.", "remoteAddress", remoteAddress, "remoteEndpoint", call.RemoteEndpoint().Addr(),
+	log.Info(ctx, "bless EC2 request", "remoteAddr", remoteAddress, "remoteEndpoint", call.RemoteEndpoint().Addr(),
 		"pkcs7b64Bytes", len(pkcs7b64), "doc", doc)
 	if err != nil {
 		log.Error(ctx, "Error parsing and verifying identity document.", "err", err)
