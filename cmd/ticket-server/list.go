@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/grailbio/base/common/log"
 	"v.io/v23/context"
 	"v.io/v23/rpc"
 )
@@ -15,6 +16,7 @@ func newList(ctx *context.T) *list {
 }
 
 func (l *list) List(ctx *context.T, call rpc.ServerCall) ([]string, error) {
+	log.Info(ctx, "list request", "endpoint", "get", "blessing", call.Security().RemoteBlessings(), "ticket", call.Suffix())
 	var result []string
 	ignored := regexp.MustCompile("blesser/*|list")
 	for t, e := range d.registry {
