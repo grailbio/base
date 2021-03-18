@@ -47,7 +47,7 @@ func Wait(ctx context.Context, policy Policy, retry int) error {
 }
 
 // WaitForFn uses the above Wait function taking the same policy and retry
-// number and generalizes it for a use of a function. Jus tlike Wait it
+// number and generalizes it for a use of a function. Just like Wait it
 // errors in the cases of extra tries, context cancel, or if its deadline
 // runs out waiting for the next try
 func WaitForFn(ctx context.Context, policy Policy, fn interface{}, params ...interface{}) (result []reflect.Value) {
