@@ -6,8 +6,11 @@ package retry
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/grailbio/base/errors"
 )
@@ -146,4 +149,32 @@ func TestWaitDeadline(t *testing.T) {
 	if got, want := Wait(ctx, policy, 0), errors.E(errors.Timeout); !errors.Match(want, got) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+func testWrapperHelper(i int) (int, error) {
+	if i == 0 {
+		return 0, fmt.Errorf("This is an Error")
+	}
+	return 9999, nil
+}
+
+func TestWaitForFn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	policy := Backoff(time.Hour, time.Hour, 1)
+	cancel()
+
+	output := WaitForFn(ctx, policy, testWrapperHelper, 0)
+	require.EqualError(t, output[1].Interface().(error), "This is an Error")
+
+	output = WaitForFn(ctx, policy, testWrapperHelper, 55)
+	require.Equal(t, 9999, int(output[0].Int()))
+
+	var err error
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("wrong number of input, expected: 1, actual: 3")
+		}
+	}()
+	WaitForFn(ctx, policy, testWrapperHelper, 1, 2, 3)
+	require.EqualError(t, err, "wrong number of input, expected: 1, actual: 3")
 }

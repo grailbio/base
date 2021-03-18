@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/grailbio/base/errors"
@@ -43,6 +44,34 @@ func Wait(ctx context.Context, policy Policy, retry int) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// WaitForFn uses the above Wait function taking the same policy and retry
+// number and generalizes it for a use of a function. Jus tlike Wait it
+// errors in the cases of extra tries, context cancel, or if its deadline
+// runs out waiting for the next try
+func WaitForFn(ctx context.Context, policy Policy, fn interface{}, params ...interface{}) (result []reflect.Value) {
+	var out []reflect.Value
+	f := reflect.ValueOf(fn)
+	inputs := make([]reflect.Value, len(params))
+	for i, in := range params {
+		inputs[i] = reflect.ValueOf(in)
+	}
+
+	var retries = 0
+	for true {
+
+		out = f.Call(inputs)
+		if out[1].IsNil() {
+			break
+		}
+		if retryErr := Wait(ctx, policy, retries); retryErr != nil {
+			return out
+		}
+		retries++
+	}
+
+	return out
 }
 
 type backoff struct {
