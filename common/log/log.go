@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-var logger = NewLogger(Config{})
+var logger = NewLogger(Config{Level: DebugLevel})
 
 // Debug logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
