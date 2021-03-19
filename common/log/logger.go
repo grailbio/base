@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ const (
 	ErrorLevel = zapcore.ErrorLevel
 	// RFC3339TrailingNano is RFC3339 format with trailing nanoseconds precision.
 	RFC3339TrailingNano = "2006-01-02T15:04:05.000000000Z07:00"
+	// LOG_LEVEL_ENV_VAR is the environment variable name used to set logging level.
+	LOG_LEVEL_ENV_VAR = "LOG_LEVEL"
 )
 
 // contextFields is a list of context key-value pairs to be logged.
@@ -33,6 +36,17 @@ const (
 // Value is the context key.
 var contextFields = map[string]interface{}{
 	"requestID": RequestIDContextKey,
+}
+
+var logLvls = map[string]zapcore.Level{
+	"debug": DebugLevel,
+	"DEBUG": DebugLevel,
+	"info":  InfoLevel,
+	"INFO":  InfoLevel,
+	"warn":  WarnLevel,
+	"WARN":  WarnLevel,
+	"error": ErrorLevel,
+	"ERROR": ErrorLevel,
 }
 
 type Logger struct {
@@ -43,7 +57,8 @@ type Logger struct {
 
 type Config struct {
 	OutputPaths []string
-	Level       zapcore.Level
+	// note: setting the environment variable LOG_LEVEL will override Config.Level
+	Level zapcore.Level
 }
 
 func NewLogger(config Config) *Logger {
@@ -240,12 +255,17 @@ func newConfig(override Config) zap.Config {
 		OutputPaths:      []string{"stderr"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
-	// Overrides
+	// config overrides
 	if override.OutputPaths != nil {
 		config.OutputPaths = override.OutputPaths
 	}
 	if override.Level != zapcore.DebugLevel {
 		config.Level = zap.NewAtomicLevelAt(override.Level)
+	}
+	// LOG_LEVEL environment variable override
+	// Note: setting the environment variable LOG_LEVEL will override Config.Level
+	if logLvl, ok := logLvls[os.Getenv(LOG_LEVEL_ENV_VAR)]; ok {
+		config.Level = zap.NewAtomicLevelAt(logLvl)
 	}
 	return config
 }
