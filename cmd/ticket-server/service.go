@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -21,15 +22,30 @@ type service struct {
 	ticket     ticket.Ticket
 	perms      access.Permissions
 	awsSession *session.Session
+	controls   map[ticket.Control]bool
 }
 
-func (s *service) Get(ctx *context.T, call rpc.ServerCall) (ticket.Ticket, error) {
-	log.Info(ctx, "get request", "blessing", call.Security().RemoteBlessings(), "ticket", call.Suffix())
-	// use an empty parameters list
-	return s.GetWithParameters(ctx, call, nil)
+func (s *service) log(ctx *context.T, call rpc.ServerCall, parameters []ticket.Parameter, args map[string]string) {
+	logArgs := make([]interface{}, len(parameters)+len(args)*2+2)
+	i := 0
+	for _, p := range parameters {
+		logArgs[i] = p.Key
+		logArgs[i+1] = p.Value
+		i += 2
+	}
+	for k, v := range args {
+		logArgs[i] = k
+		logArgs[i+1] = v
+		i += 2
+	}
+	log.Info(ctx, "Fetching ticket.", logArgs...)
 }
 
-func (s *service) GetWithParameters(ctx *context.T, call rpc.ServerCall, parameters []ticket.Parameter) (ticket.Ticket, error) {
+func (s *service) get(ctx *context.T, call rpc.ServerCall, parameters []ticket.Parameter, args map[string]string) (ticket.Ticket, error) {
+	s.log(ctx, call, parameters, args)
+	if ok, err := s.checkControls(ctx, call, args); !ok {
+		return nil, err
+	}
 	remoteBlessings := call.Security().RemoteBlessings()
 	ticketCtx := ticket.NewTicketContext(ctx, s.awsSession, remoteBlessings)
 	switch t := s.ticket.(type) {
@@ -61,6 +77,19 @@ func (s *service) GetWithParameters(ctx *context.T, call rpc.ServerCall, paramet
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (s *service) Get(ctx *context.T, call rpc.ServerCall) (ticket.Ticket, error) {
+	log.Info(ctx, "get request", "blessing", call.Security().RemoteBlessings(), "ticket", call.Suffix())
+	return s.get(ctx, call, nil, nil)
+}
+
+func (s *service) GetWithArgs(ctx *context.T, call rpc.ServerCall, args map[string]string) (ticket.Ticket, error) {
+	return s.get(ctx, call, nil, args)
+}
+
+func (s *service) GetWithParameters(ctx *context.T, call rpc.ServerCall, parameters []ticket.Parameter) (ticket.Ticket, error) {
+	return s.get(ctx, call, parameters, nil)
+}
+
 // GetPermissions implements the Object interface from
 // v.io/v23/services/permissions.
 func (s *service) GetPermissions(ctx *context.T, call rpc.ServerCall) (perms access.Permissions, version string, _ error) {
@@ -73,4 +102,13 @@ func (s *service) GetPermissions(ctx *context.T, call rpc.ServerCall) (perms acc
 // v.io/v23/services/permissions.
 func (s *service) SetPermissions(ctx *context.T, call rpc.ServerCall, perms access.Permissions, version string) error {
 	return fmt.Errorf("not implemented")
+}
+
+func (s *service) checkControls(_ *context.T, _ rpc.ServerCall, args map[string]string) (bool, error) {
+	for control, required := range s.controls {
+		if required && args[control.String()] == "" {
+			return false, errors.New("missing required argument: " + control.String())
+		}
+	}
+	return true, nil
 }

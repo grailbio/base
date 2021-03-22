@@ -22,9 +22,10 @@ import (
 const configSuffix = ".vdlconfig"
 
 type ticketConfig struct {
-	Kind   string
-	Ticket ticket.Ticket
-	Perms  access.Permissions
+	Kind     string
+	Ticket   ticket.Ticket
+	Perms    access.Permissions
+	Controls map[ticket.Control]bool
 }
 
 type Config map[string]ticketConfig
@@ -77,9 +78,14 @@ func Load(dir string) (map[string]ticketConfig, error) {
 			if t.Permissions != nil {
 				perms = t.Permissions
 			}
+			// TODO(noah): Remove this check after PagerDutyId and TicketId controls are supported.
+			if _, ok := t.Controls[ticket.ControlRationale]; len(t.Controls) != 0 && (len(t.Controls) != 1 || !ok) {
+				return fmt.Errorf("only rationale control is supported: %+v", t.Controls)
+			}
 			all[naming.Join(prefix, name)] = ticketConfig{
-				Ticket: t.Ticket,
-				Perms:  perms,
+				Ticket:   t.Ticket,
+				Perms:    perms,
+				Controls: t.Controls,
 			}
 		}
 

@@ -19,6 +19,84 @@ var _ = initializeVDL() // Must be first; see initializeVDL comments for details
 // Type definitions
 // ================
 
+// TicketConfig Controls fields
+type Control int
+
+const (
+	ControlPagerDutyId Control = iota
+	ControlRationale
+	ControlTicketId
+)
+
+// ControlAll holds all labels for Control.
+var ControlAll = [...]Control{ControlPagerDutyId, ControlRationale, ControlTicketId}
+
+// ControlFromString creates a Control from a string label.
+//nolint:deadcode,unused
+func ControlFromString(label string) (x Control, err error) {
+	err = x.Set(label)
+	return
+}
+
+// Set assigns label to x.
+func (x *Control) Set(label string) error {
+	switch label {
+	case "PagerDutyId", "pagerdutyid":
+		*x = ControlPagerDutyId
+		return nil
+	case "Rationale", "rationale":
+		*x = ControlRationale
+		return nil
+	case "TicketId", "ticketid":
+		*x = ControlTicketId
+		return nil
+	}
+	*x = -1
+	return fmt.Errorf("unknown label %q in ticket.Control", label)
+}
+
+// String returns the string label of x.
+func (x Control) String() string {
+	switch x {
+	case ControlPagerDutyId:
+		return "PagerDutyId"
+	case ControlRationale:
+		return "Rationale"
+	case ControlTicketId:
+		return "TicketId"
+	}
+	return ""
+}
+
+func (Control) VDLReflect(struct {
+	Name string `vdl:"github.com/grailbio/base/security/ticket.Control"`
+	Enum struct{ PagerDutyId, Rationale, TicketId string }
+}) {
+}
+
+func (x Control) VDLIsZero() bool { //nolint:gocyclo
+	return x == ControlPagerDutyId
+}
+
+func (x Control) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
+	if err := enc.WriteValueString(vdlTypeEnum1, x.String()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (x *Control) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
+	switch value, err := dec.ReadValueString(); {
+	case err != nil:
+		return err
+	default:
+		if err := x.Set(value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // AwsCredentials describes a set of (potentially temporary) AWS credentials.
 type AwsCredentials struct {
 	Region          string
@@ -39,7 +117,7 @@ func (x AwsCredentials) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x AwsCredentials) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct1); err != nil {
+	if err := enc.StartValue(vdlTypeStruct2); err != nil {
 		return err
 	}
 	if x.Region != "" {
@@ -75,7 +153,7 @@ func (x AwsCredentials) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *AwsCredentials) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = AwsCredentials{}
-	if err := dec.StartValue(vdlTypeStruct1); err != nil {
+	if err := dec.StartValue(vdlTypeStruct2); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -87,8 +165,8 @@ func (x *AwsCredentials) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct1 {
-			index = vdlTypeStruct1.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct2 {
+			index = vdlTypeStruct2.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -155,7 +233,7 @@ func (x AwsAssumeRoleBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x AwsAssumeRoleBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct2); err != nil {
+	if err := enc.StartValue(vdlTypeStruct3); err != nil {
 		return err
 	}
 	if x.Region != "" {
@@ -181,7 +259,7 @@ func (x AwsAssumeRoleBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *AwsAssumeRoleBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = AwsAssumeRoleBuilder{}
-	if err := dec.StartValue(vdlTypeStruct2); err != nil {
+	if err := dec.StartValue(vdlTypeStruct3); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -193,8 +271,8 @@ func (x *AwsAssumeRoleBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct2 {
-			index = vdlTypeStruct2.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct3 {
+			index = vdlTypeStruct3.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -247,7 +325,7 @@ func (x AwsSessionBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x AwsSessionBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct3); err != nil {
+	if err := enc.StartValue(vdlTypeStruct4); err != nil {
 		return err
 	}
 	if x.AwsCredentials != (AwsCredentials{}) {
@@ -271,7 +349,7 @@ func (x AwsSessionBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *AwsSessionBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = AwsSessionBuilder{}
-	if err := dec.StartValue(vdlTypeStruct3); err != nil {
+	if err := dec.StartValue(vdlTypeStruct4); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -283,8 +361,8 @@ func (x *AwsSessionBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct3 {
-			index = vdlTypeStruct3.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct4 {
+			index = vdlTypeStruct4.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -345,7 +423,7 @@ func (x TlsCertAuthorityBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x TlsCertAuthorityBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct4); err != nil {
+	if err := enc.StartValue(vdlTypeStruct5); err != nil {
 		return err
 	}
 	if x.Authority != "" {
@@ -378,7 +456,7 @@ func (x TlsCertAuthorityBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocy
 }
 
 func vdlWriteAnonList1(enc vdl.Encoder, x []string) error {
-	if err := enc.StartValue(vdlTypeList5); err != nil {
+	if err := enc.StartValue(vdlTypeList6); err != nil {
 		return err
 	}
 	if err := enc.SetLenHint(len(x)); err != nil {
@@ -397,7 +475,7 @@ func vdlWriteAnonList1(enc vdl.Encoder, x []string) error {
 
 func (x *TlsCertAuthorityBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = TlsCertAuthorityBuilder{}
-	if err := dec.StartValue(vdlTypeStruct4); err != nil {
+	if err := dec.StartValue(vdlTypeStruct5); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -409,8 +487,8 @@ func (x *TlsCertAuthorityBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocy
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct4 {
-			index = vdlTypeStruct4.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct5 {
+			index = vdlTypeStruct5.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -449,7 +527,7 @@ func (x *TlsCertAuthorityBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocy
 }
 
 func vdlReadAnonList1(dec vdl.Decoder, x *[]string) error {
-	if err := dec.StartValue(vdlTypeList5); err != nil {
+	if err := dec.StartValue(vdlTypeList6); err != nil {
 		return err
 	}
 	if len := dec.LenHint(); len > 0 {
@@ -525,7 +603,7 @@ func (x SshCertAuthorityBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x SshCertAuthorityBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct6); err != nil {
+	if err := enc.StartValue(vdlTypeStruct7); err != nil {
 		return err
 	}
 	if x.CaPrivateKey != "" {
@@ -580,7 +658,7 @@ func (x SshCertAuthorityBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocy
 
 func (x *SshCertAuthorityBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = SshCertAuthorityBuilder{}
-	if err := dec.StartValue(vdlTypeStruct6); err != nil {
+	if err := dec.StartValue(vdlTypeStruct7); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -592,8 +670,8 @@ func (x *SshCertAuthorityBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocy
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct6 {
-			index = vdlTypeStruct6.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct7 {
+			index = vdlTypeStruct7.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -663,7 +741,7 @@ func (x B2AccountAuthorizationBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x B2AccountAuthorizationBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct7); err != nil {
+	if err := enc.StartValue(vdlTypeStruct8); err != nil {
 		return err
 	}
 	if x.AccountId != "" {
@@ -684,7 +762,7 @@ func (x B2AccountAuthorizationBuilder) VDLWrite(enc vdl.Encoder) error { //nolin
 
 func (x *B2AccountAuthorizationBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = B2AccountAuthorizationBuilder{}
-	if err := dec.StartValue(vdlTypeStruct7); err != nil {
+	if err := dec.StartValue(vdlTypeStruct8); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -696,8 +774,8 @@ func (x *B2AccountAuthorizationBuilder) VDLRead(dec vdl.Decoder) error { //nolin
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct7 {
-			index = vdlTypeStruct7.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct8 {
+			index = vdlTypeStruct8.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -740,7 +818,7 @@ func (x VanadiumBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x VanadiumBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct8); err != nil {
+	if err := enc.StartValue(vdlTypeStruct9); err != nil {
 		return err
 	}
 	if x.BlessingName != "" {
@@ -756,7 +834,7 @@ func (x VanadiumBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *VanadiumBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = VanadiumBuilder{}
-	if err := dec.StartValue(vdlTypeStruct8); err != nil {
+	if err := dec.StartValue(vdlTypeStruct9); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -768,8 +846,8 @@ func (x *VanadiumBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct8 {
-			index = vdlTypeStruct8.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct9 {
+			index = vdlTypeStruct9.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -807,7 +885,7 @@ func (x AwsTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x AwsTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct9); err != nil {
+	if err := enc.StartValue(vdlTypeStruct10); err != nil {
 		return err
 	}
 	if x.AwsAssumeRoleBuilder != nil {
@@ -844,7 +922,7 @@ func (x AwsTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *AwsTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = AwsTicket{}
-	if err := dec.StartValue(vdlTypeStruct9); err != nil {
+	if err := dec.StartValue(vdlTypeStruct10); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -856,8 +934,8 @@ func (x *AwsTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct9 {
-			index = vdlTypeStruct9.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct10 {
+			index = vdlTypeStruct10.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -867,7 +945,7 @@ func (x *AwsTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional10); err != nil {
+			if err := dec.StartValue(vdlTypeOptional11); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -883,7 +961,7 @@ func (x *AwsTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 				}
 			}
 		case 1:
-			if err := dec.StartValue(vdlTypeOptional11); err != nil {
+			if err := dec.StartValue(vdlTypeOptional12); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -926,7 +1004,7 @@ func (x S3Ticket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x S3Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct12); err != nil {
+	if err := enc.StartValue(vdlTypeStruct13); err != nil {
 		return err
 	}
 	if x.AwsAssumeRoleBuilder != nil {
@@ -978,7 +1056,7 @@ func (x S3Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *S3Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = S3Ticket{}
-	if err := dec.StartValue(vdlTypeStruct12); err != nil {
+	if err := dec.StartValue(vdlTypeStruct13); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -990,8 +1068,8 @@ func (x *S3Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct12 {
-			index = vdlTypeStruct12.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct13 {
+			index = vdlTypeStruct13.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1001,7 +1079,7 @@ func (x *S3Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional10); err != nil {
+			if err := dec.StartValue(vdlTypeOptional11); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1017,7 +1095,7 @@ func (x *S3Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 				}
 			}
 		case 1:
-			if err := dec.StartValue(vdlTypeOptional11); err != nil {
+			if err := dec.StartValue(vdlTypeOptional12); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1084,7 +1162,7 @@ func (x EcrTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x EcrTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct13); err != nil {
+	if err := enc.StartValue(vdlTypeStruct14); err != nil {
 		return err
 	}
 	if x.AwsAssumeRoleBuilder != nil {
@@ -1119,7 +1197,7 @@ func (x EcrTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *EcrTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = EcrTicket{}
-	if err := dec.StartValue(vdlTypeStruct13); err != nil {
+	if err := dec.StartValue(vdlTypeStruct14); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1131,8 +1209,8 @@ func (x *EcrTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct13 {
-			index = vdlTypeStruct13.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct14 {
+			index = vdlTypeStruct14.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1142,7 +1220,7 @@ func (x *EcrTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional10); err != nil {
+			if err := dec.StartValue(vdlTypeOptional11); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1198,7 +1276,7 @@ func (x SshCert) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x SshCert) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct14); err != nil {
+	if err := enc.StartValue(vdlTypeStruct15); err != nil {
 		return err
 	}
 	if x.Cert != "" {
@@ -1214,7 +1292,7 @@ func (x SshCert) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *SshCert) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = SshCert{}
-	if err := dec.StartValue(vdlTypeStruct14); err != nil {
+	if err := dec.StartValue(vdlTypeStruct15); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1226,8 +1304,8 @@ func (x *SshCert) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct14 {
-			index = vdlTypeStruct14.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct15 {
+			index = vdlTypeStruct15.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1270,7 +1348,7 @@ func (x TlsCredentials) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x TlsCredentials) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct15); err != nil {
+	if err := enc.StartValue(vdlTypeStruct16); err != nil {
 		return err
 	}
 	if x.AuthorityCert != "" {
@@ -1296,7 +1374,7 @@ func (x TlsCredentials) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *TlsCredentials) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = TlsCredentials{}
-	if err := dec.StartValue(vdlTypeStruct15); err != nil {
+	if err := dec.StartValue(vdlTypeStruct16); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1308,8 +1386,8 @@ func (x *TlsCredentials) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct15 {
-			index = vdlTypeStruct15.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct16 {
+			index = vdlTypeStruct16.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1359,7 +1437,7 @@ func (x TlsServerTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x TlsServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct16); err != nil {
+	if err := enc.StartValue(vdlTypeStruct17); err != nil {
 		return err
 	}
 	if x.TlsCertAuthorityBuilder != nil {
@@ -1387,7 +1465,7 @@ func (x TlsServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *TlsServerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = TlsServerTicket{}
-	if err := dec.StartValue(vdlTypeStruct16); err != nil {
+	if err := dec.StartValue(vdlTypeStruct17); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1399,8 +1477,8 @@ func (x *TlsServerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct16 {
-			index = vdlTypeStruct16.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct17 {
+			index = vdlTypeStruct17.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1410,7 +1488,7 @@ func (x *TlsServerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional17); err != nil {
+			if err := dec.StartValue(vdlTypeOptional18); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1460,7 +1538,7 @@ func (x TlsClientTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x TlsClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct18); err != nil {
+	if err := enc.StartValue(vdlTypeStruct19); err != nil {
 		return err
 	}
 	if x.TlsCertAuthorityBuilder != nil {
@@ -1496,7 +1574,7 @@ func (x TlsClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *TlsClientTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = TlsClientTicket{}
-	if err := dec.StartValue(vdlTypeStruct18); err != nil {
+	if err := dec.StartValue(vdlTypeStruct19); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1508,8 +1586,8 @@ func (x *TlsClientTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct18 {
-			index = vdlTypeStruct18.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct19 {
+			index = vdlTypeStruct19.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1519,7 +1597,7 @@ func (x *TlsClientTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional17); err != nil {
+			if err := dec.StartValue(vdlTypeOptional18); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1566,7 +1644,7 @@ func (x DockerTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x DockerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct19); err != nil {
+	if err := enc.StartValue(vdlTypeStruct20); err != nil {
 		return err
 	}
 	if x.TlsCertAuthorityBuilder != nil {
@@ -1599,7 +1677,7 @@ func (x DockerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *DockerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = DockerTicket{}
-	if err := dec.StartValue(vdlTypeStruct19); err != nil {
+	if err := dec.StartValue(vdlTypeStruct20); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1611,8 +1689,8 @@ func (x *DockerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct19 {
-			index = vdlTypeStruct19.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct20 {
+			index = vdlTypeStruct20.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1622,7 +1700,7 @@ func (x *DockerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional17); err != nil {
+			if err := dec.StartValue(vdlTypeOptional18); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1669,7 +1747,7 @@ func (x DockerServerTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x DockerServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct20); err != nil {
+	if err := enc.StartValue(vdlTypeStruct21); err != nil {
 		return err
 	}
 	if x.TlsCertAuthorityBuilder != nil {
@@ -1697,7 +1775,7 @@ func (x DockerServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *DockerServerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = DockerServerTicket{}
-	if err := dec.StartValue(vdlTypeStruct20); err != nil {
+	if err := dec.StartValue(vdlTypeStruct21); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1709,8 +1787,8 @@ func (x *DockerServerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct20 {
-			index = vdlTypeStruct20.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct21 {
+			index = vdlTypeStruct21.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1720,7 +1798,7 @@ func (x *DockerServerTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional17); err != nil {
+			if err := dec.StartValue(vdlTypeOptional18); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1762,7 +1840,7 @@ func (x DockerClientTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x DockerClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct21); err != nil {
+	if err := enc.StartValue(vdlTypeStruct22); err != nil {
 		return err
 	}
 	if x.TlsCertAuthorityBuilder != nil {
@@ -1795,7 +1873,7 @@ func (x DockerClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *DockerClientTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = DockerClientTicket{}
-	if err := dec.StartValue(vdlTypeStruct21); err != nil {
+	if err := dec.StartValue(vdlTypeStruct22); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1807,8 +1885,8 @@ func (x *DockerClientTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct21 {
-			index = vdlTypeStruct21.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct22 {
+			index = vdlTypeStruct22.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1818,7 +1896,7 @@ func (x *DockerClientTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional17); err != nil {
+			if err := dec.StartValue(vdlTypeOptional18); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -1864,7 +1942,7 @@ func (x Parameter) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x Parameter) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct22); err != nil {
+	if err := enc.StartValue(vdlTypeStruct23); err != nil {
 		return err
 	}
 	if x.Key != "" {
@@ -1885,7 +1963,7 @@ func (x Parameter) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *Parameter) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = Parameter{}
-	if err := dec.StartValue(vdlTypeStruct22); err != nil {
+	if err := dec.StartValue(vdlTypeStruct23); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -1897,8 +1975,8 @@ func (x *Parameter) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct22 {
-			index = vdlTypeStruct22.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct23 {
+			index = vdlTypeStruct23.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -1954,7 +2032,7 @@ func (x AwsComputeInstancesBuilder) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x AwsComputeInstancesBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct23); err != nil {
+	if err := enc.StartValue(vdlTypeStruct24); err != nil {
 		return err
 	}
 	if len(x.InstanceFilters) != 0 {
@@ -1982,7 +2060,7 @@ func (x AwsComputeInstancesBuilder) VDLWrite(enc vdl.Encoder) error { //nolint:g
 }
 
 func vdlWriteAnonList2(enc vdl.Encoder, x []Parameter) error {
-	if err := enc.StartValue(vdlTypeList24); err != nil {
+	if err := enc.StartValue(vdlTypeList25); err != nil {
 		return err
 	}
 	if err := enc.SetLenHint(len(x)); err != nil {
@@ -2004,7 +2082,7 @@ func vdlWriteAnonList2(enc vdl.Encoder, x []Parameter) error {
 
 func (x *AwsComputeInstancesBuilder) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = AwsComputeInstancesBuilder{}
-	if err := dec.StartValue(vdlTypeStruct23); err != nil {
+	if err := dec.StartValue(vdlTypeStruct24); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -2016,8 +2094,8 @@ func (x *AwsComputeInstancesBuilder) VDLRead(dec vdl.Decoder) error { //nolint:g
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct23 {
-			index = vdlTypeStruct23.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct24 {
+			index = vdlTypeStruct24.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -2049,7 +2127,7 @@ func (x *AwsComputeInstancesBuilder) VDLRead(dec vdl.Decoder) error { //nolint:g
 }
 
 func vdlReadAnonList2(dec vdl.Decoder, x *[]Parameter) error {
-	if err := dec.StartValue(vdlTypeList24); err != nil {
+	if err := dec.StartValue(vdlTypeList25); err != nil {
 		return err
 	}
 	if len := dec.LenHint(); len > 0 {
@@ -2103,7 +2181,7 @@ func (x ComputeInstance) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x ComputeInstance) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct25); err != nil {
+	if err := enc.StartValue(vdlTypeStruct26); err != nil {
 		return err
 	}
 	if x.PublicIp != "" {
@@ -2137,7 +2215,7 @@ func (x ComputeInstance) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *ComputeInstance) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = ComputeInstance{}
-	if err := dec.StartValue(vdlTypeStruct25); err != nil {
+	if err := dec.StartValue(vdlTypeStruct26); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -2149,8 +2227,8 @@ func (x *ComputeInstance) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct25 {
-			index = vdlTypeStruct25.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct26 {
+			index = vdlTypeStruct26.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -2225,7 +2303,7 @@ func (x SshCertificateTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x SshCertificateTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct26); err != nil {
+	if err := enc.StartValue(vdlTypeStruct27); err != nil {
 		return err
 	}
 	if x.SshCertAuthorityBuilder != nil {
@@ -2274,7 +2352,7 @@ func (x SshCertificateTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func vdlWriteAnonList3(enc vdl.Encoder, x []ComputeInstance) error {
-	if err := enc.StartValue(vdlTypeList29); err != nil {
+	if err := enc.StartValue(vdlTypeList30); err != nil {
 		return err
 	}
 	if err := enc.SetLenHint(len(x)); err != nil {
@@ -2296,7 +2374,7 @@ func vdlWriteAnonList3(enc vdl.Encoder, x []ComputeInstance) error {
 
 func (x *SshCertificateTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = SshCertificateTicket{}
-	if err := dec.StartValue(vdlTypeStruct26); err != nil {
+	if err := dec.StartValue(vdlTypeStruct27); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -2308,8 +2386,8 @@ func (x *SshCertificateTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct26 {
-			index = vdlTypeStruct26.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct27 {
+			index = vdlTypeStruct27.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -2319,7 +2397,7 @@ func (x *SshCertificateTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional27); err != nil {
+			if err := dec.StartValue(vdlTypeOptional28); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -2335,7 +2413,7 @@ func (x *SshCertificateTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 				}
 			}
 		case 1:
-			if err := dec.StartValue(vdlTypeOptional28); err != nil {
+			if err := dec.StartValue(vdlTypeOptional29); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -2370,7 +2448,7 @@ func (x *SshCertificateTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 }
 
 func vdlReadAnonList3(dec vdl.Decoder, x *[]ComputeInstance) error {
-	if err := dec.StartValue(vdlTypeList29); err != nil {
+	if err := dec.StartValue(vdlTypeList30); err != nil {
 		return err
 	}
 	if len := dec.LenHint(); len > 0 {
@@ -2416,7 +2494,7 @@ func (x B2Ticket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x B2Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct30); err != nil {
+	if err := enc.StartValue(vdlTypeStruct31); err != nil {
 		return err
 	}
 	if x.B2AccountAuthorizationBuilder != nil {
@@ -2466,7 +2544,7 @@ func (x B2Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *B2Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = B2Ticket{}
-	if err := dec.StartValue(vdlTypeStruct30); err != nil {
+	if err := dec.StartValue(vdlTypeStruct31); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -2478,8 +2556,8 @@ func (x *B2Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct30 {
-			index = vdlTypeStruct30.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct31 {
+			index = vdlTypeStruct31.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -2489,7 +2567,7 @@ func (x *B2Ticket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional31); err != nil {
+			if err := dec.StartValue(vdlTypeOptional32); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -2569,7 +2647,7 @@ func (x VanadiumTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x VanadiumTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct32); err != nil {
+	if err := enc.StartValue(vdlTypeStruct33); err != nil {
 		return err
 	}
 	if x.VanadiumBuilder != nil {
@@ -2594,7 +2672,7 @@ func (x VanadiumTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *VanadiumTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = VanadiumTicket{}
-	if err := dec.StartValue(vdlTypeStruct32); err != nil {
+	if err := dec.StartValue(vdlTypeStruct33); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -2606,8 +2684,8 @@ func (x *VanadiumTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct32 {
-			index = vdlTypeStruct32.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct33 {
+			index = vdlTypeStruct33.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -2617,7 +2695,7 @@ func (x *VanadiumTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := dec.StartValue(vdlTypeOptional33); err != nil {
+			if err := dec.StartValue(vdlTypeOptional34); err != nil {
 				return err
 			}
 			if dec.IsNil() {
@@ -2659,11 +2737,11 @@ func (x GenericTicket) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x GenericTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct34); err != nil {
+	if err := enc.StartValue(vdlTypeStruct35); err != nil {
 		return err
 	}
 	if len(x.Data) != 0 {
-		if err := enc.NextFieldValueBytes(0, vdlTypeList35, x.Data); err != nil {
+		if err := enc.NextFieldValueBytes(0, vdlTypeList36, x.Data); err != nil {
 			return err
 		}
 	}
@@ -2675,7 +2753,7 @@ func (x GenericTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 
 func (x *GenericTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = GenericTicket{}
-	if err := dec.StartValue(vdlTypeStruct34); err != nil {
+	if err := dec.StartValue(vdlTypeStruct35); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -2687,8 +2765,8 @@ func (x *GenericTicket) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct34 {
-			index = vdlTypeStruct34.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct35 {
+			index = vdlTypeStruct35.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -2875,7 +2953,7 @@ func (x TicketGenericTicket) VDLIsZero() bool {
 }
 
 func (x TicketAwsTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(0); err != nil {
@@ -2891,7 +2969,7 @@ func (x TicketAwsTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func (x TicketS3Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(1); err != nil {
@@ -2907,7 +2985,7 @@ func (x TicketS3Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func (x TicketSshCertificateTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(2); err != nil {
@@ -2923,7 +3001,7 @@ func (x TicketSshCertificateTicket) VDLWrite(enc vdl.Encoder) error { //nolint:g
 }
 
 func (x TicketEcrTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(3); err != nil {
@@ -2939,7 +3017,7 @@ func (x TicketEcrTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func (x TicketTlsServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(4); err != nil {
@@ -2955,7 +3033,7 @@ func (x TicketTlsServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocycl
 }
 
 func (x TicketTlsClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(5); err != nil {
@@ -2971,7 +3049,7 @@ func (x TicketTlsClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocycl
 }
 
 func (x TicketDockerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(6); err != nil {
@@ -2987,7 +3065,7 @@ func (x TicketDockerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func (x TicketDockerServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(7); err != nil {
@@ -3003,7 +3081,7 @@ func (x TicketDockerServerTicket) VDLWrite(enc vdl.Encoder) error { //nolint:goc
 }
 
 func (x TicketDockerClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(8); err != nil {
@@ -3019,7 +3097,7 @@ func (x TicketDockerClientTicket) VDLWrite(enc vdl.Encoder) error { //nolint:goc
 }
 
 func (x TicketB2Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(9); err != nil {
@@ -3035,7 +3113,7 @@ func (x TicketB2Ticket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func (x TicketVanadiumTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(10); err != nil {
@@ -3051,7 +3129,7 @@ func (x TicketVanadiumTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func (x TicketGenericTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeUnion36); err != nil {
+	if err := enc.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	if err := enc.NextField(11); err != nil {
@@ -3067,7 +3145,7 @@ func (x TicketGenericTicket) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 }
 
 func VDLReadTicket(dec vdl.Decoder, x *Ticket) error { //nolint:gocyclo
-	if err := dec.StartValue(vdlTypeUnion36); err != nil {
+	if err := dec.StartValue(vdlTypeUnion37); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -3078,9 +3156,9 @@ func VDLReadTicket(dec vdl.Decoder, x *Ticket) error { //nolint:gocyclo
 	case index == -1:
 		return fmt.Errorf("missing field in union %T, from %v", x, decType)
 	}
-	if decType != vdlTypeUnion36 {
+	if decType != vdlTypeUnion37 {
 		name := decType.Field(index).Name
-		index = vdlTypeUnion36.FieldIndexByName(name)
+		index = vdlTypeUnion37.FieldIndexByName(name)
 		if index == -1 {
 			return fmt.Errorf("field %q not in union %T, from %v", name, x, decType)
 		}
@@ -3172,6 +3250,7 @@ func VDLReadTicket(dec vdl.Decoder, x *Ticket) error { //nolint:gocyclo
 type TicketConfig struct {
 	Ticket      Ticket
 	Permissions access.Permissions
+	Controls    map[Control]bool
 }
 
 func (TicketConfig) VDLReflect(struct {
@@ -3186,11 +3265,14 @@ func (x TicketConfig) VDLIsZero() bool { //nolint:gocyclo
 	if len(x.Permissions) != 0 {
 		return false
 	}
+	if len(x.Controls) != 0 {
+		return false
+	}
 	return true
 }
 
 func (x TicketConfig) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct37); err != nil {
+	if err := enc.StartValue(vdlTypeStruct38); err != nil {
 		return err
 	}
 	if x.Ticket != nil && !x.Ticket.VDLIsZero() {
@@ -3209,7 +3291,36 @@ func (x TicketConfig) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 			return err
 		}
 	}
+	if len(x.Controls) != 0 {
+		if err := enc.NextField(2); err != nil {
+			return err
+		}
+		if err := vdlWriteAnonMap4(enc, x.Controls); err != nil {
+			return err
+		}
+	}
 	if err := enc.NextField(-1); err != nil {
+		return err
+	}
+	return enc.FinishValue()
+}
+
+func vdlWriteAnonMap4(enc vdl.Encoder, x map[Control]bool) error {
+	if err := enc.StartValue(vdlTypeMap40); err != nil {
+		return err
+	}
+	if err := enc.SetLenHint(len(x)); err != nil {
+		return err
+	}
+	for key, elem := range x {
+		if err := enc.NextEntryValueString(vdlTypeEnum1, key.String()); err != nil {
+			return err
+		}
+		if err := enc.WriteValueBool(vdl.BoolType, elem); err != nil {
+			return err
+		}
+	}
+	if err := enc.NextEntry(true); err != nil {
 		return err
 	}
 	return enc.FinishValue()
@@ -3219,7 +3330,7 @@ func (x *TicketConfig) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = TicketConfig{
 		Ticket: TicketAwsTicket{},
 	}
-	if err := dec.StartValue(vdlTypeStruct37); err != nil {
+	if err := dec.StartValue(vdlTypeStruct38); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -3231,8 +3342,8 @@ func (x *TicketConfig) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct37 {
-			index = vdlTypeStruct37.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct38 {
+			index = vdlTypeStruct38.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -3249,6 +3360,45 @@ func (x *TicketConfig) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 			if err := x.Permissions.VDLRead(dec); err != nil {
 				return err
 			}
+		case 2:
+			if err := vdlReadAnonMap4(dec, &x.Controls); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func vdlReadAnonMap4(dec vdl.Decoder, x *map[Control]bool) error {
+	if err := dec.StartValue(vdlTypeMap40); err != nil {
+		return err
+	}
+	var tmpMap map[Control]bool
+	if len := dec.LenHint(); len > 0 {
+		tmpMap = make(map[Control]bool, len)
+	}
+	for {
+		switch done, key, err := dec.NextEntryValueString(); {
+		case err != nil:
+			return err
+		case done:
+			*x = tmpMap
+			return dec.FinishValue()
+		default:
+			var keyEnum Control
+			if err := keyEnum.Set(key); err != nil {
+				return err
+			}
+			var elem bool
+			switch value, err := dec.ReadValueBool(); {
+			case err != nil:
+				return err
+			default:
+				elem = value
+			}
+			if tmpMap == nil {
+				tmpMap = make(map[Control]bool)
+			}
+			tmpMap[keyEnum] = elem
 		}
 	}
 }
@@ -3274,14 +3424,14 @@ func (x Config) VDLIsZero() bool { //nolint:gocyclo
 }
 
 func (x Config) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
-	if err := enc.StartValue(vdlTypeStruct39); err != nil {
+	if err := enc.StartValue(vdlTypeStruct41); err != nil {
 		return err
 	}
 	if len(x.Tickets) != 0 {
 		if err := enc.NextField(0); err != nil {
 			return err
 		}
-		if err := vdlWriteAnonMap4(enc, x.Tickets); err != nil {
+		if err := vdlWriteAnonMap5(enc, x.Tickets); err != nil {
 			return err
 		}
 	}
@@ -3299,8 +3449,8 @@ func (x Config) VDLWrite(enc vdl.Encoder) error { //nolint:gocyclo
 	return enc.FinishValue()
 }
 
-func vdlWriteAnonMap4(enc vdl.Encoder, x map[string]TicketConfig) error {
-	if err := enc.StartValue(vdlTypeMap40); err != nil {
+func vdlWriteAnonMap5(enc vdl.Encoder, x map[string]TicketConfig) error {
+	if err := enc.StartValue(vdlTypeMap42); err != nil {
 		return err
 	}
 	if err := enc.SetLenHint(len(x)); err != nil {
@@ -3322,7 +3472,7 @@ func vdlWriteAnonMap4(enc vdl.Encoder, x map[string]TicketConfig) error {
 
 func (x *Config) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	*x = Config{}
-	if err := dec.StartValue(vdlTypeStruct39); err != nil {
+	if err := dec.StartValue(vdlTypeStruct41); err != nil {
 		return err
 	}
 	decType := dec.Type()
@@ -3334,8 +3484,8 @@ func (x *Config) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		case index == -1:
 			return dec.FinishValue()
 		}
-		if decType != vdlTypeStruct39 {
-			index = vdlTypeStruct39.FieldIndexByName(decType.Field(index).Name)
+		if decType != vdlTypeStruct41 {
+			index = vdlTypeStruct41.FieldIndexByName(decType.Field(index).Name)
 			if index == -1 {
 				if err := dec.SkipValue(); err != nil {
 					return err
@@ -3345,7 +3495,7 @@ func (x *Config) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 		}
 		switch index {
 		case 0:
-			if err := vdlReadAnonMap4(dec, &x.Tickets); err != nil {
+			if err := vdlReadAnonMap5(dec, &x.Tickets); err != nil {
 				return err
 			}
 		case 1:
@@ -3356,8 +3506,8 @@ func (x *Config) VDLRead(dec vdl.Decoder) error { //nolint:gocyclo
 	}
 }
 
-func vdlReadAnonMap4(dec vdl.Decoder, x *map[string]TicketConfig) error {
-	if err := dec.StartValue(vdlTypeMap40); err != nil {
+func vdlReadAnonMap5(dec vdl.Decoder, x *map[string]TicketConfig) error {
+	if err := dec.StartValue(vdlTypeMap42); err != nil {
 		return err
 	}
 	var tmpMap map[string]TicketConfig
@@ -3397,6 +3547,7 @@ type TicketServiceClientMethods interface {
 	SetPermissions(_ *context.T, perms access.Permissions, version string, _ ...rpc.CallOpt) error
 	Get(*context.T, ...rpc.CallOpt) (Ticket, error)
 	GetWithParameters(_ *context.T, parameters []Parameter, _ ...rpc.CallOpt) (Ticket, error)
+	GetWithArgs(_ *context.T, args map[string]string, _ ...rpc.CallOpt) (Ticket, error)
 }
 
 // TicketServiceClientStub embeds TicketServiceClientMethods and is a
@@ -3434,6 +3585,11 @@ func (c implTicketServiceClientStub) GetWithParameters(ctx *context.T, i0 []Para
 	return
 }
 
+func (c implTicketServiceClientStub) GetWithArgs(ctx *context.T, i0 map[string]string, opts ...rpc.CallOpt) (o0 Ticket, err error) {
+	err = v23.GetClient(ctx).Call(ctx, c.name, "GetWithArgs", []interface{}{i0}, []interface{}{&o0}, opts...)
+	return
+}
+
 // TicketServiceServerMethods is the interface a server writer
 // implements for TicketService.
 //
@@ -3444,6 +3600,7 @@ type TicketServiceServerMethods interface {
 	SetPermissions(_ *context.T, _ rpc.ServerCall, perms access.Permissions, version string) error
 	Get(*context.T, rpc.ServerCall) (Ticket, error)
 	GetWithParameters(_ *context.T, _ rpc.ServerCall, parameters []Parameter) (Ticket, error)
+	GetWithArgs(_ *context.T, _ rpc.ServerCall, args map[string]string) (Ticket, error)
 }
 
 // TicketServiceServerStubMethods is the server interface containing
@@ -3497,6 +3654,10 @@ func (s implTicketServiceServerStub) GetWithParameters(ctx *context.T, call rpc.
 	return s.impl.GetWithParameters(ctx, call, i0)
 }
 
+func (s implTicketServiceServerStub) GetWithArgs(ctx *context.T, call rpc.ServerCall, i0 map[string]string) (Ticket, error) {
+	return s.impl.GetWithArgs(ctx, call, i0)
+}
+
 func (s implTicketServiceServerStub) Globber() *rpc.GlobState {
 	return s.gs
 }
@@ -3541,6 +3702,16 @@ var descTicketService = rpc.InterfaceDesc{
 			Name: "GetWithParameters",
 			InArgs: []rpc.ArgDesc{
 				{Name: "parameters", Doc: ``}, // []Parameter
+			},
+			OutArgs: []rpc.ArgDesc{
+				{Name: "", Doc: ``}, // Ticket
+			},
+			Tags: []*vdl.Value{vdl.ValueOf(access.Tag("Read"))},
+		},
+		{
+			Name: "GetWithArgs",
+			InArgs: []rpc.ArgDesc{
+				{Name: "args", Doc: ``}, // map[string]string
 			},
 			OutArgs: []rpc.ArgDesc{
 				{Name: "", Doc: ``}, // Ticket
@@ -3650,46 +3821,48 @@ var descListService = rpc.InterfaceDesc{
 // Hold type definitions in package-level variables, for better performance.
 //nolint:unused
 var (
-	vdlTypeStruct1    *vdl.Type
+	vdlTypeEnum1      *vdl.Type
 	vdlTypeStruct2    *vdl.Type
 	vdlTypeStruct3    *vdl.Type
 	vdlTypeStruct4    *vdl.Type
-	vdlTypeList5      *vdl.Type
-	vdlTypeStruct6    *vdl.Type
+	vdlTypeStruct5    *vdl.Type
+	vdlTypeList6      *vdl.Type
 	vdlTypeStruct7    *vdl.Type
 	vdlTypeStruct8    *vdl.Type
 	vdlTypeStruct9    *vdl.Type
-	vdlTypeOptional10 *vdl.Type
+	vdlTypeStruct10   *vdl.Type
 	vdlTypeOptional11 *vdl.Type
-	vdlTypeStruct12   *vdl.Type
+	vdlTypeOptional12 *vdl.Type
 	vdlTypeStruct13   *vdl.Type
 	vdlTypeStruct14   *vdl.Type
 	vdlTypeStruct15   *vdl.Type
 	vdlTypeStruct16   *vdl.Type
-	vdlTypeOptional17 *vdl.Type
-	vdlTypeStruct18   *vdl.Type
+	vdlTypeStruct17   *vdl.Type
+	vdlTypeOptional18 *vdl.Type
 	vdlTypeStruct19   *vdl.Type
 	vdlTypeStruct20   *vdl.Type
 	vdlTypeStruct21   *vdl.Type
 	vdlTypeStruct22   *vdl.Type
 	vdlTypeStruct23   *vdl.Type
-	vdlTypeList24     *vdl.Type
-	vdlTypeStruct25   *vdl.Type
+	vdlTypeStruct24   *vdl.Type
+	vdlTypeList25     *vdl.Type
 	vdlTypeStruct26   *vdl.Type
-	vdlTypeOptional27 *vdl.Type
+	vdlTypeStruct27   *vdl.Type
 	vdlTypeOptional28 *vdl.Type
-	vdlTypeList29     *vdl.Type
-	vdlTypeStruct30   *vdl.Type
-	vdlTypeOptional31 *vdl.Type
-	vdlTypeStruct32   *vdl.Type
-	vdlTypeOptional33 *vdl.Type
-	vdlTypeStruct34   *vdl.Type
-	vdlTypeList35     *vdl.Type
-	vdlTypeUnion36    *vdl.Type
-	vdlTypeStruct37   *vdl.Type
-	vdlTypeMap38      *vdl.Type
-	vdlTypeStruct39   *vdl.Type
+	vdlTypeOptional29 *vdl.Type
+	vdlTypeList30     *vdl.Type
+	vdlTypeStruct31   *vdl.Type
+	vdlTypeOptional32 *vdl.Type
+	vdlTypeStruct33   *vdl.Type
+	vdlTypeOptional34 *vdl.Type
+	vdlTypeStruct35   *vdl.Type
+	vdlTypeList36     *vdl.Type
+	vdlTypeUnion37    *vdl.Type
+	vdlTypeStruct38   *vdl.Type
+	vdlTypeMap39      *vdl.Type
 	vdlTypeMap40      *vdl.Type
+	vdlTypeStruct41   *vdl.Type
+	vdlTypeMap42      *vdl.Type
 )
 
 var initializeVDLCalled bool
@@ -3714,6 +3887,7 @@ func initializeVDL() struct{} {
 	initializeVDLCalled = true
 
 	// Register types.
+	vdl.Register((*Control)(nil))
 	vdl.Register((*AwsCredentials)(nil))
 	vdl.Register((*AwsAssumeRoleBuilder)(nil))
 	vdl.Register((*AwsSessionBuilder)(nil))
@@ -3743,46 +3917,48 @@ func initializeVDL() struct{} {
 	vdl.Register((*Config)(nil))
 
 	// Initialize type definitions.
-	vdlTypeStruct1 = vdl.TypeOf((*AwsCredentials)(nil)).Elem()
-	vdlTypeStruct2 = vdl.TypeOf((*AwsAssumeRoleBuilder)(nil)).Elem()
-	vdlTypeStruct3 = vdl.TypeOf((*AwsSessionBuilder)(nil)).Elem()
-	vdlTypeStruct4 = vdl.TypeOf((*TlsCertAuthorityBuilder)(nil)).Elem()
-	vdlTypeList5 = vdl.TypeOf((*[]string)(nil))
-	vdlTypeStruct6 = vdl.TypeOf((*SshCertAuthorityBuilder)(nil)).Elem()
-	vdlTypeStruct7 = vdl.TypeOf((*B2AccountAuthorizationBuilder)(nil)).Elem()
-	vdlTypeStruct8 = vdl.TypeOf((*VanadiumBuilder)(nil)).Elem()
-	vdlTypeStruct9 = vdl.TypeOf((*AwsTicket)(nil)).Elem()
-	vdlTypeOptional10 = vdl.TypeOf((*AwsAssumeRoleBuilder)(nil))
-	vdlTypeOptional11 = vdl.TypeOf((*AwsSessionBuilder)(nil))
-	vdlTypeStruct12 = vdl.TypeOf((*S3Ticket)(nil)).Elem()
-	vdlTypeStruct13 = vdl.TypeOf((*EcrTicket)(nil)).Elem()
-	vdlTypeStruct14 = vdl.TypeOf((*SshCert)(nil)).Elem()
-	vdlTypeStruct15 = vdl.TypeOf((*TlsCredentials)(nil)).Elem()
-	vdlTypeStruct16 = vdl.TypeOf((*TlsServerTicket)(nil)).Elem()
-	vdlTypeOptional17 = vdl.TypeOf((*TlsCertAuthorityBuilder)(nil))
-	vdlTypeStruct18 = vdl.TypeOf((*TlsClientTicket)(nil)).Elem()
-	vdlTypeStruct19 = vdl.TypeOf((*DockerTicket)(nil)).Elem()
-	vdlTypeStruct20 = vdl.TypeOf((*DockerServerTicket)(nil)).Elem()
-	vdlTypeStruct21 = vdl.TypeOf((*DockerClientTicket)(nil)).Elem()
-	vdlTypeStruct22 = vdl.TypeOf((*Parameter)(nil)).Elem()
-	vdlTypeStruct23 = vdl.TypeOf((*AwsComputeInstancesBuilder)(nil)).Elem()
-	vdlTypeList24 = vdl.TypeOf((*[]Parameter)(nil))
-	vdlTypeStruct25 = vdl.TypeOf((*ComputeInstance)(nil)).Elem()
-	vdlTypeStruct26 = vdl.TypeOf((*SshCertificateTicket)(nil)).Elem()
-	vdlTypeOptional27 = vdl.TypeOf((*SshCertAuthorityBuilder)(nil))
-	vdlTypeOptional28 = vdl.TypeOf((*AwsComputeInstancesBuilder)(nil))
-	vdlTypeList29 = vdl.TypeOf((*[]ComputeInstance)(nil))
-	vdlTypeStruct30 = vdl.TypeOf((*B2Ticket)(nil)).Elem()
-	vdlTypeOptional31 = vdl.TypeOf((*B2AccountAuthorizationBuilder)(nil))
-	vdlTypeStruct32 = vdl.TypeOf((*VanadiumTicket)(nil)).Elem()
-	vdlTypeOptional33 = vdl.TypeOf((*VanadiumBuilder)(nil))
-	vdlTypeStruct34 = vdl.TypeOf((*GenericTicket)(nil)).Elem()
-	vdlTypeList35 = vdl.TypeOf((*[]byte)(nil))
-	vdlTypeUnion36 = vdl.TypeOf((*Ticket)(nil))
-	vdlTypeStruct37 = vdl.TypeOf((*TicketConfig)(nil)).Elem()
-	vdlTypeMap38 = vdl.TypeOf((*access.Permissions)(nil))
-	vdlTypeStruct39 = vdl.TypeOf((*Config)(nil)).Elem()
-	vdlTypeMap40 = vdl.TypeOf((*map[string]TicketConfig)(nil))
+	vdlTypeEnum1 = vdl.TypeOf((*Control)(nil))
+	vdlTypeStruct2 = vdl.TypeOf((*AwsCredentials)(nil)).Elem()
+	vdlTypeStruct3 = vdl.TypeOf((*AwsAssumeRoleBuilder)(nil)).Elem()
+	vdlTypeStruct4 = vdl.TypeOf((*AwsSessionBuilder)(nil)).Elem()
+	vdlTypeStruct5 = vdl.TypeOf((*TlsCertAuthorityBuilder)(nil)).Elem()
+	vdlTypeList6 = vdl.TypeOf((*[]string)(nil))
+	vdlTypeStruct7 = vdl.TypeOf((*SshCertAuthorityBuilder)(nil)).Elem()
+	vdlTypeStruct8 = vdl.TypeOf((*B2AccountAuthorizationBuilder)(nil)).Elem()
+	vdlTypeStruct9 = vdl.TypeOf((*VanadiumBuilder)(nil)).Elem()
+	vdlTypeStruct10 = vdl.TypeOf((*AwsTicket)(nil)).Elem()
+	vdlTypeOptional11 = vdl.TypeOf((*AwsAssumeRoleBuilder)(nil))
+	vdlTypeOptional12 = vdl.TypeOf((*AwsSessionBuilder)(nil))
+	vdlTypeStruct13 = vdl.TypeOf((*S3Ticket)(nil)).Elem()
+	vdlTypeStruct14 = vdl.TypeOf((*EcrTicket)(nil)).Elem()
+	vdlTypeStruct15 = vdl.TypeOf((*SshCert)(nil)).Elem()
+	vdlTypeStruct16 = vdl.TypeOf((*TlsCredentials)(nil)).Elem()
+	vdlTypeStruct17 = vdl.TypeOf((*TlsServerTicket)(nil)).Elem()
+	vdlTypeOptional18 = vdl.TypeOf((*TlsCertAuthorityBuilder)(nil))
+	vdlTypeStruct19 = vdl.TypeOf((*TlsClientTicket)(nil)).Elem()
+	vdlTypeStruct20 = vdl.TypeOf((*DockerTicket)(nil)).Elem()
+	vdlTypeStruct21 = vdl.TypeOf((*DockerServerTicket)(nil)).Elem()
+	vdlTypeStruct22 = vdl.TypeOf((*DockerClientTicket)(nil)).Elem()
+	vdlTypeStruct23 = vdl.TypeOf((*Parameter)(nil)).Elem()
+	vdlTypeStruct24 = vdl.TypeOf((*AwsComputeInstancesBuilder)(nil)).Elem()
+	vdlTypeList25 = vdl.TypeOf((*[]Parameter)(nil))
+	vdlTypeStruct26 = vdl.TypeOf((*ComputeInstance)(nil)).Elem()
+	vdlTypeStruct27 = vdl.TypeOf((*SshCertificateTicket)(nil)).Elem()
+	vdlTypeOptional28 = vdl.TypeOf((*SshCertAuthorityBuilder)(nil))
+	vdlTypeOptional29 = vdl.TypeOf((*AwsComputeInstancesBuilder)(nil))
+	vdlTypeList30 = vdl.TypeOf((*[]ComputeInstance)(nil))
+	vdlTypeStruct31 = vdl.TypeOf((*B2Ticket)(nil)).Elem()
+	vdlTypeOptional32 = vdl.TypeOf((*B2AccountAuthorizationBuilder)(nil))
+	vdlTypeStruct33 = vdl.TypeOf((*VanadiumTicket)(nil)).Elem()
+	vdlTypeOptional34 = vdl.TypeOf((*VanadiumBuilder)(nil))
+	vdlTypeStruct35 = vdl.TypeOf((*GenericTicket)(nil)).Elem()
+	vdlTypeList36 = vdl.TypeOf((*[]byte)(nil))
+	vdlTypeUnion37 = vdl.TypeOf((*Ticket)(nil))
+	vdlTypeStruct38 = vdl.TypeOf((*TicketConfig)(nil)).Elem()
+	vdlTypeMap39 = vdl.TypeOf((*access.Permissions)(nil))
+	vdlTypeMap40 = vdl.TypeOf((*map[Control]bool)(nil))
+	vdlTypeStruct41 = vdl.TypeOf((*Config)(nil)).Elem()
+	vdlTypeMap42 = vdl.TypeOf((*map[string]TicketConfig)(nil))
 
 	return struct{}{}
 }

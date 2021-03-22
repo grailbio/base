@@ -30,6 +30,7 @@ var (
 	authorityCertFlag string
 	certFlag          string
 	keyFlag           string
+	rationaleFlag     string
 	jsonOnlyFlag      bool
 	listFlag          bool
 )
@@ -64,6 +65,7 @@ Note that tickets can be enumerated using the 'namespace' Vanadium tool:
 	root.Flags.StringVar(&authorityCertFlag, "authority-cert", "", "PEM file to store the CA cert for a TLS-based ticket")
 	root.Flags.StringVar(&certFlag, "cert", "", "PEM file to store the cert for a TLS-based ticket")
 	root.Flags.StringVar(&keyFlag, "key", "", "PEM file to store the private key for a TLS-based ticket")
+	root.Flags.StringVar(&rationaleFlag, "rationale", "", "Rationale for accessing ticket")
 	return root
 }
 
@@ -100,7 +102,15 @@ func run(ctx *context.T, env *cmdline.Env, args []string) error {
 	ctx, cancel := context.WithTimeout(ctx, timeoutFlag)
 	defer cancel()
 
-	t, err := client.Get(ctx)
+	var t ticket.Ticket
+	var err error
+	if rationaleFlag != "" {
+		t, err = client.GetWithArgs(ctx, map[string]string{
+			ticket.ControlRationale.String(): rationaleFlag,
+		})
+	} else {
+		t, err = client.Get(ctx)
+	}
 	if err != nil {
 		return err
 	}

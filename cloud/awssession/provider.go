@@ -38,6 +38,9 @@ type Provider struct {
 	// ExpiryWindow allows triggering a refresh before the AWS credentials
 	// actually expire.
 	ExpiryWindow time.Duration
+
+	// Rationale indicates the reason for accessing a ticket
+	Rationale string
 }
 
 var _ credentials.Provider = (*Provider)(nil)
@@ -52,7 +55,13 @@ func (p *Provider) Retrieve() (credentials.Value, error) {
 		defer cancel()
 	}
 	var err error
-	p.Ticket, err = ticket.TicketServiceClient(p.TicketPath).Get(ctx)
+	if p.Rationale != "" {
+		p.Ticket, err = ticket.TicketServiceClient(p.TicketPath).GetWithArgs(ctx, map[string]string{
+			ticket.ControlRationale.String(): p.Rationale,
+		})
+	} else {
+		p.Ticket, err = ticket.TicketServiceClient(p.TicketPath).Get(ctx)
+	}
 	if err != nil {
 		return credentials.Value{}, err
 	}

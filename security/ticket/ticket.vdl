@@ -2,6 +2,13 @@ package ticket
 
 import "v.io/v23/security/access"
 
+// TicketConfig Controls fields
+type Control enum {
+    PagerDutyId
+    Rationale
+    TicketId
+}
+
 // AwsCredentials describes a set of (potentially temporary) AWS credentials.
 type AwsCredentials struct {
     Region string
@@ -284,6 +291,7 @@ type Ticket union {
 type TicketConfig struct {
     Ticket Ticket
     Permissions access.Permissions
+    Controls map[Control]bool
 }
 
 type Config struct {
@@ -305,6 +313,7 @@ type TicketService interface {
     SetPermissions(perms access.Permissions, version string) error {access.Admin}
     Get() (Ticket | error) {access.Read}
     GetWithParameters(parameters []Parameter) (Ticket | error) {access.Read}
+    GetWithArgs(args map[string]string) (Ticket | error) {access.Read}
 }
 
 type ListService interface {

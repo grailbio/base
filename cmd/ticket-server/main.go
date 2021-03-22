@@ -253,6 +253,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 				ticket:     v.Ticket,
 				perms:      v.Perms,
 				awsSession: awsSession,
+				controls:   v.Controls,
 			}),
 			auth: auth,
 		}
