@@ -158,6 +158,13 @@ func testWrapperHelper(i int) (int, error) {
 	return 9999, nil
 }
 
+func testWrapperHelperLong(i int) (int, int, error) {
+	if i == 0 {
+		return 0, 0, fmt.Errorf("This is an Error")
+	}
+	return 1, 2, nil
+}
+
 func TestWaitForFn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	policy := Backoff(time.Hour, time.Hour, 1)
@@ -177,4 +184,18 @@ func TestWaitForFn(t *testing.T) {
 	}()
 	WaitForFn(ctx, policy, testWrapperHelper, 1, 2, 3)
 	require.EqualError(t, err, "wrong number of input, expected: 1, actual: 3")
+}
+
+func TestWaitForFnLong(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	policy := Backoff(time.Hour, time.Hour, 1)
+	cancel()
+
+	output := WaitForFn(ctx, policy, testWrapperHelperLong, 0)
+	require.EqualError(t, output[2].Interface().(error), "This is an Error")
+
+	output = WaitForFn(ctx, policy, testWrapperHelperLong, 55)
+	require.Equal(t, 1, int(output[0].Int()))
+	require.Equal(t, 2, int(output[1].Int()))
+
 }

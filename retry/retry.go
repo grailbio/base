@@ -62,7 +62,7 @@ func WaitForFn(ctx context.Context, policy Policy, fn interface{}, params ...int
 	for true {
 
 		out = f.Call(inputs)
-		if out[1].IsNil() {
+		if out[len(out)-1].IsNil() {
 			break
 		}
 		if retryErr := Wait(ctx, policy, retries); retryErr != nil {
