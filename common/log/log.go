@@ -95,6 +95,7 @@ func WarnNoCtx(msg string, keysAndValues ...interface{}) {
 // Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
+// Returns an error that can be optionally ignored.
 func Error(ctx context.Context, msg string, keysAndValues ...interface{}) error {
 	return Errorv(ctx, 1, msg, keysAndValues...)
 }
@@ -102,6 +103,7 @@ func Error(ctx context.Context, msg string, keysAndValues ...interface{}) error 
 // Errorf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
+// Returns an error that can be optionally ignored.
 func Errorf(ctx context.Context, fs string, args ...interface{}) error {
 	return Errorv(ctx, 1, fmt.Sprintf(fs, args...))
 }
@@ -110,12 +112,14 @@ func Errorf(ctx context.Context, fs string, args ...interface{}) error {
 // Caller is skipped by skip.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
+// Returns an error that can be optionally ignored.
 func Errorv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) error {
 	logger.Errorv(ctx, skip+1, msg, keysAndValues...)
 	return errors.New(msg)
 }
 
 // ErrorNoCtx logs a message and variadic key-value pairs.
+// Returns an error that can be optionally ignored.
 func ErrorNoCtx(msg string, keysAndValues ...interface{}) error {
 	// context.Background() is a singleton and gets initialized once
 	return Errorv(context.Background(), 1, msg, keysAndValues...)
