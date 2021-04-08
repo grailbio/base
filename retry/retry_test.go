@@ -199,3 +199,40 @@ func TestWaitForFnLong(t *testing.T) {
 	require.Equal(t, 2, int(output[1].Int()))
 
 }
+
+func TestMaxRetries(t *testing.T) {
+	retryImmediately := Backoff(0, 0, 0)
+
+	type testArgs struct {
+		retryPolicy Policy
+		fn          func(*int) error
+	}
+	testCases := []struct {
+		testName string
+		args     testArgs
+		expected int
+	}{
+		{
+			testName: "function always fails",
+			args: testArgs{
+				retryPolicy: MaxRetries(retryImmediately, 1),
+				fn: func(callCount *int) error {
+					*callCount++
+
+					return fmt.Errorf("always fail")
+				},
+			},
+			expected: 2,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			callCount := 0
+
+			WaitForFn(context.Background(), tc.args.retryPolicy, tc.args.fn, &callCount)
+
+			require.Equal(t, tc.expected, callCount)
+		})
+	}
+}

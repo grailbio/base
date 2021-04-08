@@ -58,17 +58,15 @@ func WaitForFn(ctx context.Context, policy Policy, fn interface{}, params ...int
 		inputs[i] = reflect.ValueOf(in)
 	}
 
-	var retries = 0
-	for true {
-
+	// will break out of loop if function doesn't error
+	for retries := 0; ; retries++ {
 		out = f.Call(inputs)
-		if out[len(out)-1].IsNil() {
+		if out[len(out)-1].IsNil() { // assumes last output value of function is an error object
 			break
 		}
 		if retryErr := Wait(ctx, policy, retries); retryErr != nil {
 			return out
 		}
-		retries++
 	}
 
 	return out
@@ -119,7 +117,7 @@ func (b *backoff) Retry(retries int) (bool, time.Duration) {
 // After the max duration, the Policy will timeout and return an error.
 func BackoffWithTimeout(initial, max time.Duration, factor float64) Policy {
 	n := int(math.Floor(math.Log(float64(max/initial))/math.Log(factor))) + 1
-	return MaxTries(Backoff(initial, max, factor), n)
+	return MaxRetries(Backoff(initial, max, factor), n)
 }
 
 type jitter struct {
@@ -153,14 +151,14 @@ type maxtries struct {
 	max    int
 }
 
-// MaxTries returns a policy that enforces a maximum number of
+// MaxRetries returns a policy that enforces a maximum number of
 // attempts. The provided policy is invoked when the current number
 // of tries is within the permissible limit. If policy is nil, the
 // returned policy will permit an immediate retry when the number of
 // tries is within the allowable limits.
-func MaxTries(policy Policy, n int) Policy {
+func MaxRetries(policy Policy, n int) Policy {
 	if n < 1 {
-		panic("retry.MaxTries: n < 1")
+		panic("retry.MaxRetries: n < 1")
 	}
 	return &maxtries{policy, n - 1}
 }

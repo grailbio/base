@@ -228,7 +228,7 @@ func TestRetry(t *testing.T) {
 	const (
 		N = 1000
 	)
-	c := ControllerWithRetry(200, 1000, retry.MaxTries(retry.Backoff(100*time.Millisecond, time.Minute, 1.5), 5))
+	c := ControllerWithRetry(200, 1000, retry.MaxRetries(retry.Backoff(100*time.Millisecond, time.Minute, 1.5), 5))
 	var begin sync.WaitGroup
 	begin.Add(N)
 	err := traverse.Each(N, func(i int) error {
