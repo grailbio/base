@@ -61,18 +61,34 @@ type Config struct {
 	Level zapcore.Level
 }
 
+func setDefaultLogLevelsMap(logger *Logger) *Logger {
+	logger.levelToLogger = map[zapcore.Level]func(msg string, keysAndValues ...interface{}){
+		DebugLevel: logger.coreLogger.Debugw,
+		InfoLevel:  logger.coreLogger.Infow,
+		WarnLevel:  logger.coreLogger.Warnw,
+		ErrorLevel: logger.coreLogger.Errorw,
+	}
+	return logger
+}
+
 func NewLogger(config Config) *Logger {
 	l := Logger{
 		coreLogger: mustBuildLogger(config, zap.AddCallerSkip(2)),
 		now:        time.Now,
 	}
-	l.levelToLogger = map[zapcore.Level]func(msg string, keysAndValues ...interface{}){
-		DebugLevel: l.coreLogger.Debugw,
-		InfoLevel:  l.coreLogger.Infow,
-		WarnLevel:  l.coreLogger.Warnw,
-		ErrorLevel: l.coreLogger.Errorw,
+
+	return setDefaultLogLevelsMap(&l)
+}
+
+// NewLoggerFromCore allows the caller to pass in a zap.SugaredLogger into the logger.
+// This allows one to make unit test assertions about logs.
+func NewLoggerFromCore(lager *zap.SugaredLogger) *Logger {
+	l := Logger{
+		coreLogger: lager,
+		now:        time.Now,
 	}
-	return &l
+
+	return setDefaultLogLevelsMap(&l)
 }
 
 func (l *Logger) log(ctx context.Context, level zapcore.Level, callerSkip int, msg string, keysAndValues []interface{}) {

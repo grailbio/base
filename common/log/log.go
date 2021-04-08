@@ -3,6 +3,8 @@ package log
 import (
 	"context"
 	"fmt"
+
+	"go.uber.org/zap"
 )
 
 var logger = NewLogger(Config{Level: DebugLevel})
@@ -150,4 +152,8 @@ func ErrorvAndReturn(ctx context.Context, skip int, msg string, keysAndValues ..
 func ErrorNoCtxAndReturn(msg string, keysAndValues ...interface{}) string {
 	// context.Background() is a singleton and gets initialized once
 	return ErrorvAndReturn(context.Background(), 1, msg, keysAndValues...)
+}
+
+func InjectTestLogger(testLogger *zap.SugaredLogger) {
+	logger = NewLoggerFromCore(testLogger)
 }
