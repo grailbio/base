@@ -93,6 +93,34 @@ func WarnNoCtx(msg string, keysAndValues ...interface{}) {
 	Warnv(context.Background(), 1, msg, keysAndValues...)
 }
 
+// Fatal logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func Fatal(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	Fatalv(ctx, 1, msg, keysAndValues...)
+}
+
+// Fatalf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func Fatalf(ctx context.Context, fs string, args ...interface{}) {
+	Fatalv(ctx, 1, fmt.Sprintf(fs, args...))
+}
+
+// Fatalv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// Caller is skipped by skip.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func Fatalv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
+	logger.Fatalv(ctx, skip+1, msg, keysAndValues...)
+}
+
+// FatalNoCtx logs a message and variadic key-value pairs.
+func FatalNoCtx(msg string, keysAndValues ...interface{}) {
+	// context.Background() is a singleton and gets initialized once
+	Fatalv(context.Background(), 1, msg, keysAndValues...)
+}
+
 // Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.

@@ -25,6 +25,8 @@ const (
 	// ErrorLevel logs are high-priority.
 	// Applications running smoothly shouldn't generate any error-level logs.
 	ErrorLevel = zapcore.ErrorLevel
+	// FatalLevel logs a message, then calls os.Exit(1).
+	FatalLevel = zapcore.FatalLevel
 	// RFC3339TrailingNano is RFC3339 format with trailing nanoseconds precision.
 	RFC3339TrailingNano = "2006-01-02T15:04:05.000000000Z07:00"
 	// LOG_LEVEL_ENV_VAR is the environment variable name used to set logging level.
@@ -47,6 +49,8 @@ var logLvls = map[string]zapcore.Level{
 	"WARN":  WarnLevel,
 	"error": ErrorLevel,
 	"ERROR": ErrorLevel,
+	"fatal": FatalLevel,
+	"FATAL": FatalLevel,
 }
 
 type Logger struct {
@@ -67,6 +71,7 @@ func setDefaultLogLevelsMap(logger *Logger) *Logger {
 		InfoLevel:  logger.coreLogger.Infow,
 		WarnLevel:  logger.coreLogger.Warnw,
 		ErrorLevel: logger.coreLogger.Errorw,
+		FatalLevel: logger.coreLogger.Fatalw,
 	}
 	return logger
 }
@@ -197,6 +202,33 @@ func (l *Logger) Warnv(ctx context.Context, skip int, msg string, keysAndValues 
 // WarnNoCtx logs a message and variadic key-value pairs.
 func (l *Logger) WarnNoCtx(msg string, keysAndValues ...interface{}) {
 	l.Warnv(context.Background(), 1, msg, keysAndValues...)
+}
+
+// Fatal logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func (l *Logger) Fatal(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	l.Fatalv(ctx, 1, msg, keysAndValues...)
+}
+
+// Fatalf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func (l *Logger) Fatalf(ctx context.Context, fs string, args ...interface{}) {
+	l.Fatalv(ctx, 1, fmt.Sprintf(fs, args...))
+}
+
+// Fatalv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// Caller stack field is skipped by skip levels.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+func (l *Logger) Fatalv(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) {
+	l.log(ctx, FatalLevel, skip, msg, keysAndValues)
+}
+
+// FatalNoCtx logs a message and variadic key-value pairs.
+func (l *Logger) FatalNoCtx(msg string, keysAndValues ...interface{}) {
+	l.Fatalv(context.Background(), 1, msg, keysAndValues...)
 }
 
 // Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
