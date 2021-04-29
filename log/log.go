@@ -144,6 +144,12 @@ func Printf(format string, v ...interface{}) {
 	}
 }
 
+// Errorf formats a message in the manner of fmt.Sprintf
+// and outputs it at the Info level to the current outputter.
+func Errorf(format string, v ...interface{}) {
+	out.Output(2, Error, fmt.Sprintf(format, v...))
+}
+
 // Fatal formats a message in the manner of fmt.Sprint, outputs it at
 // the error level to the current outputter and then calls
 // os.Exit(1).
