@@ -75,26 +75,29 @@ const (
 	// the machinery to execute the RPC, e.g. network issues, machine health,
 	// etc.
 	Remote
+	// ResourcesExhausted indicates that there were insufficient resources.
+	ResourcesExhausted
 
 	maxKind
 )
 
 var kinds = map[Kind]string{
-	Other:        "unknown error",
-	Canceled:     "operation was canceled",
-	Timeout:      "operation timed out",
-	NotExist:     "resource does not exist",
-	NotAllowed:   "access denied",
-	NotSupported: "operation not supported",
-	Exists:       "resource already exists",
-	Integrity:    "integrity error",
-	Unavailable:  "resource unavailable",
-	Invalid:      "invalid argument",
-	Net:          "network error",
-	TooManyTries: "too many tries",
-	Precondition: "precondition failed",
-	OOM:          "out of memory",
-	Remote:       "remote error",
+	Other:              "unknown error",
+	Canceled:           "operation was canceled",
+	Timeout:            "operation timed out",
+	NotExist:           "resource does not exist",
+	NotAllowed:         "access denied",
+	NotSupported:       "operation not supported",
+	Exists:             "resource already exists",
+	Integrity:          "integrity error",
+	Unavailable:        "resource unavailable",
+	Invalid:            "invalid argument",
+	Net:                "network error",
+	TooManyTries:       "too many tries",
+	Precondition:       "precondition failed",
+	OOM:                "out of memory",
+	Remote:             "remote error",
+	ResourcesExhausted: "resources exhausted",
 }
 
 // String returns a human-readable explanation of the error kind k.
