@@ -55,6 +55,7 @@ var logLvls = map[string]zapcore.Level{
 
 type Logger struct {
 	coreLogger    *zap.SugaredLogger
+	defaultFields []interface{}
 	levelToLogger map[zapcore.Level]func(msg string, keysAndValues ...interface{})
 	now           func() time.Time
 }
@@ -77,9 +78,16 @@ func setDefaultLogLevelsMap(logger *Logger) *Logger {
 }
 
 func NewLogger(config Config) *Logger {
+	return NewLoggerWithDefaultFields(config, []interface{}{})
+}
+
+// NewLogger creates a new logger instance.
+// defaultFields is a list of key-value pairs to be included in every log message.
+func NewLoggerWithDefaultFields(config Config, defaultFields []interface{}) *Logger {
 	l := Logger{
-		coreLogger: mustBuildLogger(config, zap.AddCallerSkip(2)),
-		now:        time.Now,
+		coreLogger:    mustBuildLogger(config, zap.AddCallerSkip(2)),
+		defaultFields: defaultFields,
+		now:           time.Now,
 	}
 
 	return setDefaultLogLevelsMap(&l)
@@ -98,6 +106,8 @@ func NewLoggerFromCore(lager *zap.SugaredLogger) *Logger {
 
 func (l *Logger) log(ctx context.Context, level zapcore.Level, callerSkip int, msg string, keysAndValues []interface{}) {
 	t := l.now()
+	// Add default fields
+	keysAndValues = append(keysAndValues, l.defaultFields...)
 	// If there is a dangling key (i.e. odd length keysAndValues), log an error and then
 	// drop the dangling key and log original message.
 	if len(keysAndValues)%2 != 0 {

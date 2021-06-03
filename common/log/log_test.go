@@ -347,3 +347,17 @@ func Example_envVarLogLevel() {
 	// {"level":"warn","msg":"Hello, world!","caller":"log_test.go:345","ts":"2000-01-01T00:00:00.000000000Z","requestID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
 	os.Setenv(LOG_LEVEL_ENV_VAR, old)
 }
+
+func Example_defaultFields() {
+	setup()
+	logger = NewLoggerWithDefaultFields(Config{
+		OutputPaths: []string{"stdout"},
+		Level:       InfoLevel,
+	}, []interface{}{"foo", "bar"})
+	logger.now = func() time.Time {
+		return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+	logger.Info(ctx, "Hello, world!")
+	// Output:
+	// {"level":"info","msg":"Hello, world!","caller":"log_test.go:360","ts":"2000-01-01T00:00:00.000000000Z","requestID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","foo":"bar"}
+}
