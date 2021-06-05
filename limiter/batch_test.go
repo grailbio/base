@@ -108,25 +108,36 @@ func TestCtxCanceled(t *testing.T) {
 }
 
 func TestSometimesDedup(t *testing.T) {
+	const num = 5
 	a := &testBatchApi{idSeenCount: make(map[string]int)}
-	l := NewBatchLimiter(a, rate.NewLimiter(rate.Every(10*time.Millisecond), 1))
+	l := NewBatchLimiter(a, rate.NewLimiter(rate.Every(10*time.Millisecond), num))
 	id := "test"
 	a.mu.Lock() // Locks the batch API.
-	var started, done sync.WaitGroup
-	started.Add(5)
-	done.Add(5)
-	for i := 0; i < 5; i++ {
+	var done sync.WaitGroup
+	done.Add(num)
+	for i := 0; i < num; i++ {
 		go func() {
-			started.Done()
+			defer done.Done()
 			_, _ = l.Do(context.Background(), id)
-			done.Done()
 		}()
 	}
-	started.Wait() // Wait for all the goroutines on the same ID to start
-	a.mu.Unlock()  // Unlock the batch API.
-	done.Wait()    // Wait for all the goroutines on the same ID to complete
-	if got, want := a.idSeenCount[id], 2; got > want {
-		t.Errorf("got %d, want <=%d", got, want)
+	var allWaiting bool
+	for !allWaiting {
+		l.mu.Lock()
+		r := l.results[id]
+		l.mu.Unlock()
+		if r == nil {
+			time.Sleep(time.Millisecond)
+			continue
+		}
+		r.mu.Lock()
+		allWaiting = r.nWaiters == num
+		r.mu.Unlock()
+	}
+	a.mu.Unlock() // Unlock the batch API.
+	done.Wait()   // Wait for all the goroutines on the same ID to complete
+	if got, want := a.idSeenCount[id], 1; got != want {
+		t.Errorf("got %d, want %d", got, want)
 	}
 }
 

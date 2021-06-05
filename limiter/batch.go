@@ -107,12 +107,11 @@ func (l *BatchLimiter) Do(ctx context.Context, id ID) (interface{}, error) {
 		}
 		if l.limiter.Allow() {
 			m := l.claim()
-			if len(m) == 0 {
-				panic(fmt.Sprintf("Do(%v): this is a bug - no ids for batch call", id))
+			if len(m) > 0 {
+				l.api.Do(m)
+				l.update(m)
+				continue
 			}
-			l.api.Do(m)
-			l.update(m)
-			continue
 		}
 		// Wait half the interval to increase chances of making the next call as early as possible.
 		d := l.wait / 2
