@@ -207,7 +207,7 @@ func (a *authorizer) Authorize(ctx *v23context.T, call security.Call) error {
 		if tag.Type() == a.tagType {
 			if acl, exists := a.perms[tag.RawString()]; !exists || !a.aclIncludes(ctx, acl, blessings,
 				call.LocalBlessings().String()) {
-				return access.NewErrNoPermissions(ctx, blessings, invalid, tag.RawString())
+				return access.ErrorfNoPermissions(ctx, "%v %v %v", blessings, invalid, tag.RawString())
 			}
 		}
 	}
