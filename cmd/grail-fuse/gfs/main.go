@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -16,7 +15,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-const daemonEnv = "_GFS_SLAVE"
+const daemonEnv = "_GFS_DAEMON"
 
 func logSuffix() string {
 	return time.Now().Format(time.RFC3339) + ".log"
@@ -56,18 +55,12 @@ func Main(ctx context.Context, remoteRootDir, mountDir string, daemon bool, tmpD
 		MountOptions: fuse.MountOptions{
 			FsName:        "grail",
 			DisableXAttrs: true,
-			Debug:         log.At(log.Debug)}})
+			Debug:         log.At(log.Debug),
+		},
+	})
 	if err != nil {
 		log.Panicf("mount %s: %v", mountDir, err)
 	}
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGHUP)
-	go func() {
-		for _ = range sigCh {
-			log.Print("Received HUP signal")
-			newEpoch()
-		}
-	}()
 	server.Wait()
 }
 
@@ -121,5 +114,5 @@ func NewRoot(ctx context.Context, remoteRootDir, tmpDir string) fs.InodeEmbedder
 		Name: "/",
 		Ino:  getIno(""),
 		Mode: getModeBits(true)}
-	return &rootInode{inode: inode{path: remoteRootDir, ent: ent, parentEnt: ent}, ctx: ctx, tmpDir: tmpDir}
+	return &rootInode{inode: inode{path: remoteRootDir, ent: ent}, ctx: ctx, tmpDir: tmpDir}
 }

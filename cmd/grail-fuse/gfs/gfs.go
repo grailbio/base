@@ -30,21 +30,20 @@ type inode struct {
 	path string
 	// dir entry as stored in the parent directory.
 	ent fuse.DirEntry
-	// dir entry of the parent directory. Used to produce
-	// the fake ".." entry.
-	parentEnt fuse.DirEntry
 
 	mu   sync.Mutex // guards the following fields.
-	stat cachedStat
-	// Directory entries. Used only when this inode is a directory.
-	dirCache *dirCache
+	stat cachedStat // TODO: Remove this since we're now using kernel caching.
 }
+
+// Amount of time to cache directory entries and file stats (size, mtime).
+const cacheExpiration = 5 * time.Minute
 
 // RootInode is a singleton inode created for the root mount point.
 type rootInode struct {
 	inode
 	// The context to be used for all file operations. It's vcontext.Background()
 	// in Grail environments.
+	// TODO(josh): Consider removing and using operation-specific contexts instead (like readdir).
 	ctx context.Context
 	// Directory for storing tmp files.
 	tmpDir string
@@ -54,9 +53,6 @@ type rootInode struct {
 type handle struct {
 	// The file that the handle belongs to
 	inode *inode
-	// The parent of this file. dirInode.dirCache is updated if the handle is
-	// opened for writing and it is closed successfully.
-	dirInode *inode
 	// Open mode bits. O_WRONLY, etc.
 	openMode uint32
 	// Size passed to Setattr, if any. -1 if not set.
@@ -73,8 +69,8 @@ type handle struct {
 }
 
 // openMode is a bitmap of O_RDONLY, O_APPEND, etc.
-func newHandle(inode, dirInode *inode, openMode uint32) *handle {
-	return &handle{inode: inode, dirInode: dirInode, openMode: openMode, requestedSize: -1}
+func newHandle(inode *inode, openMode uint32) *handle {
+	return &handle{inode: inode, openMode: openMode, requestedSize: -1}
 }
 
 // DirectWrite is part of open file handle. It uploads data directly to the remote
@@ -105,21 +101,9 @@ type tmpIO struct {
 // CachedStat is stored in inode and a directory entry to provide quick access
 // to basic stats.
 type cachedStat struct {
-	expiration timestamp
+	expiration time.Time
 	size       int64
 	modTime    time.Time
-}
-
-type dirEntry struct {
-	fuse.DirEntry
-	stat cachedStat
-}
-
-// DirCache caches the whole contents of a directory.
-type dirCache struct {
-	expiration timestamp
-	ents       []*dirEntry          // preserves the order of file.List()
-	entMap     map[string]*dirEntry // maps filename -> element in ent[]
 }
 
 func downCast(n *fs.Inode) *inode {
@@ -147,40 +131,6 @@ var _ = (fs.FileWriter)((*handle)(nil))
 var _ = (fs.FileFlusher)((*handle)(nil))
 var _ = (fs.FileReleaser)((*handle)(nil))
 var _ = (fs.FileFsyncer)((*handle)(nil))
-
-// Remove an entry from the cache. Called on unlink.
-//
-// REQUIRES: inode.mu is locked.
-func (c *dirCache) remove(name string) {
-	old := c.entMap[name]
-	if old == nil {
-		return
-	}
-	for i := range c.ents {
-		if c.ents[i] == old {
-			n := len(c.ents)
-			c.ents[i], c.ents[n-1] = c.ents[n-1], nil
-			c.ents = c.ents[:n-1]
-			delete(c.entMap, name)
-			return
-		}
-	}
-	log.Panicf("entry %v not found", name)
-}
-
-// Update adds or updates an entry. Called on create.
-//
-// REQUIRES: inode.mu is locked.
-func (c *dirCache) update(e fuse.DirEntry, stat cachedStat) {
-	if e.Ino == 0 || e.Name == "" || e.Mode == 0 {
-		panic(e)
-	}
-	c.remove(e.Name)
-	ent := &dirEntry{DirEntry: e, stat: stat}
-	c.ents = append(c.ents, ent)
-	c.entMap[e.Name] = ent
-	log.Debug.Printf("dircache update: %+v stat %+v", e, ent.stat)
-}
 
 func newAttr(ino uint64, mode uint32, size uint64, optionalMtime time.Time) (attr fuse.Attr) {
 	const blockSize = 1 << 20
@@ -233,7 +183,7 @@ func errToErrno(err error) syscall.Errno {
 	case errors.Is(errors.Timeout, err):
 		return syscall.ETIMEDOUT
 	case errors.Is(errors.Canceled, err):
-		return syscall.ECANCELED
+		return syscall.EINTR
 	case errors.Is(errors.NotExist, err):
 		return syscall.ENOENT
 	case errors.Is(errors.Exists, err):
@@ -254,60 +204,6 @@ func errToErrno(err error) syscall.Errno {
 	}
 	return fs.ToErrno(err)
 }
-
-// FsDirStream implements readdir.
-type fsDirStream struct {
-	dir *inode
-	err error
-	// the next entry to return. Indexes dir.dirCache.  next can be -1 or -2. -1
-	// stands for ".", -2 for "..".
-	next int
-}
-
-var _ = (fs.DirStream)((*fsDirStream)(nil))
-
-// HasNext implements fs.DirStream
-func (s *fsDirStream) HasNext() bool {
-	s.dir.mu.Lock()
-	defer s.dir.mu.Unlock()
-	if s.err != nil {
-		return false
-	}
-	dirCache, err := s.dir.listDirLocked()
-	if err != nil {
-		s.err = err
-		return false
-	}
-	return s.next < len(dirCache.ents)
-}
-
-// Next implements fs.DirStream
-func (s *fsDirStream) Next() (fuse.DirEntry, syscall.Errno) {
-	s.dir.mu.Lock()
-	defer s.dir.mu.Unlock()
-
-	if s.err != nil {
-		return fuse.DirEntry{}, errToErrno(s.err)
-	}
-	seq := s.next
-	s.next++
-
-	if seq == -2 {
-		ent := s.dir.parentEnt
-		ent.Name = ".."
-		return ent, 0
-	}
-	if seq == -1 {
-		ent := s.dir.ent
-		ent.Name = "."
-		return ent, 0
-	}
-	ent := s.dir.dirCache.ents[seq]
-	return ent.DirEntry, 0
-}
-
-// Close implements fs.DirStream
-func (s *fsDirStream) Close() {}
 
 // Root reports the inode of the root mountpoint.
 func (n *inode) root() *rootInode { return n.Root().Operations().(*rootInode) }
@@ -415,7 +311,7 @@ func (n *inode) Getattr(_ context.Context, fhi fs.FileHandle, out *fuse.AttrOut)
 		}
 		// fall through
 	}
-	now := now()
+	now := time.Now()
 	log.Debug.Printf("getattr %s: cached stats %+v now %+v", n.path, n.stat, now)
 	if now.After(n.stat.expiration) {
 		log.Debug.Printf("getattr %s: reading stats", n.path)
@@ -449,7 +345,7 @@ func (fh *handle) maybeInitIO() error {
 		// Readonly handle should have fh.direct set at the time of Open.
 		log.Panicf("open %s: uninitialized readonly handle", n.path)
 	}
-	if fh.inode == nil || fh.dirInode == nil {
+	if fh.inode == nil {
 		log.Panicf("open %s: nil inode: %+v", n.path, fh)
 	}
 	ctx := n.ctx()
@@ -490,10 +386,10 @@ func (fh *handle) maybeInitIO() error {
 		_ = tmp.Close()
 		return errToErrno(err)
 	}
-	now := now()
+	now := time.Now()
 	n.stat.expiration = now.Add(cacheExpiration)
 	n.stat.size = inSize
-	n.stat.modTime = now.time
+	n.stat.modTime = now
 	fh.tmp = &tmpIO{
 		fp: tmp,
 	}
@@ -610,28 +506,16 @@ func (fh *handle) Write(_ context.Context, dest []byte, off int64) (uint32, sysc
 func (fh *handle) Fsync(_ context.Context, _ uint32) syscall.Errno {
 	n := fh.inode
 	n.mu.Lock()
+	defer n.mu.Unlock()
 	if d := fh.dw; d != nil {
 		n := fh.inode
 		// There's not much we can do, but returning ENOSYS breaks too many apps.
-		now := now()
+		now := time.Now()
 		n.stat.expiration = now.Add(cacheExpiration)
 		n.stat.size = d.off
-		n.stat.modTime = now.time
-
-		stat := n.stat
-		dirInode := fh.dirInode
+		n.stat.modTime = now
 		log.Debug.Printf("fsync %s: update stats: stat=%v", n.path, n.stat)
-		n.mu.Unlock()
-
-		dirInode.mu.Lock()
-		if dirInode.dirCache != nil {
-			log.Debug.Printf("dircache update %s: %v %v", dirInode.path, n.ent, stat)
-			dirInode.dirCache.update(n.ent, stat)
-		}
-		defer dirInode.mu.Unlock()
-		return 0
 	}
-	n.mu.Unlock()
 	return 0
 }
 
@@ -725,23 +609,14 @@ func (fh *handle) Flush(_ context.Context) syscall.Errno {
 			return fh.closeErrno
 		}
 
-		now := now()
+		now := time.Now()
 		n.stat.expiration = now.Add(cacheExpiration)
 		n.stat.size = nByte
-		n.stat.modTime = now.time
+		n.stat.modTime = now
 
-		stat := n.stat
-		dirInode := fh.dirInode
 		closeErrno := fh.closeErrno
 		mu.Unlock()
 		mu = nil
-		if dirInode != nil && closeErrno == 0 {
-			dirInode.mu.Lock()
-			defer dirInode.mu.Unlock()
-			if dirInode.dirCache != nil {
-				dirInode.dirCache.update(n.ent, stat)
-			}
-		}
 		return closeErrno
 	}
 
@@ -761,25 +636,16 @@ func (fh *handle) Flush(_ context.Context) syscall.Errno {
 		fh.closeErrno = errToErrno(err)
 		log.Debug.Printf("flush %s fh=%p, err=%v", n.path, fh, err)
 		if d.w != nil {
-			now := now()
+			now := time.Now()
 			n.stat.expiration = now.Add(cacheExpiration)
 			n.stat.size = d.off
-			n.stat.modTime = now.time
+			n.stat.modTime = now
 		}
 		d.fp = nil
 		d.w = nil
-		stat := n.stat
-		dirInode := fh.dirInode
 		closeErrno := fh.closeErrno
 		mu.Unlock()
 		mu = nil
-		if dirInode != nil && closeErrno == 0 {
-			dirInode.mu.Lock()
-			defer dirInode.mu.Unlock()
-			if dirInode.dirCache != nil {
-				dirInode.dirCache.update(n.ent, stat)
-			}
-		}
 		return closeErrno
 	}
 	n.mu.Lock()
@@ -798,8 +664,7 @@ func (n *inode) Create(ctx context.Context, name string, flags uint32, mode uint
 	out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
 	newPath := file.Join(n.path, name)
 	childNode := &inode{
-		path:      newPath,
-		parentEnt: n.ent,
+		path: newPath,
 		ent: fuse.DirEntry{
 			Name: name,
 			Ino:  getIno(newPath),
@@ -808,7 +673,7 @@ func (n *inode) Create(ctx context.Context, name string, flags uint32, mode uint
 		Mode: childNode.ent.Mode,
 		Ino:  childNode.ent.Ino,
 	})
-	fh := newHandle(childNode, n, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC)
+	fh := newHandle(childNode, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC)
 	fh.requestedSize = 0
 	log.Debug.Printf("create %s: (mode %x)", n.path, mode)
 	out.Attr = newAttr(n.ent.Ino, n.ent.Mode, 0, time.Time{})
@@ -835,134 +700,204 @@ func (n *inode) Open(_ context.Context, mode uint32) (fs.FileHandle, uint32, sys
 			log.Error.Printf("open %s (mode %x): %v", n.path, mode, err)
 			return nil, 0, errToErrno(err)
 		}
-		fh := newHandle(n, nil, mode)
+		fh := newHandle(n, mode)
 		fh.dr = &directRead{fp: fp, r: fp.Reader(ctx)}
 		log.Debug.Printf("open %s: mode %x, fh %p", n.path, mode, fh)
 		return fh, 0, 0
 	}
 
-	fh := newHandle(n, downCast(dirInode), mode)
+	fh := newHandle(n, mode)
 	return fh, 0, 0
 }
 
-// listDirLocked reports the contents of a directory.
-//
-// REQUIRES: n.IsDir() && n.mu is locked
-func (n *inode) listDirLocked() (*dirCache, error) {
-	now := now()
-	if n.dirCache != nil && !now.After(n.dirCache.expiration) {
-		return n.dirCache, nil
-	}
-	log.Debug.Printf("listdir %s: start", n.path)
+// FsDirStream implements readdir.
+type fsDirStream struct {
+	ctx    context.Context
+	dir    *inode
+	lister file.Lister
+	err    error
 
-	lister := file.List(n.ctx(), n.path, false /*nonrecursive*/)
-	var (
-		dirNames = map[string]struct{}{}
-		ents     []*dirEntry
-	)
-	for lister.Scan() {
-		fileName := getFileName(n, lister.Path())
-		if fileName == "" {
-			// Assume this is a directory marker:
-			// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
-			// s3file's List returns these, but empty filenames seem to cause problems for FUSE.
-			// TODO: Filtering these in s3file, if it's ok for other users.
-			continue
-		}
-		ent := &dirEntry{
-			DirEntry: fuse.DirEntry{
-				Name: fileName,
-				Mode: getModeBits(lister.IsDir()),
-				Ino:  getIno(lister.Path())},
-		}
-		if info := lister.Info(); info != nil {
-			ent.stat.expiration = now.Add(cacheExpiration)
-			ent.stat.size = info.Size()
-			ent.stat.modTime = info.ModTime()
-		}
-		if lister.IsDir() {
-			dirNames[fileName] = struct{}{}
-		}
-		ents = append(ents, ent)
-	}
-	if err := lister.Err(); err != nil {
-		return nil, err
-	}
-	// Clear the existing contents
-	if n.dirCache == nil {
-		n.dirCache = &dirCache{entMap: map[string]*dirEntry{}}
-	} else {
-		for filename := range n.dirCache.entMap {
-			delete(n.dirCache.entMap, filename)
-		}
-		n.dirCache.ents = n.dirCache.ents[:0]
-	}
-	// Add the contents to n.dirCache
-	n.dirCache.expiration = now.Add(cacheExpiration)
-	for _, ent := range ents {
-		add := false
-		if ent.Mode&syscall.S_IFDIR != 0 { // directory names are always unique
-			add = true
-		} else if _, ok := dirNames[ent.Name]; !ok {
-			// For a regular file, we report only if there's no directory with the
-			// same name. S3 doesn't prevent such situation from happening. In
-			// particular, the "Make folder" feature in web console creates a
-			// duplicate regular file.
-			add = true
-		}
-		if add {
-			n.dirCache.ents = append(n.dirCache.ents, ent)
-			n.dirCache.entMap[ent.Name] = ent
-		}
-	}
-	return n.dirCache, nil
+	// plus* serve the Plus() call following a Next().
+	plusEnt  fuse.DirEntry
+	plusStat cachedStat
+
+	seenParent  bool // Whether Next has already returned '..'.
+	seenSelf    bool // Whether Next has already returned '.'.
+	peekedChild bool // Whether HasNext has Scan()-ed a child that Next hasn't returned yet.
 }
 
-func (n *inode) Lookup(_ context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	log.Debug.Printf("lookup %s: name=%s start", n.path, name)
-	ctx := n.ctx()
+var _ = (fs.DirPlusStream)((*fsDirStream)(nil))
 
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	dirCache, err := n.listDirLocked()
-	if err != nil {
-		return nil, errToErrno(err)
+// HasNext implements fs.DirStream
+func (s *fsDirStream) HasNext() bool {
+	s.dir.mu.Lock() // TODO: Remove?
+	defer s.dir.mu.Unlock()
+
+	if s.err != nil || s.lister == nil {
+		return false
+	}
+	if !s.seenParent || !s.seenSelf || s.peekedChild {
+		return true
+	}
+	for s.lister.Scan() {
+		if getFileName(s.dir, s.lister.Path()) != "" {
+			s.peekedChild = true
+			return true
+		}
+		// Assume this is a directory marker:
+		// https://web.archive.org/web/20190424231712/https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html
+		// s3file's List returns these, but empty filenames seem to cause problems for FUSE.
+		// TODO: Filtering these in s3file, if it's ok for other users.
+	}
+	return false
+}
+
+// Next implements fs.DirStream
+func (s *fsDirStream) Next() (fuse.DirEntry, syscall.Errno) {
+	s.dir.mu.Lock()
+	defer s.dir.mu.Unlock()
+
+	if s.err != nil {
+		return fuse.DirEntry{}, errToErrno(s.err)
+	}
+	if err := s.lister.Err(); err != nil {
+		if _, canceled := <-s.ctx.Done(); canceled {
+			s.err = errors.E(errors.Canceled, "list canceled", err)
+		} else {
+			s.err = err
+		}
+		return fuse.DirEntry{}, errToErrno(s.err)
 	}
 
-	ent, ok := dirCache.entMap[name]
-	if !ok {
+	s.plusEnt = fuse.DirEntry{}
+	s.plusStat = cachedStat{expiration: time.Now().Add(cacheExpiration)}
+
+	if !s.seenParent {
+		s.seenParent = true
+		_, parent := s.dir.Parent()
+		if parent != nil {
+			// Not root.
+			parentDir := downCast(parent)
+			s.plusEnt = parentDir.ent
+			s.plusEnt.Name = ".."
+			s.plusStat = parentDir.stat
+			return s.plusEnt, 0
+		}
+	}
+	if !s.seenSelf {
+		s.seenSelf = true
+		s.plusEnt = s.dir.ent
+		s.plusEnt.Name = "."
+		s.plusStat = s.dir.stat
+		return s.plusEnt, 0
+	}
+	s.peekedChild = false
+
+	s.plusEnt = fuse.DirEntry{
+		Name: getFileName(s.dir, s.lister.Path()),
+		Mode: getModeBits(s.lister.IsDir()),
+		Ino:  getIno(s.lister.Path()),
+	}
+	if info := s.lister.Info(); info != nil {
+		s.plusStat.size, s.plusStat.modTime = info.Size(), info.ModTime()
+	}
+
+	return s.plusEnt, 0
+}
+
+func (s *fsDirStream) Plus(out *fuse.EntryOut) {
+	_ = s.dir.AddChild(
+		s.plusEnt.Name,
+		s.dir.NewInode(
+			s.ctx,
+			&inode{path: file.Join(s.dir.path, s.plusEnt.Name), ent: s.plusEnt, stat: s.plusStat},
+			fs.StableAttr{Mode: s.plusEnt.Mode, Ino: s.plusEnt.Ino},
+		),
+		true)
+	out.NodeId = s.plusEnt.Ino
+	out.Attr = newAttr(s.plusEnt.Ino, s.plusEnt.Mode, uint64(s.plusStat.size), s.plusStat.modTime)
+	out.SetEntryTimeout(cacheExpiration)
+	out.SetAttrTimeout(cacheExpiration)
+}
+
+// Close implements fs.DirStream
+func (s *fsDirStream) Close() {}
+
+func (n *inode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	log.Debug.Printf("lookup %s: name=%s start", n.path, name)
+
+	var (
+		childPath = file.Join(n.path, name)
+		foundDir  bool
+		foundFile cachedStat
+		lister    = file.List(ctx, childPath, false /* recursive */)
+	)
+	// Look for either a file or a directory at this path.
+	// If both exist, assume file is a directory marker.
+	for lister.Scan() {
+		if lister.Path() != childPath {
+			break
+		}
+		if lister.IsDir() {
+			foundDir = true
+			break
+		}
+		info := lister.Info()
+		foundFile = cachedStat{time.Now().Add(cacheExpiration), info.Size(), info.ModTime()}
+	}
+	if err := lister.Err(); err != nil {
+		if errors.Is(errors.NotExist, err) || errors.Is(errors.NotAllowed, err) {
+			// Ignore.
+		} else {
+			return nil, errToErrno(err)
+		}
+	}
+
+	if !foundDir && foundFile == (cachedStat{}) {
+		log.Debug.Printf("lookup: %s name='%s' not found", n.path, name)
 		return nil, syscall.ENOENT
 	}
-	childNode := &inode{
-		path:      file.Join(n.path, name),
-		parentEnt: n.ent,
-		ent:       ent.DirEntry,
-		stat:      ent.stat}
-	child := n.NewInode(ctx, childNode, fs.StableAttr{
-		Mode: ent.Mode,
-		Ino:  ent.Ino,
-	})
-	out.Attr = newAttr(childNode.ent.Ino, childNode.ent.Mode, uint64(childNode.stat.size), childNode.stat.modTime)
-	log.Debug.Printf("lookup %s name=%s' done: mode=%o ino=%d stat=%+v", n.path, name, ent.Mode, ent.Ino, ent.stat)
+
+	var (
+		ent = fuse.DirEntry{
+			Name: childPath,
+			Mode: getModeBits(foundDir),
+			Ino:  getIno(childPath),
+		}
+		child = n.NewInode(
+			ctx,
+			&inode{path: childPath, ent: ent, stat: foundFile},
+			fs.StableAttr{
+				Mode: ent.Mode,
+				Ino:  ent.Ino,
+			})
+	)
+	out.Attr = newAttr(ent.Ino, ent.Mode, uint64(foundFile.size), foundFile.modTime)
+	out.SetEntryTimeout(cacheExpiration)
+	out.SetAttrTimeout(cacheExpiration)
+	log.Debug.Printf("lookup %s name='%s' done: mode=%o ino=%d stat=%+v", n.path, name, ent.Mode, ent.Ino, foundFile)
 	return child, 0
 }
 
-func (n *inode) Readdir(_ context.Context) (fs.DirStream, syscall.Errno) {
+func (n *inode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	log.Debug.Printf("readdir %s: start", n.path)
-	return &fsDirStream{dir: n, next: -2 /*synthesize ".." and "."*/}, 0
+	// TODO(josh): Newer Linux kernels (4.20+) can cache the entries from readdir. Make sure this works
+	// and invalidates reasonably.
+	// References:
+	//   Linux patch series: https://github.com/torvalds/linux/commit/69e345511
+	//   go-fuse support: https://github.com/hanwen/go-fuse/commit/fa1304749db6eafd8fe64338f10c9750cf693274
+	//   libfuse's documentation (describing some kernel behavior): http://web.archive.org/web/20210118113434/https://libfuse.github.io/doxygen/structfuse__lowlevel__ops.html#afa15612c68f7971cadfe3d3ec0a8b70e
+	return &fsDirStream{
+		ctx:    ctx,
+		dir:    n,
+		lister: file.List(ctx, n.path, false /*nonrecursive*/),
+	}, 0
 }
 
 func (n *inode) Unlink(_ context.Context, name string) syscall.Errno {
 	childPath := file.Join(n.path, name)
 	err := file.Remove(n.ctx(), childPath)
 	log.Debug.Printf("unlink %s: err %v", childPath, err)
-	if err == nil {
-		n.mu.Lock()
-		defer n.mu.Unlock()
-		if n.dirCache != nil {
-			n.dirCache.remove(name)
-		}
-	}
 	return errToErrno(err)
 }
 
@@ -974,14 +909,11 @@ func (n *inode) Rmdir(_ context.Context, name string) syscall.Errno {
 func (n *inode) Mkdir(ctx context.Context, name string, _ uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	dirCache, err := n.listDirLocked()
-	if err != nil {
-		return nil, errToErrno(err)
-	}
+	// TODO: Consider creating an S3 "directory" object so this new directory persists for new listings.
+	// https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-folders.html
 	newPath := file.Join(n.path, name)
 	childNode := &inode{
-		path:      newPath,
-		parentEnt: n.ent,
+		path: newPath,
 		ent: fuse.DirEntry{
 			Name: name,
 			Ino:  getIno(newPath),
@@ -991,6 +923,7 @@ func (n *inode) Mkdir(ctx context.Context, name string, _ uint32, out *fuse.Entr
 		Ino:  childNode.ent.Ino,
 	})
 	out.Attr = newAttr(n.ent.Ino, n.ent.Mode, 0, time.Time{})
-	dirCache.update(childNode.ent, cachedStat{})
+	out.SetEntryTimeout(cacheExpiration)
+	out.SetAttrTimeout(cacheExpiration)
 	return childInode, 0
 }

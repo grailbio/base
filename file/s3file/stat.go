@@ -34,6 +34,9 @@ func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path
 	if err != nil {
 		return nil, errors.E(errors.Invalid, "could not parse", path, err)
 	}
+	if key == "" {
+		return nil, errors.E(errors.Invalid, "cannot stat with empty S3 key", path)
+	}
 	metric := metrics.Op("stat").Start()
 	defer metric.Done()
 	for {

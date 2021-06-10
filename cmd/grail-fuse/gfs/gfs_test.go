@@ -9,11 +9,10 @@ import (
 	"io/ioutil"
 	golog "log"
 	"os"
-	"sort"
-	"testing"
-
 	"os/exec"
+	"sort"
 	"syscall"
+	"testing"
 
 	"github.com/grailbio/base/cmd/grail-fuse/gfs"
 	"github.com/grailbio/base/log"
@@ -22,6 +21,7 @@ import (
 	"github.com/grailbio/testutil/h"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/hanwen/go-fuse/v2/posixtest"
 )
 
 type tester struct {
@@ -231,4 +231,16 @@ func TestShell(t *testing.T) {
 	cmd = exec.Command("sh", "-c", fmt.Sprintf("cat <%s >%s", path, path2))
 	assert.NoError(t, cmd.Run())
 	expect.EQ(t, readFile(path2), "foo\nbar\n")
+}
+
+func TestPosix(t *testing.T) {
+	tc := newTester(t, "")
+	defer tc.Cleanup()
+
+	// Regression test for a directory listing bug (erroneously skipping some entries).
+	t.Run("ReadDir", func(t *testing.T) {
+		posixtest.ReadDir(t, tc.MountDir())
+	})
+
+	// TODO(josh): Consider running more tests from posixtest. This may require new features.
 }
