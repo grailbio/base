@@ -114,23 +114,27 @@ func downCast(n *fs.Inode) *inode {
 	return nn
 }
 
-var _ = (fs.InodeEmbedder)((*inode)(nil))
-var _ = (fs.NodeAccesser)((*inode)(nil))
-var _ = (fs.NodeCreater)((*inode)(nil))
-var _ = (fs.NodeGetattrer)((*inode)(nil))
-var _ = (fs.NodeSetattrer)((*inode)(nil))
-var _ = (fs.NodeLookuper)((*inode)(nil))
-var _ = (fs.NodeOpener)((*inode)(nil))
-var _ = (fs.NodeReaddirer)((*inode)(nil))
-var _ = (fs.NodeUnlinker)((*inode)(nil))
-var _ = (fs.NodeRmdirer)((*inode)(nil))
-var _ = (fs.NodeMkdirer)((*inode)(nil))
+var (
+	_ fs.InodeEmbedder = (*inode)(nil)
 
-var _ = (fs.FileReader)((*handle)(nil))
-var _ = (fs.FileWriter)((*handle)(nil))
-var _ = (fs.FileFlusher)((*handle)(nil))
-var _ = (fs.FileReleaser)((*handle)(nil))
-var _ = (fs.FileFsyncer)((*handle)(nil))
+	_ fs.NodeAccesser  = (*inode)(nil)
+	_ fs.NodeCreater   = (*inode)(nil)
+	_ fs.NodeGetattrer = (*inode)(nil)
+	_ fs.NodeLookuper  = (*inode)(nil)
+	_ fs.NodeMkdirer   = (*inode)(nil)
+	_ fs.NodeOpener    = (*inode)(nil)
+	_ fs.NodeReaddirer = (*inode)(nil)
+	_ fs.NodeRmdirer   = (*inode)(nil)
+	_ fs.NodeSetattrer = (*inode)(nil)
+	_ fs.NodeUnlinker  = (*inode)(nil)
+
+	_ fs.FileFlusher  = (*handle)(nil)
+	_ fs.FileFsyncer  = (*handle)(nil)
+	_ fs.FileLseeker  = (*handle)(nil)
+	_ fs.FileReader   = (*handle)(nil)
+	_ fs.FileReleaser = (*handle)(nil)
+	_ fs.FileWriter   = (*handle)(nil)
+)
 
 func newAttr(ino uint64, mode uint32, size uint64, optionalMtime time.Time) (attr fuse.Attr) {
 	const blockSize = 1 << 20
@@ -271,10 +275,6 @@ func (n *inode) Setattr(_ context.Context, fhi fs.FileHandle, in *fuse.SetAttrIn
 
 func (n *inode) Getattr(_ context.Context, fhi fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	ctx := n.ctx()
-	var (
-		err  error
-		stat file.Info
-	)
 	if n.ent.Ino == 0 || n.ent.Mode == 0 {
 		log.Panicf("node %s: ino or mode unset: %+v", n.path, n)
 	}
@@ -311,25 +311,34 @@ func (n *inode) Getattr(_ context.Context, fhi fs.FileHandle, out *fuse.AttrOut)
 		}
 		// fall through
 	}
+	stat, err := n.getCachedStat(ctx)
+	if err != nil {
+		log.Printf("getattr %s: err %v", n.path, err)
+		return errToErrno(err)
+	}
+	out.Attr = newAttr(n.ent.Ino, n.ent.Mode, uint64(stat.size), stat.modTime)
+	log.Debug.Printf("getattr %s: out %+v", n.path, out)
+	return 0
+}
+
+func (n *inode) getCachedStat(ctx context.Context) (cachedStat, error) {
 	now := time.Now()
-	log.Debug.Printf("getattr %s: cached stats %+v now %+v", n.path, n.stat, now)
 	if now.After(n.stat.expiration) {
-		log.Debug.Printf("getattr %s: reading stats", n.path)
-		stat, err = file.Stat(ctx, n.path)
+		log.Debug.Printf("getcachedstat %s: cache miss", n.path)
+		info, err := file.Stat(ctx, n.path)
 		if err != nil {
-			log.Printf("getattr %s: err %v", n.path, err)
-			return errToErrno(err)
+			log.Printf("getcachedstat %s: err %v", n.path, err)
+			return cachedStat{}, err
 		}
 		n.stat = cachedStat{
 			expiration: now.Add(cacheExpiration),
-			size:       stat.Size(),
-			modTime:    stat.ModTime(),
+			size:       info.Size(),
+			modTime:    info.ModTime(),
 		}
-		log.Debug.Printf("getattr %s: refreshed %v", n.path, out)
+	} else {
+		log.Debug.Printf("getcachedstat %s: cache hit %+v now %v", n.path, n.stat, now)
 	}
-	out.Attr = newAttr(n.ent.Ino, n.ent.Mode, uint64(n.stat.size), n.stat.modTime)
-	log.Debug.Printf("getattr %s: out %+v", n.path, out)
-	return 0
+	return n.stat, nil
 }
 
 // MaybeInitIO is called on the first call to Read or Write after open.  It
@@ -449,6 +458,27 @@ func (fh *handle) Read(_ context.Context, dest []byte, off int64) (fuse.ReadResu
 		log.Error.Printf("read %s: reading unopened or writeonly file", n.path)
 		return nil, syscall.EBADF
 	}
+}
+
+func (fh *handle) Lseek(ctx context.Context, off uint64, whence uint32) (uint64, syscall.Errno) {
+	const (
+		// Copied from https://github.com/torvalds/linux/blob/a050a6d2b7e80ca52b2f4141eaf3420d201b72b3/tools/include/uapi/linux/fs.h#L43-L47.
+		SEEK_DATA = 3
+		SEEK_HOLE = 4
+	)
+	switch whence {
+	case SEEK_DATA:
+		return off, 0 // We don't support holes so current offset is correct.
+	case SEEK_HOLE:
+		stat, err := fh.inode.getCachedStat(ctx)
+		if err != nil {
+			log.Error.Printf("lseek %s: stat: %v", fh.inode.path, err)
+			return 0, errToErrno(err)
+		}
+		return uint64(stat.size), 0
+	}
+	log.Error.Printf("lseek %s: unimplemented whence: %d", fh.inode.path, whence)
+	return 0, syscall.ENOSYS
 }
 
 func (fh *handle) Write(_ context.Context, dest []byte, off int64) (uint32, syscall.Errno) {
