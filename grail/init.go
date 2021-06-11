@@ -28,9 +28,9 @@ import (
 type Shutdown func()
 
 var (
-	initialized      = false
-	mu               = sync.Mutex{}
-	gopsFlag         = flag.Bool("gops", false, "enable the gops listener")
+	initialized = false
+	mu          = sync.Mutex{}
+	gopsFlag    = flag.Bool("gops", false, "enable the gops listener")
 )
 
 // Init should be called once at the beginning at each executable that doesn't
@@ -106,14 +106,18 @@ func (vlogOutputter) Level() log.Level {
 }
 
 func (vlogOutputter) Output(calldepth int, level log.Level, s string) error {
+	// Notice that we do not add 1 to the call depth. In vlog, 0 depth means
+	// that the caller's file/line will be used. This is different from the log
+	// and github.com/grailbio/base/log packages, where that's the behavior you
+	// get with depth 1.
 	switch level {
 	case log.Off:
 	case log.Error:
-		vlog.ErrorDepth(calldepth+1, s)
+		vlog.ErrorDepth(calldepth, s)
 	case log.Info:
-		vlog.InfoDepth(calldepth+1, s)
+		vlog.InfoDepth(calldepth, s)
 	default:
-		vlog.VI(vlog.Level(level)).InfoDepth(calldepth+1, s)
+		vlog.VI(vlog.Level(level)).InfoDepth(calldepth, s)
 	}
 	return nil
 }
