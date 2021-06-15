@@ -9,6 +9,12 @@ import (
 
 var logger = NewLogger(Config{Level: DebugLevel})
 
+// Instantiate a new logger and assign any key-value pair to addedInfo field in logger to log additional
+// information specific to service
+func GetNewLoggerWithDefaultFields(addedInfo ...interface{}) *Logger {
+	return NewLoggerWithDefaultFields(Config{Level: DebugLevel}, addedInfo)
+}
+
 // Debug logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.

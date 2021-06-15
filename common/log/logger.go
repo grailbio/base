@@ -55,6 +55,7 @@ var logLvls = map[string]zapcore.Level{
 
 type Logger struct {
 	coreLogger    *zap.SugaredLogger
+	// Additional information that may be unique to each service (e.g. order UUID for Ensemble orders)
 	defaultFields []interface{}
 	levelToLogger map[zapcore.Level]func(msg string, keysAndValues ...interface{})
 	now           func() time.Time
@@ -84,12 +85,21 @@ func NewLogger(config Config) *Logger {
 // NewLogger creates a new logger instance.
 // defaultFields is a list of key-value pairs to be included in every log message.
 func NewLoggerWithDefaultFields(config Config, defaultFields []interface{}) *Logger {
+	if len(defaultFields) % 2 != 0 {
+		danglingKey := defaultFields[len(defaultFields)-1]
+		defaultFields = defaultFields[:len(defaultFields)-1]
+		errLogger := NewLogger(config)
+		errLog := []interface{}{
+			"ignored", danglingKey,
+		}
+		logErr := errLogger.levelToLogger[ErrorLevel]
+		logErr("Ignored key without a value.", errLog...)
+	}
 	l := Logger{
 		coreLogger:    mustBuildLogger(config, zap.AddCallerSkip(2)),
 		defaultFields: defaultFields,
 		now:           time.Now,
 	}
-
 	return setDefaultLogLevelsMap(&l)
 }
 
@@ -266,6 +276,39 @@ func (l *Logger) Errorv(ctx context.Context, skip int, msg string, keysAndValues
 // ErrorNoCtx logs a message and variadic key-value pairs.
 func (l *Logger) ErrorNoCtx(msg string, keysAndValues ...interface{}) {
 	l.Errorv(context.Background(), 1, msg, keysAndValues...)
+}
+
+// Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+// Returns the message (without keysAndValues) as a string for convenience.
+func (l *Logger) ErrorAndReturn(ctx context.Context, msg string, keysAndValues ...interface{}) string {
+	return l.ErrorvAndReturn(ctx, 1, msg, keysAndValues...)
+}
+
+// Errorf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+// Returns the formatted message as a string for convenience.
+func (l *Logger) ErrorfAndReturn(ctx context.Context, fs string, args ...interface{}) string {
+	return l.ErrorvAndReturn(ctx, 1, fmt.Sprintf(fs, args...))
+}
+
+// Errorv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
+// Caller is skipped by skip.
+// If ctx is nil, all fields from contextFields will be omitted.
+// If ctx does not contain a key in contextFields, that field will be omitted.
+// Returns the message (without keysAndValues) as a string for convenience.
+func (l *Logger) ErrorvAndReturn(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) string {
+	l.Errorv(ctx, skip+1, msg, keysAndValues...)
+	return msg
+}
+
+// ErrorNoCtx logs a message and variadic key-value pairs.
+// Returns the message (without keysAndValues) as a string for convenience.
+func (l *Logger) ErrorNoCtxAndReturn(msg string, keysAndValues ...interface{}) string {
+	// context.Background() is a singleton and gets initialized once
+	return l.ErrorvAndReturn(context.Background(), 1, msg, keysAndValues...)
 }
 
 // rfc3339TrailingNanoTimeEncoder serializes a time.Time to an RFC3339-formatted string
