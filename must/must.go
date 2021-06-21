@@ -16,11 +16,20 @@ import (
 	"github.com/grailbio/base/log"
 )
 
-// Func is the function called to report an error and interrupt
-// execution. Func is typically set to log.Panic or log.Fatal. It
-// should be set before any potential calls to functions in the
-// must package.
-var Func func(...interface{}) = log.Panic
+// Func is the function called to report an error and interrupt execution. Func
+// is typically set to a function that logs the message and halts execution,
+// e.g. by panicking. It should be set before any potential calls to functions
+// in the must package. Func is passed the call depth of the caller of the must
+// function, e.g. the caller of Nil. This can be used to annotate messages.
+//
+// The default implementation logs the message with
+// github.com/grailbio/base/log at the Error level and then panics.
+var Func func(int, ...interface{}) = func(depth int, v ...interface{}) {
+	s := fmt.Sprint(v...)
+	// Nothing to do if output fails.
+	_ = log.Output(depth+1, log.Error, s)
+	panic(s)
+}
 
 // Nil asserts that v is nil; v is typically a value of type error.
 // If v is not nil, Nil formats a message in hte manner of fmt.Sprint
@@ -31,10 +40,10 @@ func Nil(v interface{}, args ...interface{}) {
 		return
 	}
 	if len(args) == 0 {
-		Func(v)
+		Func(2, v)
 		return
 	}
-	Func(fmt.Sprint(args...), ": ", v)
+	Func(2, fmt.Sprint(args...), ": ", v)
 }
 
 // Nilf asserts that v is nil; v is typically a value of type error.
@@ -45,7 +54,7 @@ func Nilf(v interface{}, format string, args ...interface{}) {
 	if v == nil {
 		return
 	}
-	Func(fmt.Sprintf(format, args...), ": ", v)
+	Func(2, fmt.Sprintf(format, args...), ": ", v)
 }
 
 // True is a no-op if the value b is true. If it is false, True
@@ -55,10 +64,10 @@ func True(b bool, v ...interface{}) {
 		return
 	}
 	if len(v) == 0 {
-		Func("must: assertion failed")
+		Func(2, "must: assertion failed")
 		return
 	}
-	Func(v...)
+	Func(2, v...)
 }
 
 // Truef is a no-op if the value b is true. If it is false, True
@@ -67,17 +76,17 @@ func Truef(x bool, format string, v ...interface{}) {
 	if x {
 		return
 	}
-	Func(fmt.Sprintf(format, v...))
+	Func(2, fmt.Sprintf(format, v...))
 }
 
 // Never asserts that it is never called. If it is, it formats a message
 // in the manner of fmt.Sprint and calls Func.
 func Never(v ...interface{}) {
-	Func(v...)
+	Func(2, v...)
 }
 
 // Neverf asserts that it is never called. If it is, it formats a message
 // in the manner of fmt.Sprintf and calls Func.
 func Neverf(format string, v ...interface{}) {
-	Func(fmt.Sprintf(format, v...))
+	Func(2, fmt.Sprintf(format, v...))
 }

@@ -7,12 +7,41 @@ package must_test
 import (
 	"errors"
 	"fmt"
+	"runtime"
+	"testing"
 
 	"github.com/grailbio/base/must"
 )
 
+// TestDepth verifies that the depth passed to Func correctly locates the
+// caller of the must function.
+func TestDepth(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not determine current file")
+	}
+	must.Func = func(depth int, v ...interface{}) {
+		_, file, _, ok := runtime.Caller(depth)
+		if !ok {
+			t.Fatal("could not determine caller of Func")
+		}
+		if file != thisFile {
+			t.Errorf("caller at depth %d is '%s'; should be '%s'", depth, file, thisFile)
+		}
+	}
+	must.True(false)
+	must.Truef(false, "")
+	must.Nil(struct{}{})
+	must.Nilf(struct{}{}, "")
+	must.Never()
+	must.Neverf("")
+}
+
 func ExampleMust() {
-	must.Func = func(v ...interface{}) { fmt.Print(v...); fmt.Print("\n") }
+	must.Func = func(depth int, v ...interface{}) {
+		fmt.Print(v...)
+		fmt.Print("\n")
+	}
 
 	must.Nil(errors.New("unexpected condition"))
 	must.Nil(nil)
