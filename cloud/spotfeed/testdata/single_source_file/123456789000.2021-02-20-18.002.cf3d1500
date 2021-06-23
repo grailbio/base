@@ -1,0 +1,6 @@
+#Version: 1.0
+#Fields: Timestamp UsageType Operation InstanceID MyBidID MyMaxPrice MarketPrice Charge Version
+2021-02-20 18:52:50 UTC	USW2-SpotUsage:x1.16xlarge	RunInstances:SV002	i-0053c2917e2afa2f0	sir-yb3gavgp	6.669 USD	2.001 USD	0.073 USD	2
+2021-02-20 18:50:58 UTC	USW2-SpotUsage:x1.16xlarge	RunInstances:SV002	i-07eaa4b2bf27c4b75	sir-w13gadim	6.669 USD	2.001 USD	1.741 USD	2
+2021-02-20 18:56:14 UTC	USW2-SpotUsage:x1.32xlarge	RunInstances:SV002	i-000e2cebfe213246e	sir-fcg8btin	13.338 USD	4.001 USD	2.636 USD	2
+2021-02-20 18:56:01 UTC	USW2-SpotUsage:x1.32xlarge	RunInstances:SV002	i-032a1a622fb441a7b	sir-c6ag9vxn	13.338 USD	4.001 USD	4.001 USD	2
