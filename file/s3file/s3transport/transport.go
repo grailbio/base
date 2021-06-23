@@ -57,7 +57,9 @@ func (t *T) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	ips, err := defaultResolver.LookupIP(host)
 	if err != nil {
-		_ = req.Body.Close()
+		if req.Body != nil {
+			_ = req.Body.Close()
+		}
 		return nil, fmt.Errorf("s3transport: lookup ip: %w", err)
 	}
 	ips = t.hostIPs.AddAndGet(host, ips)
