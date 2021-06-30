@@ -69,10 +69,31 @@ func newQuerier(all []*Entry) *querier {
 		byInstanceId[iid] = append(byInstanceId[iid], entry)
 	}
 	for iid, entries := range byInstanceId {
+		// For each instance, first sort all the entries
 		sort.Slice(entries, func(i, j int) bool {
 			return entries[i].Timestamp.Before(entries[j].Timestamp)
 		})
-		byInstanceId[iid] = entries
+		var (
+			prev       *Entry
+			iidEntries []*Entry
+		)
+		// There can be multiple entries at the same Timestamp, one for each Version.
+		// We simply take the entry of the version that has the max cost for the same timestamp.
+		for _, entry := range entries {
+			switch {
+			case prev == nil:
+			case prev.Timestamp != entry.Timestamp:
+				iidEntries = append(iidEntries, prev)
+			case entry.ChargeUSD > prev.ChargeUSD:
+			default:
+				continue // Keep prev as-is.
+			}
+			prev = entry
+		}
+		if prev != nil {
+			iidEntries = append(iidEntries, prev)
+		}
+		byInstanceId[iid] = iidEntries
 	}
 	return &querier{byInstanceId: byInstanceId}
 }

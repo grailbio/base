@@ -10,9 +10,14 @@ func TestQuerier(t *testing.T) {
 	iid, typ := "some-instance-id", "some-instance-type"
 	entries := []*Entry{
 		{ChargeUSD: 60, Timestamp: now.Add(-60 * time.Minute), InstanceID: iid, Instance: typ},
+		{ChargeUSD: 110 /*ignored*/, Timestamp: now, InstanceID: iid, Instance: typ},
 		{ChargeUSD: 120, Timestamp: now, InstanceID: iid, Instance: typ},
+		{ChargeUSD: 80 /*ignored*/, Timestamp: now.Add(59 * time.Minute), InstanceID: iid, Instance: typ},
 		{ChargeUSD: 90, Timestamp: now.Add(59 * time.Minute), InstanceID: iid, Instance: typ},
 		{ChargeUSD: 120, Timestamp: now.Add(121 * time.Minute), InstanceID: iid, Instance: typ},
+		{ChargeUSD: 88 /*ignored*/, Timestamp: now.Add(3 * time.Hour), InstanceID: iid, Instance: typ},
+		{ChargeUSD: 89 /*ignored*/, Timestamp: now.Add(3 * time.Hour), InstanceID: iid, Instance: typ},
+		{ChargeUSD: 90 /*duplicate*/, Timestamp: now.Add(3 * time.Hour), InstanceID: iid, Instance: typ},
 		{ChargeUSD: 90, Timestamp: now.Add(3 * time.Hour), InstanceID: iid, Instance: typ},
 	}
 	terminated := now.Add(3*time.Hour + 30*time.Minute)
