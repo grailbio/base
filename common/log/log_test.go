@@ -376,3 +376,31 @@ func Example_defaultFieldsDanglingKey() {
 	// {"level":"error","msg":"Ignored key without a value.","ignored":"foobar"}
 	// {"level":"info","msg":"Hello, world!","caller":"log_test.go:374","ts":"2000-01-01T00:00:00.000000000Z","requestID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","foo":"bar"}
 }
+
+func ExampleDebugfNoCtx() {
+	setup()
+	DebugfNoCtx("Hello, %s!", "world")
+	// Output:
+	// {"level":"debug","msg":"Hello, world!","caller":"log_test.go:382","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
+func ExampleInfofNoCtx() {
+	setup()
+	InfofNoCtx("Hello, %s!", "world")
+	// Output:
+	// {"level":"info","msg":"Hello, world!","caller":"log_test.go:389","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
+func ExampleWarnfNoCtx() {
+	setup()
+	WarnfNoCtx("Hello, %s!", "world")
+	// Output:
+	// {"level":"warn","msg":"Hello, world!","caller":"log_test.go:396","ts":"2000-01-01T00:00:00.000000000Z"}
+}
+
+func ExampleErrorfNoCtx() {
+	setup()
+	ErrorfNoCtx("Hello, %s!", "world")
+	// Output:
+	// {"level":"error","msg":"Hello, world!","caller":"log_test.go:403","ts":"2000-01-01T00:00:00.000000000Z"}
+}

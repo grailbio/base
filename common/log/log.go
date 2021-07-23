@@ -43,6 +43,11 @@ func DebugNoCtx(msg string, keysAndValues ...interface{}) {
 	Debugv(context.Background(), 1, msg, keysAndValues...)
 }
 
+// DebugfNoCtx uses fmt.Sprintf to log a templated message.
+func DebugfNoCtx(fs string, args ...interface{}) {
+	Debugv(context.Background(), 1, fmt.Sprintf(fs, args...))
+}
+
 // Info logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
@@ -69,6 +74,11 @@ func Infov(ctx context.Context, skip int, msg string, keysAndValues ...interface
 func InfoNoCtx(msg string, keysAndValues ...interface{}) {
 	// context.Background() is a singleton and gets initialized once
 	Infov(context.Background(), 1, msg, keysAndValues...)
+}
+
+// InfofNoCtx uses fmt.Sprintf to log a templated message.
+func InfofNoCtx(fs string, args ...interface{}) {
+	Infov(context.Background(), 1, fmt.Sprintf(fs, args...))
 }
 
 // Warn logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
@@ -99,6 +109,11 @@ func WarnNoCtx(msg string, keysAndValues ...interface{}) {
 	Warnv(context.Background(), 1, msg, keysAndValues...)
 }
 
+// WarnfNoCtx uses fmt.Sprintf to log a templated message.
+func WarnfNoCtx(fs string, args ...interface{}) {
+	Warnv(context.Background(), 1, fmt.Sprintf(fs, args...))
+}
+
 // Fatal logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
@@ -127,6 +142,11 @@ func FatalNoCtx(msg string, keysAndValues ...interface{}) {
 	Fatalv(context.Background(), 1, msg, keysAndValues...)
 }
 
+// FatalfNoCtx uses fmt.Sprintf to log a templated message.
+func FatalfNoCtx(fs string, args ...interface{}) {
+	Fatalv(context.Background(), 1, fmt.Sprintf(fs, args...))
+}
+
 // Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
@@ -153,6 +173,11 @@ func Errorv(ctx context.Context, skip int, msg string, keysAndValues ...interfac
 func ErrorNoCtx(msg string, keysAndValues ...interface{}) {
 	// context.Background() is a singleton and gets initialized once
 	Errorv(context.Background(), 1, msg, keysAndValues...)
+}
+
+// ErrorfNoCtx uses fmt.Sprintf to log a templated message.
+func ErrorfNoCtx(fs string, args ...interface{}) {
+	Errorv(context.Background(), 1, fmt.Sprintf(fs, args...))
 }
 
 // Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
