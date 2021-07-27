@@ -860,15 +860,13 @@ func (n *inode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*f
 		childPath = file.Join(n.path, name)
 		foundDir  bool
 		foundFile cachedStat
-		lister    = file.List(ctx, childPath, false /* recursive */)
+		lister    = file.List(ctx, childPath, true /* recursive */)
 	)
 	// Look for either a file or a directory at this path.
 	// If both exist, assume file is a directory marker.
 	for lister.Scan() {
-		if lister.Path() != childPath {
-			break
-		}
-		if lister.IsDir() {
+		if lister.IsDir() || // We've found an exact match, and it's a directory.
+			lister.Path() != childPath { // We're seeing children, so childPath must be a directory.
 			foundDir = true
 			break
 		}
