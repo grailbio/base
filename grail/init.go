@@ -76,7 +76,7 @@ func Init() Shutdown {
 	if err := vlog.ConfigureLibraryLoggerFromFlags(); err != nil {
 		vlog.Error(err)
 	}
-	log.SetOutputter(vlogOutputter{})
+	log.SetOutputter(VlogOutputter{})
 	if profile.NeedProcessFlags() {
 		_ = config.Application()
 	}
@@ -93,31 +93,4 @@ func Init() Shutdown {
 		pprof.Write(1)
 		vlog.FlushLog()
 	}
-}
-
-type vlogOutputter struct{}
-
-func (vlogOutputter) Level() log.Level {
-	if vlog.V(1) {
-		return log.Debug
-	} else {
-		return log.Info
-	}
-}
-
-func (vlogOutputter) Output(calldepth int, level log.Level, s string) error {
-	// Notice that we do not add 1 to the call depth. In vlog, 0 depth means
-	// that the caller's file/line will be used. This is different from the log
-	// and github.com/grailbio/base/log packages, where that's the behavior you
-	// get with depth 1.
-	switch level {
-	case log.Off:
-	case log.Error:
-		vlog.ErrorDepth(calldepth, s)
-	case log.Info:
-		vlog.InfoDepth(calldepth, s)
-	default:
-		vlog.VI(vlog.Level(level)).InfoDepth(calldepth, s)
-	}
-	return nil
 }
