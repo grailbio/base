@@ -60,7 +60,9 @@ func (t T) Each(n int, fn func(i int) error) error {
 		defer t.Reporter.Complete()
 	}
 	var err error
-	if t.Limit == 0 || t.Limit >= n {
+	if t.Limit == 1 || n == 1 {
+		err = t.eachSerial(n, fn)
+	} else if t.Limit == 0 || t.Limit >= n {
 		err = t.each(n, fn)
 	} else {
 		err = t.eachLimit(n, fn)
@@ -97,6 +99,23 @@ func (t T) each(n int, fn func(i int) error) error {
 	}
 	wg.Wait()
 	return errors.Err()
+}
+
+// eachSerial runs on the local thread using a conventional for loop.
+// all invocations will be run in numerical order.
+func (t T) eachSerial(n int, fn func(i int) error) error {
+	for i := 0; i < n; i++ {
+		if t.Reporter != nil {
+			t.Reporter.Begin(i)
+		}
+		if err := apply(fn, i); err != nil {
+			return err
+		}
+		if t.Reporter != nil {
+			t.Reporter.End(i)
+		}
+	}
+	return nil
 }
 
 func (t T) eachLimit(n int, fn func(i int) error) error {
