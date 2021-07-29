@@ -10,11 +10,10 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"time"
-
 	"github.com/grailbio/base/security/keycrypt"
 
 	"errors"
+	"time"
 )
 
 // CertificateAuthority is a ssh certificate authority.
@@ -62,6 +61,8 @@ type CertificateRequest struct {
 	// }
 	Extensions []string
 }
+
+const sshSignAlg = ssh.SigAlgoRSASHA2256
 
 func validateCertType(certType string) (uint32, error) {
 	switch certType {
@@ -136,7 +137,19 @@ func (ca CertificateAuthority) issueWithKeyUsage(now time.Time, cr CertificateRe
 		},
 	}
 
-	err = certificate.SignCert(rand.Reader, ca.Signer)
+	// Replicate the certificate.SignCert functions but with a custom algorithm
+	certificate.Nonce = make([]byte, 32)
+	if _, err = rand.Read(certificate.Nonce); err != nil {
+		return "", err
+	}
+	certificate.SignatureKey = ca.Signer.PublicKey()
+
+	// based on Certificate.bytesForSigning()
+	certificateBytes := certificate.Marshal()
+	// Drop trailing signature length
+	certificateBytes = certificateBytes[:len(certificateBytes)-4]
+
+	certificate.Signature, err = ca.Signer.(ssh.AlgorithmSigner).SignWithAlgorithm(rand.Reader, certificateBytes, sshSignAlg)
 	if err != nil {
 		return "", err
 	}

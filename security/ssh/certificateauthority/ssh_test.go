@@ -57,7 +57,7 @@ func TestAuthority(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Check the golang created certificate against the one created with
-	// ssh-keygen -s testdata/ssh_key.pem -I foo -V 20200118160000:20200118170000  -n ubuntu testdata/user_ssh_key.pem
+	// ssh-keygen -t rsa-sha2-256 -s testdata/ssh_key.pem -I foo -V 20200118160000:20200118170000  -n ubuntu testdata/user_ssh_key.pem
 	preCreatedUserCert, err := ioutil.ReadFile("testdata/user_ssh_key.pem-cert.pub")
 	assert.NoError(t, err)
 
