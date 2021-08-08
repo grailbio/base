@@ -15,8 +15,8 @@ import (
 
 type columnFormat struct {
 	fieldName  string       // Go struct field name.
-	fieldIdx   []int        // Go struct field index.
 	columnName string       // expected column name in TSV. Defaults to fieldName unless `tsv:"colname"` tag is set.
+	typ        reflect.Type // Go type information of the column.
 	kind       reflect.Kind // type of the column.
 	fmt        string       // Optional format directive for writing this value.
 	index      int          // index of this column in a row, 0-based.
@@ -94,17 +94,33 @@ func (r *Reader) validateRowFormat(format rowFormat) error {
 }
 
 func parseRowFormat(typ reflect.Type) (rowFormat, error) {
+	var format rowFormat
 	if typ.Kind() != reflect.Ptr || typ.Elem().Kind() != reflect.Struct {
 		return nil, fmt.Errorf("destination must be a pointer to struct, but found %v", typ)
 	}
 	typ = typ.Elem()
 	nField := typ.NumField()
-	var format rowFormat
 	for i := 0; i < nField; i++ {
 		f := typ.Field(i)
-		if f.PkgPath != "" { // Unexported field?
+		if f.PkgPath != "" { // Unexported field.
 			if tag := f.Tag.Get("tsv"); tag != "" {
 				return nil, fmt.Errorf("unexported field '%s' should not have a tsv tag '%s'", f.Name, tag)
+			}
+			// Unexported embedded (anonymous) struct is OK, but skip other fields.
+			if !f.Anonymous {
+				continue
+			}
+		}
+		// Fields from embedded structs are parsed recursively.
+		if f.Anonymous && f.Type.Kind() == reflect.Struct {
+			embeddedFormat, err := parseRowFormat(reflect.PtrTo(f.Type))
+			if err != nil {
+				return nil, err
+			}
+			for _, col := range embeddedFormat {
+				col.offset += f.Offset  // Shift offsets to be relative to the outer struct.
+				col.index = len(format) // Reset column index.
+				format = append(format, col)
 			}
 			continue
 		}
@@ -126,8 +142,8 @@ func parseRowFormat(typ reflect.Type) (rowFormat, error) {
 		}
 		format = append(format, columnFormat{
 			fieldName:  f.Name,
-			fieldIdx:   f.Index,
 			columnName: columnName,
+			typ:        f.Type,
 			kind:       f.Type.Kind(),
 			fmt:        fmt,
 			index:      len(format),
@@ -150,7 +166,6 @@ func (r *Reader) wrapError(err error, col columnFormat) error {
 // fillRow fills Go struct fields from the TSV row.  dest is the pointer to the
 // struct, and format defines the struct format.
 func (r *Reader) fillRow(val interface{}, row []string) error {
-	typ := reflect.TypeOf(val).Elem()
 	p := unsafe.Pointer(reflect.ValueOf(val).Pointer())
 	if r.RequireParseAllColumns && len(r.cachedRowFormat) != len(row) { // check this for headerless TSVs
 		return fmt.Errorf("extra columns found in %+v", r.cachedRowFormat)
@@ -175,7 +190,7 @@ func (r *Reader) fillRow(val interface{}, row []string) error {
 				return r.wrapError(fmt.Errorf("value with fmt option can not have whitespace"), col)
 			}
 			var (
-				typ1   = typ.FieldByIndex(col.fieldIdx).Type
+				typ1   = col.typ
 				p1     = unsafe.Pointer(uintptr(p) + col.offset)
 				v      = reflect.NewAt(typ1, p1).Interface()
 				n, err = fmt.Sscanf(colVal, "%"+colfmt, v)
@@ -341,6 +356,9 @@ const EmptyReadErrStr = "empty file: could not read the header row"
 // The first Read() will return row{"chr1", 10, 1000, 10}.
 //
 // The second Read() will return row{"chr2", 20, 950, 15}.
+//
+// Embedded structs are supported, and the default column name for nested
+// fields will be the unqualified name of the field.
 func (r *Reader) Read(v interface{}) error {
 	if r.nRow == 0 && r.HasHeaderRow {
 		headerRow, err := r.Reader.Read()
