@@ -43,9 +43,6 @@ func NewRowWriter(w io.Writer) *RowWriter {
 // to format the value using the fmt package. Note that the reader may not
 // support all the verbs. Without the fmt option, formatting options are preset
 // for each type. Using the fmt option may lead to slower performance.
-//
-// Embedded structs are supported, and the default column name for nested
-// fields will be the unqualified name of the field.
 func (w *RowWriter) Write(v interface{}) error {
 	typ := reflect.TypeOf(v)
 	if typ != w.cachedRowType {
@@ -78,11 +75,12 @@ func (w *RowWriter) writeHeader() error {
 }
 
 func (w *RowWriter) writeRow(v interface{}) error {
+	typ := reflect.TypeOf(v).Elem()
 	p := unsafe.Pointer(reflect.ValueOf(v).Pointer())
 	for _, col := range w.cachedRowFormat {
 		if col.fmt != "" {
 			var (
-				typ1 = col.typ
+				typ1 = typ.FieldByIndex(col.fieldIdx).Type
 				p1   = unsafe.Pointer(uintptr(p) + col.offset)
 				v    = reflect.Indirect(reflect.NewAt(typ1, p1))
 			)

@@ -15,26 +15,21 @@ import (
 func TestRowWriter(t *testing.T) {
 	var buf bytes.Buffer
 	rw := tsv.NewRowWriter(&buf)
-	type embedded struct {
-		EmbeddedString string  `tsv:"estring"`
-		EmbeddedFloat  float64 `tsv:"efloat,fmt=0.3f"`
-	}
 	var row struct {
-		Bool    bool   `tsv:"true_or_false"`
-		String  string `tsv:"name"`
-		Int8    int8
-		Int16   int16
-		Int32   int32
-		Int64   int64
-		Int     int
-		Uint8   uint8
-		Uint16  uint16
-		Uint32  uint32
-		Uint64  uint64
-		Uint    uint
-		Float32 float32
-		Float64 float64
-		embedded
+		Bool          bool   `tsv:"true_or_false"`
+		String        string `tsv:"name"`
+		Int8          int8
+		Int16         int16
+		Int32         int32
+		Int64         int64
+		Int           int
+		Uint8         uint8
+		Uint16        uint16
+		Uint32        uint32
+		Uint64        uint64
+		Uint          uint
+		Float32       float32
+		Float64       float64
 		skippedString string
 		skippedFunc   func()
 	}
@@ -47,8 +42,6 @@ func TestRowWriter(t *testing.T) {
 	row.String = "def"
 	row.Int = 2
 	row.Float32 = 0
-	row.EmbeddedString = "estring"
-	row.EmbeddedFloat = 0.123456
 	if err := rw.Write(&row); err != nil {
 		t.Error(err)
 	}
@@ -56,9 +49,9 @@ func TestRowWriter(t *testing.T) {
 		t.Error(err)
 	}
 	got := buf.String()
-	want := `true_or_false	name	Int8	Int16	Int32	Int64	Int	Uint8	Uint16	Uint32	Uint64	Uint	Float32	Float64	estring	efloat
-false	abc	0	0	0	0	0	0	0	0	0	0	-3	1e+300		0.000
-false	def	0	0	0	0	2	0	0	0	0	0	0	1e+300	estring	0.123
+	want := `true_or_false	name	Int8	Int16	Int32	Int64	Int	Uint8	Uint16	Uint32	Uint64	Uint	Float32	Float64
+false	abc	0	0	0	0	0	0	0	0	0	0	-3	1e+300
+false	def	0	0	0	0	2	0	0	0	0	0	0	1e+300
 `
 	if got != want {
 		t.Errorf("got: %q, want %q", got, want)
