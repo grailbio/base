@@ -184,6 +184,33 @@ key1	2	1.5
 	assert.EQ(t, r.Read(&v), io.EOF)
 }
 
+func TestReadEmbeddedStruct(t *testing.T) {
+	type embedded1 struct {
+		Col1 int     `tsv:"col1"`
+		Col2 float64 `tsv:"col2_2,fmt=0.3f"`
+	}
+	type embedded2 struct {
+		Col2 float32 `tsv:"col2_1"`
+	}
+	type row struct {
+		Key string `tsv:"key"`
+		embedded1
+		embedded2
+	}
+	r := tsv.NewReader(bytes.NewReader([]byte(`key	col2_1	col1	col2_2
+key0	0.5	1	0.123
+key1	1.5	2	0.789
+`)))
+	r.HasHeaderRow = true
+	r.UseHeaderNames = true
+	var v row
+	assert.NoError(t, r.Read(&v))
+	expect.EQ(t, v, row{"key0", embedded1{1, 0.123}, embedded2{0.5}})
+	assert.NoError(t, r.Read(&v))
+	expect.EQ(t, v, row{"key1", embedded1{2, 0.789}, embedded2{1.5}})
+	assert.EQ(t, r.Read(&v), io.EOF)
+}
+
 func TestReadExtraColumns(t *testing.T) {
 	type row struct {
 		ColA string
