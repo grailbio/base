@@ -404,3 +404,18 @@ func ExampleErrorfNoCtx() {
 	// Output:
 	// {"level":"error","msg":"Hello, world!","caller":"log_test.go:403","ts":"2000-01-01T00:00:00.000000000Z"}
 }
+
+func ExampleSetLoggerConfig() {
+	setup()
+	SetLoggerConfig(Config{
+		OutputPaths: TestConfig.OutputPaths,
+		Level:       InfoLevel,
+	})
+	logger.now = func() time.Time {
+		return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+	Debug(ctx, "Hello, world!")
+	Info(ctx, "Goodbye, world!")
+	// Output:
+	// {"level":"info","msg":"Goodbye, world!","caller":"log_test.go:418","ts":"2000-01-01T00:00:00.000000000Z","requestID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
+}

@@ -4,10 +4,22 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/zap/zapcore"
+
 	"go.uber.org/zap"
 )
 
 var logger = NewLogger(Config{Level: DebugLevel})
+
+// SetLoggerConfig sets the logging config.
+func SetLoggerConfig(config Config) {
+	logger = NewLogger(config)
+}
+
+// SetLoggerLevel sets the logging level.
+func SetLoggerLevel(level zapcore.Level) {
+	SetLoggerConfig(Config{Level: level})
+}
 
 // Instantiate a new logger and assign any key-value pair to addedInfo field in logger to log additional
 // information specific to service
