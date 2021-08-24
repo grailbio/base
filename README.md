@@ -19,3 +19,6 @@ other grailbio Go packages:
 - [bitset](https://godoc.org/github.com/grailbio/base/bitset): []uintptr bitset support
 - [simd](https://godoc.org/github.com/grailbio/base/simd): fast operations on []byte
 - [tsv](https://godoc.org/github.com/grailbio/base/tsv): simple and efficient TSV writer
+- [cloud/spotadvisor](https://godoc.org/github.com/grailbio/base/cloud/spotadvisor): provides an interface for fetching and utilizing AWS Spot Advisor data
+- [cloud/spotfeed](https://godoc.org/github.com/grailbio/base/cloud/spotfeed): provides interfaces for interacting with the AWS spot data feed format for files hosted on S3
+ 

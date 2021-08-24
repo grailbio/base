@@ -1,0 +1,2955 @@
+{
+  "spot_advisor": {
+    "eu-west-2": {
+      "Windows": {
+        "r4.xlarge": {
+          "r": 0,
+          "s": 50
+        },
+        "t3.nano": {
+          "r": 1,
+          "s": 39
+        },
+        "t2.micro": {
+          "r": 2,
+          "s": 52
+        },
+        "r5d.metal": {
+          "r": 3,
+          "s": 52
+        },
+        "i3.2xlarge": {
+          "r": 4,
+          "s": 46
+        }
+      },
+      "Linux": {
+        "m5a.4xlarge": {
+          "r": 0,
+          "s": 67
+        },
+        "t3.nano": {
+          "r": 1,
+          "s": 69
+        },
+        "g4dn.12xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "r5d.8xlarge": {
+          "r": 3,
+          "s": 80
+        },
+        "i3.2xlarge": {
+          "r": 4,
+          "s": 70
+        }
+      }
+    },
+    "us-west-2": {
+      "Windows": {
+        "t3.nano": {
+          "r": 0,
+          "s": 37
+        },
+        "r5a.large": {
+          "r": 1,
+          "s": 38
+        },
+        "m2.xlarge": {
+          "r": 4,
+          "s": 64
+        },
+        "d3.2xlarge": {
+          "r": 2,
+          "s": 51
+        },
+        "r5b.16xlarge": {
+          "r": 3,
+          "s": 47
+        },
+        "c5a.24xlarge": {
+          "r": 2,
+          "s": 27
+        },
+        "z1d.3xlarge": {
+          "r": 4,
+          "s": 47
+        },
+        "c5d.24xlarge": {
+          "r": 0,
+          "s": 34
+        },
+        "r5d.xlarge": {
+          "r": 0,
+          "s": 46
+        },
+        "c5n.9xlarge": {
+          "r": 1,
+          "s": 38
+        },
+        "c5d.18xlarge": {
+          "r": 0,
+          "s": 34
+        },
+        "m5ad.12xlarge": {
+          "r": 2,
+          "s": 35
+        },
+        "c4.2xlarge": {
+          "r": 0,
+          "s": 36
+        },
+        "r5dn.8xlarge": {
+          "r": 0,
+          "s": 51
+        },
+        "r4.8xlarge": {
+          "r": 0,
+          "s": 44
+        },
+        "m3.xlarge": {
+          "r": 0,
+          "s": 40
+        },
+        "m5dn.metal": {
+          "r": 4,
+          "s": 45
+        },
+        "m5d.2xlarge": {
+          "r": 1,
+          "s": 39
+        },
+        "c3.2xlarge": {
+          "r": 2,
+          "s": 40
+        },
+        "r5dn.large": {
+          "r": 1,
+          "s": 51
+        }
+      },
+      "Linux": {
+        "x2gd.16xlarge": {
+          "r": 1,
+          "s": 70
+        },
+        "r5a.large": {
+          "r": 0,
+          "s": 69
+        },
+        "a1.2xlarge": {
+          "r": 4,
+          "s": 67
+        },
+        "m2.xlarge": {
+          "r": 4,
+          "s": 90
+        },
+        "d3.2xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "m3.large": {
+          "r": 0,
+          "s": 77
+        },
+        "c5.metal": {
+          "r": 0,
+          "s": 62
+        },
+        "t3a.nano": {
+          "r": 0,
+          "s": 66
+        },
+        "c5ad.xlarge": {
+          "r": 0,
+          "s": 63
+        },
+        "m6g.2xlarge": {
+          "r": 0,
+          "s": 54
+        },
+        "m6g.metal": {
+          "r": 0,
+          "s": 54
+        },
+        "r3.8xlarge": {
+          "r": 0,
+          "s": 81
+        },
+        "r5b.xlarge": {
+          "r": 0,
+          "s": 76
+        },
+        "t3a.medium": {
+          "r": 0,
+          "s": 70
+        },
+        "c6gd.2xlarge": {
+          "r": 0,
+          "s": 56
+        },
+        "c5ad.8xlarge": {
+          "r": 1,
+          "s": 63
+        },
+        "r5n.large": {
+          "r": 1,
+          "s": 76
+        },
+        "m6gd.2xlarge": {
+          "r": 2,
+          "s": 61
+        },
+        "t2.micro": {
+          "r": 0,
+          "s": 70
+        },
+        "m5a.8xlarge": {
+          "r": 2,
+          "s": 60
+        },
+        "x2gd.8xlarge": {
+          "r": 1,
+          "s": 70
+        },
+        "m5n.2xlarge": {
+          "r": 0,
+          "s": 61
+        },
+        "c5n.4xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "c5ad.2xlarge": {
+          "r": 4,
+          "s": 63
+        },
+        "m5ad.8xlarge": {
+          "r": 1,
+          "s": 67
+        },
+        "t2.small": {
+          "r": 0,
+          "s": 70
+        },
+        "m2.4xlarge": {
+          "r": 4,
+          "s": 90
+        },
+        "r5d.4xlarge": {
+          "r": 1,
+          "s": 70
+        },
+        "r5d.xlarge": {
+          "r": 0,
+          "s": 75
+        },
+        "m5d.12xlarge": {
+          "r": 1,
+          "s": 70
+        },
+        "z1d.large": {
+          "r": 4,
+          "s": 70
+        },
+        "r5b.12xlarge": {
+          "r": 3,
+          "s": 76
+        },
+        "r4.xlarge": {
+          "r": 0,
+          "s": 71
+        },
+        "m6g.xlarge": {
+          "r": 0,
+          "s": 54
+        },
+        "r5b.large": {
+          "r": 0,
+          "s": 76
+        },
+        "m5ad.4xlarge": {
+          "r": 0,
+          "s": 65
+        },
+        "c5d.large": {
+          "r": 0,
+          "s": 66
+        },
+        "a1.metal": {
+          "r": 2,
+          "s": 67
+        },
+        "t4g.medium": {
+          "r": 0,
+          "s": 70
+        },
+        "c3.2xlarge": {
+          "r": 1,
+          "s": 72
+        },
+        "g4dn.16xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "c3.8xlarge": {
+          "r": 0,
+          "s": 72
+        },
+        "r4.2xlarge": {
+          "r": 0,
+          "s": 67
+        },
+        "m5a.2xlarge": {
+          "r": 0,
+          "s": 48
+        },
+        "c5d.metal": {
+          "r": 3,
+          "s": 66
+        },
+        "t4g.xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "r6gd.large": {
+          "r": 0,
+          "s": 68
+        },
+        "r6gd.8xlarge": {
+          "r": 4,
+          "s": 68
+        },
+        "m5zn.12xlarge": {
+          "r": 3,
+          "s": 80
+        },
+        "r5ad.large": {
+          "r": 1,
+          "s": 73
+        },
+        "m5n.8xlarge": {
+          "r": 0,
+          "s": 62
+        },
+        "m6gd.medium": {
+          "r": 0,
+          "s": 61
+        },
+        "m5dn.xlarge": {
+          "r": 0,
+          "s": 63
+        },
+        "inf1.6xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "d3en.xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "p2.16xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "x2gd.4xlarge": {
+          "r": 1,
+          "s": 70
+        },
+        "z1d.3xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "c5d.24xlarge": {
+          "r": 3,
+          "s": 65
+        },
+        "r5d.12xlarge": {
+          "r": 1,
+          "s": 75
+        },
+        "g4ad.16xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "m5d.metal": {
+          "r": 3,
+          "s": 70
+        },
+        "c5ad.large": {
+          "r": 2,
+          "s": 63
+        },
+        "g4dn.xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "c5.9xlarge": {
+          "r": 2,
+          "s": 62
+        },
+        "r5dn.metal": {
+          "r": 3,
+          "s": 79
+        },
+        "c5ad.12xlarge": {
+          "r": 0,
+          "s": 63
+        },
+        "i2.xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "r6gd.16xlarge": {
+          "r": 4,
+          "s": 68
+        },
+        "m6gd.xlarge": {
+          "r": 0,
+          "s": 61
+        },
+        "x2gd.large": {
+          "r": 1,
+          "s": 70
+        },
+        "r3.4xlarge": {
+          "r": 0,
+          "s": 80
+        },
+        "c5a.24xlarge": {
+          "r": 0,
+          "s": 58
+        },
+        "t3a.2xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "c6g.12xlarge": {
+          "r": 0,
+          "s": 50
+        },
+        "c5n.2xlarge": {
+          "r": 0,
+          "s": 69
+        },
+        "c5a.16xlarge": {
+          "r": 4,
+          "s": 58
+        },
+        "m5dn.12xlarge": {
+          "r": 3,
+          "s": 73
+        },
+        "m1.medium": {
+          "r": 4,
+          "s": 90
+        },
+        "m6g.12xlarge": {
+          "r": 0,
+          "s": 54
+        },
+        "d3en.12xlarge": {
+          "r": 3,
+          "s": 70
+        },
+        "g3.8xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "m6g.8xlarge": {
+          "r": 0,
+          "s": 54
+        },
+        "m5a.24xlarge": {
+          "r": 4,
+          "s": 61
+        },
+        "z1d.6xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "r5n.8xlarge": {
+          "r": 0,
+          "s": 67
+        },
+        "m5zn.metal": {
+          "r": 4,
+          "s": 80
+        },
+        "m5dn.8xlarge": {
+          "r": 1,
+          "s": 65
+        },
+        "r5a.8xlarge": {
+          "r": 1,
+          "s": 69
+        },
+        "t3.2xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "r6gd.metal": {
+          "r": 0,
+          "s": 68
+        },
+        "m5d.xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "c6g.metal": {
+          "r": 0,
+          "s": 50
+        },
+        "r5dn.8xlarge": {
+          "r": 0,
+          "s": 75
+        },
+        "m5dn.metal": {
+          "r": 2,
+          "s": 75
+        },
+        "m5d.2xlarge": {
+          "r": 0,
+          "s": 64
+        },
+        "c6gd.4xlarge": {
+          "r": 0,
+          "s": 56
+        },
+        "r6g.large": {
+          "r": 0,
+          "s": 63
+        },
+        "t3.nano": {
+          "r": 0,
+          "s": 69
+        },
+        "m5a.4xlarge": {
+          "r": 1,
+          "s": 52
+        },
+        "m4.10xlarge": {
+          "r": 2,
+          "s": 61
+        },
+        "c6gd.8xlarge": {
+          "r": 3,
+          "s": 56
+        },
+        "i3.2xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "r5d.metal": {
+          "r": 4,
+          "s": 75
+        },
+        "m6gd.4xlarge": {
+          "r": 0,
+          "s": 61
+        },
+        "i2.2xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "c6gd.medium": {
+          "r": 0,
+          "s": 56
+        },
+        "c6gn.12xlarge": {
+          "r": 0,
+          "s": 61
+        },
+        "i3en.24xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "x1e.2xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "i3en.xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "a1.large": {
+          "r": 4,
+          "s": 67
+        },
+        "c5n.18xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "g4ad.4xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "r5n.24xlarge": {
+          "r": 1,
+          "s": 76
+        },
+        "x1e.32xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "r5ad.xlarge": {
+          "r": 1,
+          "s": 73
+        },
+        "c6g.8xlarge": {
+          "r": 0,
+          "s": 50
+        },
+        "c5.4xlarge": {
+          "r": 1,
+          "s": 62
+        },
+        "h1.16xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "c6gn.large": {
+          "r": 0,
+          "s": 61
+        },
+        "c3.xlarge": {
+          "r": 1,
+          "s": 72
+        },
+        "m5dn.24xlarge": {
+          "r": 3,
+          "s": 75
+        },
+        "m5ad.xlarge": {
+          "r": 0,
+          "s": 67
+        },
+        "r6g.4xlarge": {
+          "r": 1,
+          "s": 63
+        },
+        "c4.large": {
+          "r": 0,
+          "s": 69
+        },
+        "d2.2xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "t3.large": {
+          "r": 0,
+          "s": 70
+        },
+        "m6gd.16xlarge": {
+          "r": 0,
+          "s": 61
+        },
+        "c6gd.metal": {
+          "r": 4,
+          "s": 56
+        },
+        "r5a.12xlarge": {
+          "r": 0,
+          "s": 69
+        },
+        "m4.16xlarge": {
+          "r": 2,
+          "s": 65
+        },
+        "c6gn.16xlarge": {
+          "r": 0,
+          "s": 61
+        },
+        "m5d.24xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "x2gd.2xlarge": {
+          "r": 1,
+          "s": 70
+        },
+        "m6g.4xlarge": {
+          "r": 0,
+          "s": 54
+        },
+        "t4g.small": {
+          "r": 0,
+          "s": 70
+        },
+        "t3a.micro": {
+          "r": 0,
+          "s": 70
+        },
+        "x1.32xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "inf1.2xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "m4.xlarge": {
+          "r": 1,
+          "s": 67
+        },
+        "c4.8xlarge": {
+          "r": 3,
+          "s": 65
+        },
+        "x1e.16xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "d2.4xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "d3en.4xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "r5n.2xlarge": {
+          "r": 0,
+          "s": 68
+        },
+        "m5n.12xlarge": {
+          "r": 4,
+          "s": 65
+        },
+        "r3.2xlarge": {
+          "r": 1,
+          "s": 79
+        },
+        "r5a.24xlarge": {
+          "r": 1,
+          "s": 69
+        },
+        "a1.medium": {
+          "r": 4,
+          "s": 67
+        },
+        "t4g.nano": {
+          "r": 0,
+          "s": 69
+        },
+        "r5d.2xlarge": {
+          "r": 1,
+          "s": 75
+        },
+        "r5dn.24xlarge": {
+          "r": 3,
+          "s": 79
+        },
+        "r6gd.medium": {
+          "r": 0,
+          "s": 68
+        },
+        "r5ad.4xlarge": {
+          "r": 0,
+          "s": 73
+        },
+        "m5.4xlarge": {
+          "r": 4,
+          "s": 60
+        },
+        "r6g.xlarge": {
+          "r": 3,
+          "s": 63
+        },
+        "h1.8xlarge": {
+          "r": 4,
+          "s": 68
+        },
+        "g4dn.2xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "m5zn.6xlarge": {
+          "r": 4,
+          "s": 80
+        },
+        "r5b.8xlarge": {
+          "r": 4,
+          "s": 76
+        },
+        "c5.large": {
+          "r": 0,
+          "s": 62
+        },
+        "m5ad.24xlarge": {
+          "r": 1,
+          "s": 67
+        },
+        "i3en.6xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "r5n.12xlarge": {
+          "r": 4,
+          "s": 72
+        },
+        "r5dn.16xlarge": {
+          "r": 3,
+          "s": 79
+        },
+        "m5zn.large": {
+          "r": 1,
+          "s": 80
+        },
+        "c5.xlarge": {
+          "r": 0,
+          "s": 62
+        },
+        "m5ad.2xlarge": {
+          "r": 0,
+          "s": 57
+        },
+        "i3.xlarge": {
+          "r": 4,
+          "s": 62
+        },
+        "g3.4xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "p2.xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "m1.xlarge": {
+          "r": 4,
+          "s": 90
+        },
+        "t3a.large": {
+          "r": 1,
+          "s": 70
+        },
+        "r5b.16xlarge": {
+          "r": 4,
+          "s": 76
+        },
+        "r5.16xlarge": {
+          "r": 3,
+          "s": 70
+        },
+        "r5.12xlarge": {
+          "r": 2,
+          "s": 72
+        },
+        "h1.4xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "c5.18xlarge": {
+          "r": 0,
+          "s": 62
+        },
+        "i2.8xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "x2gd.metal": {
+          "r": 1,
+          "s": 70
+        },
+        "r6g.16xlarge": {
+          "r": 0,
+          "s": 63
+        },
+        "r6gd.4xlarge": {
+          "r": 3,
+          "s": 68
+        },
+        "r5.8xlarge": {
+          "r": 1,
+          "s": 71
+        },
+        "c5n.metal": {
+          "r": 1,
+          "s": 70
+        },
+        "c6g.xlarge": {
+          "r": 0,
+          "s": 50
+        },
+        "m5zn.2xlarge": {
+          "r": 0,
+          "s": 78
+        },
+        "r5ad.16xlarge": {
+          "r": 1,
+          "s": 73
+        },
+        "p2.8xlarge": {
+          "r": 4,
+          "s": 70
+        },
+        "r4.4xlarge": {
+          "r": 0,
+          "s": 68
+        },
+        "t2.large": {
+          "r": 0,
+          "s": 70
+        },
+        "c5d.xlarge": {
+          "r": 0,
+          "s": 66
+        },
+        "g4ad.8xlarge": {
+          "r": 2,
+          "s": 70
+        },
+        "m5.24xlarge": {
+          "r": 3,
+          "s": 65
+        },
+        "z1d.metal": {
+          "r": 4,
+          "s": 70
+        },
+        "r5b.2xlarge": {
+          "r": 2,
+          "s": 71
+        },
+        "a1.xlarge": {
+          "r": 4,
+          "s": 67
+        },
+        "r5dn.2xlarge": {
+          "r": 0,
+          "s": 70
+        },
+        "m5zn.xlarge": {
+          "r": 1,
+          "s": 73
+        },
+        "r5dn.large": {
+          "r": 1,
+          "s": 79
+        },
+        "i3.4xlarge": {
+          "r": 4,
+          "s": 70
+        }
+      }
+    }
+  },
+  "global_rate": "<5%",
+  "instance_types": {
+    "x2gd.16xlarge": {
+      "ram_gb": 1024,
+      "cores": 64,
+      "emr": false
+    },
+    "r5a.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "a1.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "m2.xlarge": {
+      "ram_gb": 17.1,
+      "cores": 2,
+      "emr": true
+    },
+    "d3.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "m3.large": {
+      "ram_gb": 7.5,
+      "cores": 2,
+      "emr": false
+    },
+    "c5.metal": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "t3a.nano": {
+      "ram_gb": 0.5,
+      "cores": 2,
+      "emr": false
+    },
+    "r4.xlarge": {
+      "ram_gb": 30.5,
+      "cores": 4,
+      "emr": true
+    },
+    "m6g.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": true
+    },
+    "m6g.metal": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "inf1.6xlarge": {
+      "ram_gb": 48,
+      "cores": 24,
+      "emr": false
+    },
+    "r5b.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "t3a.medium": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "c6gd.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "c5ad.8xlarge": {
+      "ram_gb": 64,
+      "cores": 32,
+      "emr": false
+    },
+    "r5n.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "m6gd.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "t2.micro": {
+      "ram_gb": 1,
+      "cores": 1,
+      "emr": false
+    },
+    "c5ad.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "u-6tb1.56xlarge": {
+      "ram_gb": 6144,
+      "cores": 224,
+      "emr": false
+    },
+    "r5d.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": true
+    },
+    "m5n.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "c5n.4xlarge": {
+      "ram_gb": 42,
+      "cores": 16,
+      "emr": true
+    },
+    "m5dn.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "m5zn.3xlarge": {
+      "ram_gb": 48,
+      "cores": 12,
+      "emr": false
+    },
+    "m5.metal": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "c5n.xlarge": {
+      "ram_gb": 10.5,
+      "cores": 4,
+      "emr": true
+    },
+    "m5a.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": true
+    },
+    "u-9tb1.112xlarge": {
+      "ram_gb": 9216,
+      "cores": 448,
+      "emr": false
+    },
+    "c5ad.16xlarge": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "c6gn.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "r4.large": {
+      "ram_gb": 15.25,
+      "cores": 2,
+      "emr": false
+    },
+    "i3en.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": true
+    },
+    "m5d.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": true
+    },
+    "d3.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "c5ad.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "inf1.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "m1.large": {
+      "ram_gb": 7.5,
+      "cores": 2,
+      "emr": true
+    },
+    "i3en.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "r5ad.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "r6g.medium": {
+      "ram_gb": 8,
+      "cores": 1,
+      "emr": false
+    },
+    "g3.16xlarge": {
+      "ram_gb": 488,
+      "cores": 64,
+      "emr": true
+    },
+    "c4.xlarge": {
+      "ram_gb": 7.5,
+      "cores": 4,
+      "emr": true
+    },
+    "t2.small": {
+      "ram_gb": 2,
+      "cores": 1,
+      "emr": false
+    },
+    "m2.4xlarge": {
+      "ram_gb": 68.4,
+      "cores": 8,
+      "emr": true
+    },
+    "r5d.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": true
+    },
+    "r5n.metal": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "m3.medium": {
+      "ram_gb": 3.75,
+      "cores": 1,
+      "emr": false
+    },
+    "z1d.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "r5b.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "c5ad.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "m6g.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": true
+    },
+    "r5b.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "c6gd.medium": {
+      "ram_gb": 2,
+      "cores": 1,
+      "emr": false
+    },
+    "c5d.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "a1.metal": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "c3.2xlarge": {
+      "ram_gb": 15,
+      "cores": 8,
+      "emr": true
+    },
+    "g4dn.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "c3.8xlarge": {
+      "ram_gb": 60,
+      "cores": 32,
+      "emr": true
+    },
+    "r4.2xlarge": {
+      "ram_gb": 61,
+      "cores": 8,
+      "emr": true
+    },
+    "m5a.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": true
+    },
+    "c5d.metal": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "t4g.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "r6gd.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "r6gd.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": false
+    },
+    "m3.2xlarge": {
+      "ram_gb": 30,
+      "cores": 8,
+      "emr": true
+    },
+    "m5d.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "c6g.16xlarge": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "r3.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": true
+    },
+    "c6gd.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": false
+    },
+    "r5b.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "t4g.micro": {
+      "ram_gb": 1,
+      "cores": 2,
+      "emr": false
+    },
+    "m5zn.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "d3en.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "g4dn.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "c6gd.16xlarge": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "x1e.8xlarge": {
+      "ram_gb": 976,
+      "cores": 32,
+      "emr": false
+    },
+    "r5ad.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "m5n.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "r5n.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "m5dn.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "d3en.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "p2.16xlarge": {
+      "ram_gb": 732,
+      "cores": 64,
+      "emr": true
+    },
+    "c6gd.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "r6g.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": true
+    },
+    "r5d.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": true
+    },
+    "g4ad.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "m5d.metal": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "c5ad.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "g4dn.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "c5.9xlarge": {
+      "ram_gb": 72,
+      "cores": 36,
+      "emr": true
+    },
+    "r5dn.metal": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "c5ad.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": false
+    },
+    "i2.xlarge": {
+      "ram_gb": 30.5,
+      "cores": 4,
+      "emr": true
+    },
+    "r5dn.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "r6gd.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "m6gd.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "x2gd.large": {
+      "ram_gb": 32,
+      "cores": 2,
+      "emr": false
+    },
+    "c5a.24xlarge": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "i3.16xlarge": {
+      "ram_gb": 488,
+      "cores": 64,
+      "emr": true
+    },
+    "x1e.4xlarge": {
+      "ram_gb": 488,
+      "cores": 16,
+      "emr": false
+    },
+    "t3a.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "r6g.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "r5a.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": true
+    },
+    "i3en.metal": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "g2.2xlarge": {
+      "ram_gb": 15,
+      "cores": 8,
+      "emr": true
+    },
+    "m5d.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": true
+    },
+    "d3.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": false
+    },
+    "m2.2xlarge": {
+      "ram_gb": 34.2,
+      "cores": 4,
+      "emr": true
+    },
+    "i3en.6xlarge": {
+      "ram_gb": 192,
+      "cores": 24,
+      "emr": true
+    },
+    "t2.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "c6gd.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "c5.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": true
+    },
+    "m6gd.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "m5n.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "d2.8xlarge": {
+      "ram_gb": 244,
+      "cores": 36,
+      "emr": true
+    },
+    "z1d.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "m5dn.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "r5n.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "r5ad.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "m3.xlarge": {
+      "ram_gb": 15,
+      "cores": 4,
+      "emr": true
+    },
+    "m5n.24xlarge": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "p4d.24xlarge": {
+      "ram_gb": 1152,
+      "cores": 96,
+      "emr": false
+    },
+    "t2.nano": {
+      "ram_gb": 0.5,
+      "cores": 1,
+      "emr": false
+    },
+    "c5ad.24xlarge": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "c3.large": {
+      "ram_gb": 3.75,
+      "cores": 2,
+      "emr": false
+    },
+    "m6gd.medium": {
+      "ram_gb": 4,
+      "cores": 1,
+      "emr": false
+    },
+    "t3a.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "c6g.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": false
+    },
+    "c5n.2xlarge": {
+      "ram_gb": 21,
+      "cores": 8,
+      "emr": true
+    },
+    "c5a.16xlarge": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "f1.2xlarge": {
+      "ram_gb": 122,
+      "cores": 8,
+      "emr": false
+    },
+    "d3.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "r5b.metal": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "i3.large": {
+      "ram_gb": 15.25,
+      "cores": 2,
+      "emr": true
+    },
+    "m5n.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "m5dn.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "m1.medium": {
+      "ram_gb": 3.75,
+      "cores": 1,
+      "emr": true
+    },
+    "m6g.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": true
+    },
+    "d3en.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "g3.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": true
+    },
+    "m6g.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": true
+    },
+    "m5a.24xlarge": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": true
+    },
+    "z1d.6xlarge": {
+      "ram_gb": 192,
+      "cores": 24,
+      "emr": false
+    },
+    "r5n.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": false
+    },
+    "m5zn.metal": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "t4g.medium": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "u-12tb1.112xlarge": {
+      "ram_gb": 12288,
+      "cores": 448,
+      "emr": false
+    },
+    "r5a.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": true
+    },
+    "t3.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "r6gd.metal": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "m5d.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": true
+    },
+    "m5.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": true
+    },
+    "r5.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": true
+    },
+    "z1d.3xlarge": {
+      "ram_gb": 96,
+      "cores": 12,
+      "emr": false
+    },
+    "c5n.large": {
+      "ram_gb": 5.25,
+      "cores": 2,
+      "emr": false
+    },
+    "m5dn.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "m5dn.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "c6g.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "m1.xlarge": {
+      "ram_gb": 15,
+      "cores": 4,
+      "emr": true
+    },
+    "m5.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": true
+    },
+    "r4.16xlarge": {
+      "ram_gb": 488,
+      "cores": 64,
+      "emr": true
+    },
+    "z1d.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "c6g.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "t1.micro": {
+      "ram_gb": 0.61,
+      "cores": 1,
+      "emr": false
+    },
+    "u-6tb1.112xlarge": {
+      "ram_gb": 6144,
+      "cores": 448,
+      "emr": false
+    },
+    "c1.medium": {
+      "ram_gb": 1.7,
+      "cores": 2,
+      "emr": true
+    },
+    "f1.4xlarge": {
+      "ram_gb": 244,
+      "cores": 16,
+      "emr": false
+    },
+    "t3.micro": {
+      "ram_gb": 1,
+      "cores": 2,
+      "emr": false
+    },
+    "x2gd.12xlarge": {
+      "ram_gb": 768,
+      "cores": 48,
+      "emr": false
+    },
+    "g4dn.metal": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "c6g.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "x2gd.xlarge": {
+      "ram_gb": 64,
+      "cores": 4,
+      "emr": false
+    },
+    "m5dn.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "x1.16xlarge": {
+      "ram_gb": 976,
+      "cores": 64,
+      "emr": false
+    },
+    "t3.medium": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "m6g.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": true
+    },
+    "r3.large": {
+      "ram_gb": 15.25,
+      "cores": 2,
+      "emr": false
+    },
+    "r5d.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": true
+    },
+    "c5.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": true
+    },
+    "r6gd.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "c5d.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": true
+    },
+    "i3en.3xlarge": {
+      "ram_gb": 96,
+      "cores": 12,
+      "emr": true
+    },
+    "r4.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": true
+    },
+    "t4g.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "g4dn.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "m5.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "c6gn.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "c5.18xlarge": {
+      "ram_gb": 144,
+      "cores": 72,
+      "emr": true
+    },
+    "m5a.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": true
+    },
+    "r5ad.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "i3.metal": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "c5a.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": false
+    },
+    "p3.16xlarge": {
+      "ram_gb": 488,
+      "cores": 64,
+      "emr": true
+    },
+    "r5.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": true
+    },
+    "t4g.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "m4.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": true
+    },
+    "c6g.metal": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "r5dn.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": false
+    },
+    "m5dn.metal": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "c6gd.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "m5ad.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "t3.nano": {
+      "ram_gb": 0.5,
+      "cores": 2,
+      "emr": false
+    },
+    "m5a.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": true
+    },
+    "m4.10xlarge": {
+      "ram_gb": 160,
+      "cores": 40,
+      "emr": true
+    },
+    "c6gd.8xlarge": {
+      "ram_gb": 64,
+      "cores": 32,
+      "emr": false
+    },
+    "i3.2xlarge": {
+      "ram_gb": 61,
+      "cores": 8,
+      "emr": true
+    },
+    "r5d.metal": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "m6gd.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "i2.2xlarge": {
+      "ram_gb": 61,
+      "cores": 8,
+      "emr": true
+    },
+    "m5ad.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "c6gn.12xlarge": {
+      "ram_gb": 96,
+      "cores": 48,
+      "emr": false
+    },
+    "i3en.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": true
+    },
+    "x1e.2xlarge": {
+      "ram_gb": 244,
+      "cores": 8,
+      "emr": false
+    },
+    "r6g.metal": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "a1.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "c5n.18xlarge": {
+      "ram_gb": 192,
+      "cores": 72,
+      "emr": true
+    },
+    "g4ad.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "d2.xlarge": {
+      "ram_gb": 30.5,
+      "cores": 4,
+      "emr": true
+    },
+    "x1e.32xlarge": {
+      "ram_gb": 3904,
+      "cores": 128,
+      "emr": false
+    },
+    "r5ad.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "c6g.8xlarge": {
+      "ram_gb": 64,
+      "cores": 32,
+      "emr": false
+    },
+    "m4.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": true
+    },
+    "m5a.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "h1.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": true
+    },
+    "c3.xlarge": {
+      "ram_gb": 7.5,
+      "cores": 4,
+      "emr": true
+    },
+    "m5dn.24xlarge": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "m5ad.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "r6g.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "c4.large": {
+      "ram_gb": 3.75,
+      "cores": 2,
+      "emr": true
+    },
+    "d2.2xlarge": {
+      "ram_gb": 61,
+      "cores": 8,
+      "emr": true
+    },
+    "r5ad.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "m6gd.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "c6gd.metal": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "x2gd.4xlarge": {
+      "ram_gb": 256,
+      "cores": 16,
+      "emr": false
+    },
+    "r5a.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": true
+    },
+    "m4.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": true
+    },
+    "c6gn.16xlarge": {
+      "ram_gb": 128,
+      "cores": 64,
+      "emr": false
+    },
+    "m5d.24xlarge": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": true
+    },
+    "x2gd.2xlarge": {
+      "ram_gb": 128,
+      "cores": 8,
+      "emr": false
+    },
+    "m6g.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": true
+    },
+    "t4g.small": {
+      "ram_gb": 2,
+      "cores": 2,
+      "emr": false
+    },
+    "t3a.micro": {
+      "ram_gb": 1,
+      "cores": 2,
+      "emr": false
+    },
+    "c5.24xlarge": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "t3a.small": {
+      "ram_gb": 2,
+      "cores": 2,
+      "emr": false
+    },
+    "c5d.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": true
+    },
+    "d3en.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "g3s.xlarge": {
+      "ram_gb": 30.5,
+      "cores": 4,
+      "emr": true
+    },
+    "c5a.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "c6gn.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "c5d.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": true
+    },
+    "p3dn.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "c5a.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "r5dn.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "m1.small": {
+      "ram_gb": 1.7,
+      "cores": 1,
+      "emr": true
+    },
+    "x1.32xlarge": {
+      "ram_gb": 1952,
+      "cores": 128,
+      "emr": false
+    },
+    "inf1.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": false
+    },
+    "m4.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": true
+    },
+    "c4.8xlarge": {
+      "ram_gb": 60,
+      "cores": 36,
+      "emr": true
+    },
+    "x1e.16xlarge": {
+      "ram_gb": 1952,
+      "cores": 64,
+      "emr": false
+    },
+    "d2.4xlarge": {
+      "ram_gb": 122,
+      "cores": 16,
+      "emr": true
+    },
+    "d3en.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "z1d.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "m5n.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "r3.2xlarge": {
+      "ram_gb": 61,
+      "cores": 8,
+      "emr": true
+    },
+    "r5a.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": true
+    },
+    "x2gd.8xlarge": {
+      "ram_gb": 512,
+      "cores": 32,
+      "emr": false
+    },
+    "a1.medium": {
+      "ram_gb": 2,
+      "cores": 1,
+      "emr": false
+    },
+    "t4g.nano": {
+      "ram_gb": 0.5,
+      "cores": 2,
+      "emr": false
+    },
+    "r5d.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": true
+    },
+    "r5dn.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "r3.4xlarge": {
+      "ram_gb": 122,
+      "cores": 16,
+      "emr": true
+    },
+    "r5ad.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "m5.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": true
+    },
+    "r6g.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": true
+    },
+    "h1.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": true
+    },
+    "hs1.8xlarge": {
+      "ram_gb": 117,
+      "cores": 16,
+      "emr": false
+    },
+    "m5zn.6xlarge": {
+      "ram_gb": 96,
+      "cores": 24,
+      "emr": false
+    },
+    "cr1.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": false
+    },
+    "c5a.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "c5.large": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "m5ad.24xlarge": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "r3.xlarge": {
+      "ram_gb": 30.5,
+      "cores": 4,
+      "emr": true
+    },
+    "r5n.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "m5zn.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "c5.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": true
+    },
+    "m5ad.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "i3.xlarge": {
+      "ram_gb": 30.5,
+      "cores": 4,
+      "emr": true
+    },
+    "g3.4xlarge": {
+      "ram_gb": 122,
+      "cores": 16,
+      "emr": true
+    },
+    "c5.2xlarge": {
+      "ram_gb": 16,
+      "cores": 8,
+      "emr": true
+    },
+    "i3en.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": true
+    },
+    "c6gn.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "c1.xlarge": {
+      "ram_gb": 7,
+      "cores": 8,
+      "emr": true
+    },
+    "m5d.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": true
+    },
+    "r5ad.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": false
+    },
+    "m5n.metal": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": false
+    },
+    "h1.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": true
+    },
+    "h1.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": true
+    },
+    "c4.2xlarge": {
+      "ram_gb": 15,
+      "cores": 8,
+      "emr": true
+    },
+    "z1d.metal": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "g2.8xlarge": {
+      "ram_gb": 60,
+      "cores": 32,
+      "emr": false
+    },
+    "r5d.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "m5a.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "i3en.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": true
+    },
+    "m5.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": true
+    },
+    "r5d.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": true
+    },
+    "m5.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": true
+    },
+    "m5a.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": true
+    },
+    "r5n.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "inf1.24xlarge": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "r5d.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": true
+    },
+    "r5.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": true
+    },
+    "r6gd.medium": {
+      "ram_gb": 8,
+      "cores": 1,
+      "emr": false
+    },
+    "x2gd.medium": {
+      "ram_gb": 16,
+      "cores": 1,
+      "emr": false
+    },
+    "r5b.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": false
+    },
+    "r5a.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": true
+    },
+    "m5d.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "r5a.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": true
+    },
+    "r5dn.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "c6gn.medium": {
+      "ram_gb": 2,
+      "cores": 1,
+      "emr": false
+    },
+    "m4.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": true
+    },
+    "m5ad.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "c5n.9xlarge": {
+      "ram_gb": 96,
+      "cores": 36,
+      "emr": true
+    },
+    "i3.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": true
+    },
+    "c6gn.8xlarge": {
+      "ram_gb": 64,
+      "cores": 32,
+      "emr": false
+    },
+    "c6g.medium": {
+      "ram_gb": 2,
+      "cores": 1,
+      "emr": false
+    },
+    "m5.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "r5.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": true
+    },
+    "g4dn.4xlarge": {
+      "ram_gb": 64,
+      "cores": 16,
+      "emr": false
+    },
+    "t2.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "c4.4xlarge": {
+      "ram_gb": 30,
+      "cores": 16,
+      "emr": true
+    },
+    "t2.medium": {
+      "ram_gb": 4,
+      "cores": 2,
+      "emr": false
+    },
+    "x1e.xlarge": {
+      "ram_gb": 122,
+      "cores": 4,
+      "emr": false
+    },
+    "m6gd.metal": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "r6gd.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "t3.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "c5a.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "c5a.8xlarge": {
+      "ram_gb": 64,
+      "cores": 32,
+      "emr": false
+    },
+    "d3en.6xlarge": {
+      "ram_gb": 96,
+      "cores": 24,
+      "emr": false
+    },
+    "m5.24xlarge": {
+      "ram_gb": 384,
+      "cores": 96,
+      "emr": true
+    },
+    "r5n.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "r5.24xlarge": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": true
+    },
+    "m6g.medium": {
+      "ram_gb": 4,
+      "cores": 1,
+      "emr": false
+    },
+    "c3.4xlarge": {
+      "ram_gb": 30,
+      "cores": 16,
+      "emr": true
+    },
+    "m5n.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "r5b.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "c5d.9xlarge": {
+      "ram_gb": 72,
+      "cores": 36,
+      "emr": true
+    },
+    "r5a.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": true
+    },
+    "m5ad.16xlarge": {
+      "ram_gb": 256,
+      "cores": 64,
+      "emr": false
+    },
+    "r5.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "m5n.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "m6g.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "r5n.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "a1.4xlarge": {
+      "ram_gb": 32,
+      "cores": 16,
+      "emr": false
+    },
+    "m5d.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": true
+    },
+    "r6g.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": true
+    },
+    "p2.xlarge": {
+      "ram_gb": 61,
+      "cores": 4,
+      "emr": true
+    },
+    "c5d.24xlarge": {
+      "ram_gb": 192,
+      "cores": 96,
+      "emr": false
+    },
+    "t3a.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "r5b.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "r5.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": true
+    },
+    "g4ad.8xlarge": {
+      "ram_gb": 128,
+      "cores": 32,
+      "emr": false
+    },
+    "g4dn.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "c5d.18xlarge": {
+      "ram_gb": 144,
+      "cores": 72,
+      "emr": true
+    },
+    "i2.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": true
+    },
+    "x2gd.metal": {
+      "ram_gb": 1024,
+      "cores": 64,
+      "emr": false
+    },
+    "r6g.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": true
+    },
+    "r6gd.4xlarge": {
+      "ram_gb": 128,
+      "cores": 16,
+      "emr": false
+    },
+    "r5.8xlarge": {
+      "ram_gb": 256,
+      "cores": 32,
+      "emr": true
+    },
+    "c5n.metal": {
+      "ram_gb": 192,
+      "cores": 72,
+      "emr": false
+    },
+    "p3.8xlarge": {
+      "ram_gb": 244,
+      "cores": 32,
+      "emr": true
+    },
+    "c6g.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "m5zn.2xlarge": {
+      "ram_gb": 32,
+      "cores": 8,
+      "emr": false
+    },
+    "t3.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "p2.8xlarge": {
+      "ram_gb": 488,
+      "cores": 32,
+      "emr": true
+    },
+    "r4.4xlarge": {
+      "ram_gb": 122,
+      "cores": 16,
+      "emr": true
+    },
+    "t2.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "c5d.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": true
+    },
+    "r5dn.16xlarge": {
+      "ram_gb": 512,
+      "cores": 64,
+      "emr": false
+    },
+    "m6gd.large": {
+      "ram_gb": 8,
+      "cores": 2,
+      "emr": false
+    },
+    "r5b.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "a1.xlarge": {
+      "ram_gb": 8,
+      "cores": 4,
+      "emr": false
+    },
+    "m6gd.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "p3.2xlarge": {
+      "ram_gb": 61,
+      "cores": 8,
+      "emr": true
+    },
+    "r5.metal": {
+      "ram_gb": 768,
+      "cores": 96,
+      "emr": false
+    },
+    "m5ad.12xlarge": {
+      "ram_gb": 192,
+      "cores": 48,
+      "emr": false
+    },
+    "i2.4xlarge": {
+      "ram_gb": 122,
+      "cores": 16,
+      "emr": true
+    },
+    "r6gd.xlarge": {
+      "ram_gb": 32,
+      "cores": 4,
+      "emr": false
+    },
+    "r5dn.12xlarge": {
+      "ram_gb": 384,
+      "cores": 48,
+      "emr": false
+    },
+    "t3.small": {
+      "ram_gb": 2,
+      "cores": 2,
+      "emr": false
+    },
+    "f1.16xlarge": {
+      "ram_gb": 976,
+      "cores": 64,
+      "emr": false
+    },
+    "r5dn.2xlarge": {
+      "ram_gb": 64,
+      "cores": 8,
+      "emr": false
+    },
+    "m5zn.xlarge": {
+      "ram_gb": 16,
+      "cores": 4,
+      "emr": false
+    },
+    "r6g.large": {
+      "ram_gb": 16,
+      "cores": 2,
+      "emr": false
+    },
+    "i3.4xlarge": {
+      "ram_gb": 122,
+      "cores": 16,
+      "emr": true
+    }
+  },
+  "ranges": [
+    {
+      "label": "<5%",
+      "index": 0,
+      "max": 5,
+      "dots": 0
+    },
+    {
+      "label": "5-10%",
+      "index": 1,
+      "max": 11,
+      "dots": 1
+    },
+    {
+      "label": "10-15%",
+      "index": 2,
+      "max": 16,
+      "dots": 2
+    },
+    {
+      "label": "15-20%",
+      "index": 3,
+      "max": 22,
+      "dots": 3
+    },
+    {
+      "label": ">20%",
+      "index": 4,
+      "max": 100,
+      "dots": 4
+    }
+  ]
+}
