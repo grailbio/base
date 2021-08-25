@@ -12,35 +12,18 @@ import (
 
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/testutil"
+	"github.com/grailbio/testutil/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // Write to /dev/stdout. This test only checks that the write succeeds.
 func TestStdout(t *testing.T) {
-	var err error
-
-	if testing.Short() {
-		t.Skip("Cannot open /dev/tty or /dev/stdout from automated tests")
-	}
-
-	for _, path := range []string{
-		"/dev/tty",    // works on darwin
-		"/dev/stdout", // works on linux
-	} {
-		ctx := context.Background()
-		var w file.File
-		w, err = file.Create(ctx, path)
-		if err != nil {
-			continue
-		}
-		_, err = w.Writer(ctx).Write([]byte("Hello"))
-		if err != nil {
-			continue
-		}
-		require.NoError(t, w.Close(ctx))
-		break
-	}
-	require.NoError(t, err)
+	ctx := context.Background()
+	w, err := file.Create(ctx, "/dev/stdout")
+	assert.Nil(t, err)
+	_, err = w.Writer(ctx).Write([]byte("Hello\n"))
+	assert.Nil(t, err)
+	require.NoError(t, w.Close(ctx))
 }
 
 // Read and write a FIFO.

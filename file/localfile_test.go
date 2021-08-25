@@ -6,6 +6,7 @@ package file_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/grailbio/base/file"
 	filetestutil "github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/testutil"
+	"github.com/grailbio/testutil/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,4 +58,17 @@ func TestCreateSymlink(t *testing.T) {
 	data, err = ioutil.ReadFile(oldPath)
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(data))
+}
+
+func TestCreateDirectory(t *testing.T) {
+	tmp, cleanup0 := testutil.TempDir(t, "", "")
+	defer cleanup0()
+
+	dirPath := file.Join(tmp, "dir")
+	err := os.Mkdir(dirPath, 0777)
+	assert.Nil(t, err)
+
+	ctx := context.Background()
+	_, err = file.Create(ctx, dirPath)
+	require.EqualError(t, err, fmt.Sprintf("file.Create %s: is a directory", dirPath))
 }

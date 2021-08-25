@@ -27,8 +27,9 @@ type Implementation interface {
 	// Create opens a file for writing. If "path" already exists, the old contents
 	// will be destroyed. If "path" does not exist already, the file will be newly
 	// created.  If the directory part of the path does not exist already, it will
-	// be created. The pathname given to file.Open() is passed here unchanged.
-	// Thus, it contains the URL prefix such as "s3://".
+	// be created. If the path is a directory, an error will be returned. The
+	// pathname given to file.Create() is passed here unchanged.  Thus, it
+	// contains the URL prefix such as "s3://".
 	Create(ctx context.Context, path string, opts ...Opts) (File, error)
 
 	// List finds files and directories. If "path" points to a regular file, the

@@ -82,12 +82,17 @@ func (*localImpl) Create(ctx context.Context, path string, _ ...Opts) (File, err
 		// symlink on close.
 		realPath = path
 	}
-	if stat, err := os.Stat(path); err == nil && ((stat.Mode()&os.ModeDevice != 0) || (stat.Mode()&os.ModeNamedPipe != 0) || (stat.Mode()&os.ModeSocket != 0)) {
-		f, err := os.Create(path)
-		if err != nil {
-			return nil, err
+	if stat, err := os.Stat(path); err == nil {
+		if (stat.Mode()&os.ModeDevice != 0) || (stat.Mode()&os.ModeNamedPipe != 0) || (stat.Mode()&os.ModeSocket != 0) {
+			f, err := os.Create(path)
+			if err != nil {
+				return nil, err
+			}
+			return &localFile{f: f, mode: writeonlyDev, path: path, realPath: realPath}, nil
 		}
-		return &localFile{f: f, mode: writeonlyDev, path: path, realPath: realPath}, nil
+		if stat.IsDir() {
+			return nil, fmt.Errorf("file.Create %s: is a directory", path)
+		}
 	}
 
 	// filepath.Dir just strips the last "/" if path ends with "/". Else, it
