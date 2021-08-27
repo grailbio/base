@@ -45,12 +45,12 @@ func getFiles() (caCrt, namespace, token string, err error) {
 	}
 	namespaceData, err := ioutil.ReadFile(namespacePath)
 	if err != nil {
-		return "", "", "", fmt.Errorf("opening ca.crt: %w", err)
+		return "", "", "", fmt.Errorf("opening namespace file: %w", err)
 
 	}
 	tokenData, err := ioutil.ReadFile(tokenPath)
 	if err != nil {
-		return "", "", "", fmt.Errorf("opening ca.crt: %w", err)
+		return "", "", "", fmt.Errorf("opening token file: %w", err)
 	}
 
 	return string(caCrtData), string(namespaceData), string(tokenData), err
