@@ -20,7 +20,7 @@ import (
 // Contains an abridged version of a real response to make got/want comparisons easier.
 const testDataPath = "./testdata/test-spot-advisor-data.json"
 
-// TestGetAndFilterByInterruptRate tests both GetInstancesWithMaxInterruptRange and FilterByInterruptRange.
+// TestGetAndFilterByInterruptRate tests both GetInstancesWithMaxInterruptProbability and FilterByMaxInterruptProbability.
 func TestGetAndFilterByInterruptRate(t *testing.T) {
 	defer setupMockTestServer(t).Close()
 	adv, err := sa.NewSpotAdvisor(nil, context.Background().Done())
@@ -31,7 +31,7 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 		name             string
 		osType           sa.OsType
 		region           sa.AwsRegion
-		maxInterruptRate sa.InterruptRange
+		maxInterruptProb sa.InterruptProbability
 		candidates       []string
 		want             []string
 		wantErr          error
@@ -41,7 +41,7 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 			osType:           sa.Windows,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.LessThanFivePct,
+			maxInterruptProb: sa.LessThanFivePct,
 			want:             []string{"r4.xlarge"},
 		},
 		{
@@ -49,7 +49,7 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.LessThanFivePct,
+			maxInterruptProb: sa.LessThanFivePct,
 			want:             []string{"m5a.4xlarge"},
 		},
 		{
@@ -57,7 +57,7 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.LessThanTenPct,
+			maxInterruptProb: sa.LessThanTenPct,
 			want:             []string{"m5a.4xlarge", "t3.nano"},
 		},
 		{
@@ -65,7 +65,7 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.LessThanFifteenPct,
+			maxInterruptProb: sa.LessThanFifteenPct,
 			want:             []string{"m5a.4xlarge", "t3.nano", "g4dn.12xlarge"},
 		},
 		{
@@ -73,49 +73,49 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.LessThanTwentyPct,
+			maxInterruptProb: sa.LessThanTwentyPct,
 			want:             []string{"m5a.4xlarge", "t3.nano", "g4dn.12xlarge", "r5d.8xlarge"},
 		},
 		{
-			name:             "All",
+			name:             "Any",
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.All,
+			maxInterruptProb: sa.Any,
 			want:             testAvailableInstanceTypes,
 		},
 		{
-			name:             "bad_interrupt_range_neg",
+			name:             "bad_interrupt_prob_neg",
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.InterruptRange(-1),
+			maxInterruptProb: sa.InterruptProbability(-1),
 			want:             nil,
-			wantErr:          fmt.Errorf("invalid InterruptRange: -1"),
+			wantErr:          fmt.Errorf("invalid InterruptProbability: -1"),
 		},
 		{
-			name:             "bad_interrupt_range_pos",
+			name:             "bad_interrupt_prob_pos",
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("eu-west-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.InterruptRange(6),
+			maxInterruptProb: sa.InterruptProbability(6),
 			want:             nil,
-			wantErr:          fmt.Errorf("invalid InterruptRange: 6"),
+			wantErr:          fmt.Errorf("invalid InterruptProbability: 6"),
 		},
 		{
 			name:             "bad_instance_region",
 			osType:           sa.Linux,
 			region:           sa.AwsRegion("us-foo-2"),
 			candidates:       testAvailableInstanceTypes,
-			maxInterruptRate: sa.LessThanFifteenPct,
+			maxInterruptProb: sa.LessThanFifteenPct,
 			want:             nil,
 			wantErr:          fmt.Errorf("no spot advisor data for: {Linux, us-foo-2, < 15%%}"),
 		},
 	}
 	for _, tt := range tests {
-		name := fmt.Sprintf("%s_%s_%s_%d", tt.name, tt.osType, tt.region, tt.maxInterruptRate)
+		name := fmt.Sprintf("%s_%s_%s_%d", tt.name, tt.osType, tt.region, tt.maxInterruptProb)
 		t.Run(name, func(t *testing.T) {
-			got, gotErr := adv.FilterByInterruptRange(tt.osType, tt.region, tt.candidates, tt.maxInterruptRate)
+			got, gotErr := adv.FilterByMaxInterruptProbability(tt.osType, tt.region, tt.candidates, tt.maxInterruptProb)
 			checkErr(t, tt.wantErr, gotErr)
 			if tt.wantErr == nil {
 				checkEqual(t, tt.want, got)
@@ -143,7 +143,7 @@ func TestGetInterruptRange(t *testing.T) {
 			osType:       sa.Windows,
 			region:       sa.AwsRegion("us-west-2"),
 			instanceType: "c5a.24xlarge",
-			want:         sa.LessThanFifteenPct,
+			want:         sa.TenToFifteenPct,
 		},
 		{
 			name:         "bad_region",

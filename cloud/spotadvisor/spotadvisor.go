@@ -29,11 +29,20 @@ const (
 
 // These need to be in their own const block to ensure iota starts at 0.
 const (
-	LessThanFivePct InterruptRange = iota
+	ZeroToFivePct InterruptRange = iota
+	FiveToTenPct
+	TenToFifteenPct
+	FifteenToTwentyPct
+	GreaterThanTwentyPct
+)
+
+// These need to be in their own const block to ensure iota starts at 0.
+const (
+	LessThanFivePct InterruptProbability = iota
 	LessThanTenPct
 	LessThanFifteenPct
 	LessThanTwentyPct
-	All
+	Any
 )
 
 type interruptRange struct {
@@ -61,33 +70,57 @@ type osGroups struct {
 
 type advisorData struct {
 	Ranges []interruptRange `json:"ranges"`
-	// key is instance type name like "r5a.large"
+	// key is an EC2 instance type name like "r5a.large"
 	InstanceTypes map[string]instanceType `json:"instance_types"`
-	// key is AWS region name like "us-west-2"
+	// key is an AWS region name like "us-west-2"
 	SpotAdvisor map[string]osGroups `json:"spot_advisor"`
 }
 
-type key struct {
+type aggKey struct {
 	ot OsType
 	ar AwsRegion
-	ir InterruptRange
+	ip InterruptProbability
 }
 
-func (k key) String() string {
-	return fmt.Sprintf("{%s, %s, %s}", k.ot, k.ar, k.ir)
+func (k aggKey) String() string {
+	return fmt.Sprintf("{%s, %s, %s}", k.ot, k.ar, k.ip)
 }
 
 // OsType should only be used via the pre-defined constants in this package.
 type OsType string
 
+// AwsRegion is an AWS region name like "us-west-2".
 type AwsRegion string
 
+// InstanceType is an EC2 instance type name like "r5a.large".
 type InstanceType string
 
-// InterruptRange should only be used via the pre-defined constants in this package.
+// InterruptRange is the AWS defined interrupt range for an instance type; it
+// should only be used via the pre-defined constants in this package.
 type InterruptRange int
 
 func (ir InterruptRange) String() string {
+	switch ir {
+	case ZeroToFivePct:
+		return "O-5%"
+	case FiveToTenPct:
+		return "5-10%"
+	case TenToFifteenPct:
+		return "10-15%"
+	case FifteenToTwentyPct:
+		return "15-20%"
+	case GreaterThanTwentyPct:
+		return "> 20%"
+	default:
+		return "invalid interrupt range"
+	}
+}
+
+// InterruptProbability is an upper bound used to indicate multiple interrupt
+// ranges; it should only be used via the pre-defined constants in this package.
+type InterruptProbability int
+
+func (ir InterruptProbability) String() string {
 	switch ir {
 	case LessThanFivePct:
 		return "< 5%"
@@ -97,10 +130,10 @@ func (ir InterruptRange) String() string {
 		return "< 15%"
 	case LessThanTwentyPct:
 		return "< 20%"
-	case All:
-		return "< 100%"
+	case Any:
+		return "Any"
 	default:
-		return "invalid interrupt range"
+		return "invalid interrupt probability"
 	}
 }
 
@@ -108,12 +141,13 @@ func (ir InterruptRange) String() string {
 // data and savings data from AWS.
 type SpotAdvisor struct {
 	mu sync.RWMutex
-	// rawData is decoded spot advisor json response
+	// rawData is the decoded spot advisor json response
 	rawData advisorData
-	// aggByRange maps each key to a slice of instance types aggregated <= interrupt range. For example,
-	// if key.ir=LessThanTenPct, the mapped value would contain all instances in LessThanTenPct AND LessThanFivePct
-	// e.g. {Linux, "us-west-2", LessThanFivePct} -> ["r5a.large", ...]
-	aggByRange map[key][]string
+	// aggData maps each aggKey to a slice of instance types aggregated by interrupt
+	// probability. For example, if aggKey.ip=LessThanTenPct, then the mapped value
+	// would contain all instance types which have an interrupt range of
+	// LessThanFivePct or FiveToTenPct.
+	aggData map[aggKey][]string
 
 	// TODO: incorporate spot advisor savings data
 }
@@ -138,7 +172,7 @@ func NewSpotAdvisor(log *log.Logger, done <-chan struct{}) (*SpotAdvisor, error)
 				return
 			case <-ticker.C:
 				if err := sa.refresh(); err != nil {
-					log.Printf("error when refreshing spot advisor data (will try again later): %s", err)
+					log.Printf("error refreshing spot advisor data (will try again later): %s", err)
 				}
 			}
 		}
@@ -167,49 +201,49 @@ func (sa *SpotAdvisor) refresh() (err error) {
 	}
 
 	// update internal data structures
-	aggByRange := make(map[key][]string)
+	aggData := make(map[aggKey][]string)
 	for r, o := range rawData.SpotAdvisor {
 		region := AwsRegion(r)
-		// transform raw data
+		// transform the raw data so that the values of aggData will contain just the instances in a given range
 		for instance, data := range o.Linux {
-			k := key{Linux, region, InterruptRange(data.RangeIdx)}
-			aggByRange[k] = append(aggByRange[k], instance)
+			k := aggKey{Linux, region, InterruptProbability(data.RangeIdx)}
+			aggData[k] = append(aggData[k], instance)
 		}
 		for instance, data := range o.Windows {
-			k := key{Windows, region, InterruptRange(data.RangeIdx)}
-			aggByRange[k] = append(aggByRange[k], instance)
+			k := aggKey{Windows, region, InterruptProbability(data.RangeIdx)}
+			aggData[k] = append(aggData[k], instance)
 		}
 
-		// aggregate
-		for i := 1; i <= int(All); i++ {
+		// aggregate instances by the upper bound interrupt probability of each key
+		for i := 1; i <= int(Any); i++ {
 			{
-				lk := key{Linux, region, InterruptRange(i)}
-				lprevk := key{Linux, region, InterruptRange(i - 1)}
-				aggByRange[lk] = append(aggByRange[lk], aggByRange[lprevk]...)
+				lk := aggKey{Linux, region, InterruptProbability(i)}
+				lprevk := aggKey{Linux, region, InterruptProbability(i - 1)}
+				aggData[lk] = append(aggData[lk], aggData[lprevk]...)
 			}
 			{
-				wk := key{Windows, region, InterruptRange(i)}
-				wprevk := key{Windows, region, InterruptRange(i - 1)}
-				aggByRange[wk] = append(aggByRange[wk], aggByRange[wprevk]...)
+				wk := aggKey{Windows, region, InterruptProbability(i)}
+				wprevk := aggKey{Windows, region, InterruptProbability(i - 1)}
+				aggData[wk] = append(aggData[wk], aggData[wprevk]...)
 			}
 		}
 	}
 	sa.mu.Lock()
 	sa.rawData = rawData
-	sa.aggByRange = aggByRange
+	sa.aggData = aggData
 	sa.mu.Unlock()
 	return nil
 }
 
-// FilterByInterruptRange returns a subset of the input candidates by removing
-// instance types which don't fall into the given interrupt range.
-func (sa *SpotAdvisor) FilterByInterruptRange(ot OsType, ar AwsRegion, candidates []string, ir InterruptRange) (filtered []string, err error) {
-	if ir == All {
+// FilterByMaxInterruptProbability returns a subset of the input candidates by
+// removing instance types which have a probability of interruption greater than ip.
+func (sa *SpotAdvisor) FilterByMaxInterruptProbability(ot OsType, ar AwsRegion, candidates []string, ip InterruptProbability) (filtered []string, err error) {
+	if ip == Any {
 		// There's a chance we may not have spot advisor data for some instances in
 		// the candidates, so just return as is without doing a set difference.
 		return candidates, nil
 	}
-	allowed, err := sa.GetInstancesWithMaxInterruptRange(ot, ar, ir)
+	allowed, err := sa.GetInstancesWithMaxInterruptProbability(ot, ar, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -221,16 +255,16 @@ func (sa *SpotAdvisor) FilterByInterruptRange(ot OsType, ar AwsRegion, candidate
 	return filtered, nil
 }
 
-// GetInstancesWithMaxInterruptRange returns the set of instance types with a
-// matching OS and region that fall within the given interrupt range.
-func (sa *SpotAdvisor) GetInstancesWithMaxInterruptRange(ot OsType, region AwsRegion, ir InterruptRange) (map[string]bool, error) {
-	if ir < LessThanFivePct || ir > All {
-		return nil, fmt.Errorf("invalid InterruptRange: %d", ir)
+// GetInstancesWithMaxInterruptProbability returns the set of spot instance types
+// with an interrupt probability less than or equal to ip, with the given OS and region.
+func (sa *SpotAdvisor) GetInstancesWithMaxInterruptProbability(ot OsType, region AwsRegion, ip InterruptProbability) (map[string]bool, error) {
+	if ip < LessThanFivePct || ip > Any {
+		return nil, fmt.Errorf("invalid InterruptProbability: %d", ip)
 	}
-	k := key{ot, region, ir}
+	k := aggKey{ot, region, ip}
 	sa.mu.RLock()
 	defer sa.mu.RUnlock()
-	ts, ok := sa.aggByRange[k]
+	ts, ok := sa.aggData[k]
 	if !ok {
 		return nil, fmt.Errorf("no spot advisor data for: %s", k)
 	}
