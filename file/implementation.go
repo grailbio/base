@@ -26,10 +26,21 @@ type Implementation interface {
 
 	// Create opens a file for writing. If "path" already exists, the old contents
 	// will be destroyed. If "path" does not exist already, the file will be newly
-	// created.  If the directory part of the path does not exist already, it will
-	// be created. If the path is a directory, an error will be returned. The
-	// pathname given to file.Create() is passed here unchanged.  Thus, it
-	// contains the URL prefix such as "s3://".
+	// created. The pathname given to file.Create() is passed here unchanged.
+	// Thus, it contains the URL prefix such as "s3://".
+	//
+	// Creating a file with the same name as an existing directory is unspecified
+	// behavior and varies by implementation. Users are thus advised to avoid
+	// this if possible.
+	//
+	// For filesystem based storage engines (e.g. localfile), if the directory
+	// part of the path does not exist already, it will be created. If the path
+	// is a directory, an error will be returned.
+	//
+	// For key based storage engines (e.g. S3), it is OK to create a file that
+	// already exists as a common prefix for other objects, assuming a pseudo
+	// path separator. So both "foo" and "foo/bar" can be used as paths for
+	// creating regular files in the same storage. See List() for more context.
 	Create(ctx context.Context, path string, opts ...Opts) (File, error)
 
 	// List finds files and directories. If "path" points to a regular file, the
