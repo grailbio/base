@@ -9,7 +9,6 @@ package spotadvisor
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -152,11 +151,18 @@ type SpotAdvisor struct {
 	// TODO: incorporate spot advisor savings data
 }
 
+// SimpleLogger is a bare-bones logger interface which allows many logger
+// implementations to be used with SpotAdvisor. The default Go log.Logger and
+// grailbio/base/log.Logger implement this interface.
+type SimpleLogger interface {
+	Printf(string, ...interface{})
+}
+
 // NewSpotAdvisor initializes and returns a SpotAdvisor instance. If
 // initialization fails, a nil SpotAdvisor is returned with an error. The
 // underlying data is asynchronously updated, until the done channel is closed.
 // Errors during updates are non-fatal and will not prevent future updates.
-func NewSpotAdvisor(log *log.Logger, done <-chan struct{}) (*SpotAdvisor, error) {
+func NewSpotAdvisor(log SimpleLogger, done <-chan struct{}) (*SpotAdvisor, error) {
 	sa := SpotAdvisor{}
 	// initial load
 	if err := sa.refresh(); err != nil {
@@ -299,4 +305,12 @@ func (sa *SpotAdvisor) GetInterruptRange(ot OsType, ar AwsRegion, it InstanceTyp
 		return -1, fmt.Errorf("no spot advisor data for %s instance type '%s' in %s", ot, it, ar)
 	}
 	return InterruptRange(d.RangeIdx), nil
+}
+
+// GetMaxInterruptProbability is a helper method to easily get the max interrupt
+// probability of an instance type (i.e. the upper bound of the interrupt range
+// for that instance type).
+func (sa *SpotAdvisor) GetMaxInterruptProbability(ot OsType, ar AwsRegion, it InstanceType) (InterruptProbability, error) {
+	ir, err := sa.GetInterruptRange(ot, ar, it)
+	return InterruptProbability(ir), err
 }

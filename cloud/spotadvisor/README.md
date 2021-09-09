@@ -20,4 +20,4 @@ The available data are:
     Management Console for up to date pricing information for each Availability 
     Zone.
 
-See [godoc](https://godoc.org/github.com/grailbio/base/cloud/spotfeed) for usage.
+See [godoc](https://godoc.org/github.com/grailbio/base/cloud/spotadvisor) for usage.

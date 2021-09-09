@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -23,7 +24,7 @@ const testDataPath = "./testdata/test-spot-advisor-data.json"
 // TestGetAndFilterByInterruptRate tests both GetInstancesWithMaxInterruptProbability and FilterByMaxInterruptProbability.
 func TestGetAndFilterByInterruptRate(t *testing.T) {
 	defer setupMockTestServer(t).Close()
-	adv, err := sa.NewSpotAdvisor(nil, context.Background().Done())
+	adv, err := sa.NewSpotAdvisor(testLogger, context.Background().Done())
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -126,7 +127,7 @@ func TestGetAndFilterByInterruptRate(t *testing.T) {
 
 func TestGetInterruptRange(t *testing.T) {
 	defer setupMockTestServer(t).Close()
-	adv, err := sa.NewSpotAdvisor(nil, context.Background().Done())
+	adv, err := sa.NewSpotAdvisor(testLogger, context.Background().Done())
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -182,6 +183,92 @@ func TestGetInterruptRange(t *testing.T) {
 	}
 }
 
+func TestGetMaxInterruptProbability(t *testing.T) {
+	defer setupMockTestServer(t).Close()
+	adv, err := sa.NewSpotAdvisor(testLogger, context.Background().Done())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	tests := []struct {
+		name         string
+		osType       sa.OsType
+		region       sa.AwsRegion
+		instanceType sa.InstanceType
+		want         sa.InterruptProbability
+		wantErr      error
+	}{
+		{
+			name:         "simple_<5%",
+			osType:       sa.Linux,
+			region:       sa.AwsRegion("eu-west-2"),
+			instanceType: "m5a.4xlarge",
+			want:         sa.LessThanFivePct,
+		},
+		{
+			name:         "simple_<10%",
+			osType:       sa.Linux,
+			region:       sa.AwsRegion("eu-west-2"),
+			instanceType: "t3.nano",
+			want:         sa.LessThanTenPct,
+		},
+		{
+			name:         "simple_<15%",
+			osType:       sa.Linux,
+			region:       sa.AwsRegion("eu-west-2"),
+			instanceType: "g4dn.12xlarge",
+			want:         sa.LessThanFifteenPct,
+		},
+		{
+			name:         "simple_<20%",
+			osType:       sa.Linux,
+			region:       sa.AwsRegion("eu-west-2"),
+			instanceType: "r5d.8xlarge",
+			want:         sa.LessThanTwentyPct,
+		},
+		{
+			name:         "simple_Any",
+			osType:       sa.Linux,
+			region:       sa.AwsRegion("eu-west-2"),
+			instanceType: "i3.2xlarge",
+			want:         sa.Any,
+		},
+		{
+			name:         "bad_region",
+			osType:       sa.Windows,
+			region:       sa.AwsRegion("us-foo-2"),
+			instanceType: "c5a.24xlarge",
+			want:         -1,
+			wantErr:      fmt.Errorf("no spot advisor data for: us-foo-2"),
+		},
+		{
+			name:         "bad_os",
+			osType:       sa.OsType("Unix"),
+			region:       sa.AwsRegion("us-west-2"),
+			instanceType: "c5a.24xlarge",
+			want:         -1,
+			wantErr:      fmt.Errorf("invalid OS: Unix"),
+		},
+		{
+			name:         "bad_instance_type",
+			osType:       sa.Linux,
+			region:       sa.AwsRegion("us-west-2"),
+			instanceType: "foo.bar",
+			want:         -1,
+			wantErr:      fmt.Errorf("no spot advisor data for Linux instance type 'foo.bar' in us-west-2"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := adv.GetMaxInterruptProbability(tt.osType, tt.region, tt.instanceType)
+			checkErr(t, tt.wantErr, gotErr)
+			if tt.wantErr == nil && tt.want != got {
+				t.Fatalf("want: %s, got: %s", tt.want, got)
+			}
+		})
+	}
+
+}
+
 // setupMockTestServer starts a test server and replaces the actual spot advisor
 // data URL with the test server's URL. A request to the server will return the
 // contents of the file at testDataPath. The caller is expected to call Close()
@@ -223,6 +310,8 @@ func checkErr(t *testing.T, want error, got error) {
 		t.Fatalf("want: %s, got: %s", want, got)
 	}
 }
+
+var testLogger = log.New(ioutil.Discard, "", 0)
 
 var testAvailableInstanceTypes = []string{
 	"a1.2xlarge", "a1.4xlarge", "a1.large", "a1.metal", "a1.xlarge", "c1.xlarge", "c3.2xlarge", "c3.4xlarge", "c3.8xlarge", "c3.large", "c3.xlarge",
