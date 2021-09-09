@@ -39,15 +39,16 @@ require (
 
 require (
 	github.com/cespare/xxhash v1.1.0
-	github.com/gin-gonic/gin v1.6.3
+	github.com/gin-gonic/gin v1.7.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.1.2
 	github.com/shirou/gopsutil v2.19.9+incompatible
 	go.uber.org/zap v1.16.0
+	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	google.golang.org/api v0.10.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.0.0-20181213150558-05914d821849
-	k8s.io/apimachinery v0.0.0-20181127025237-2b1284ed4c93
+	k8s.io/apimachinery v0.0.0-20181127025237-2b1284ed4c93 // indirect
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/klog v1.0.0 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
