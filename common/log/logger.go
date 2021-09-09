@@ -54,7 +54,7 @@ var logLvls = map[string]zapcore.Level{
 }
 
 type Logger struct {
-	coreLogger    *zap.SugaredLogger
+	coreLogger *zap.SugaredLogger
 	// Additional information that may be unique to each service (e.g. order UUID for Ensemble orders)
 	defaultFields []interface{}
 	levelToLogger map[zapcore.Level]func(msg string, keysAndValues ...interface{})
@@ -85,7 +85,7 @@ func NewLogger(config Config) *Logger {
 // NewLogger creates a new logger instance.
 // defaultFields is a list of key-value pairs to be included in every log message.
 func NewLoggerWithDefaultFields(config Config, defaultFields []interface{}) *Logger {
-	if len(defaultFields) % 2 != 0 {
+	if len(defaultFields)%2 != 0 {
 		danglingKey := defaultFields[len(defaultFields)-1]
 		defaultFields = defaultFields[:len(defaultFields)-1]
 		errLogger := NewLogger(config)
@@ -93,7 +93,7 @@ func NewLoggerWithDefaultFields(config Config, defaultFields []interface{}) *Log
 			"ignored", danglingKey,
 		}
 		logErr := errLogger.levelToLogger[ErrorLevel]
-		logErr("Ignored key without a value.", errLog...)
+		logErr("defaultFields contains a key without a value.", errLog...)
 	}
 	l := Logger{
 		coreLogger:    mustBuildLogger(config, zap.AddCallerSkip(2)),

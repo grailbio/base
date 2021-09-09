@@ -373,7 +373,7 @@ func Example_defaultFieldsDanglingKey() {
 	}
 	logger.Info(ctx, "Hello, world!")
 	// Output:
-	// {"level":"error","msg":"Ignored key without a value.","ignored":"foobar"}
+	// {"level":"error","msg":"defaultFields contains a key without a value.","ignored":"foobar"}
 	// {"level":"info","msg":"Hello, world!","caller":"log_test.go:374","ts":"2000-01-01T00:00:00.000000000Z","requestID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","foo":"bar"}
 }
 
