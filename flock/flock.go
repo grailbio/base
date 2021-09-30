@@ -9,11 +9,23 @@ import (
 	"context"
 )
 
+type T struct {
+	impl FileLock
+}
+
+func New(path string) *T {
+	return &T{PlatformSpecificLock(path)}
+}
+
+func (lockType *T) Lock(ctx context.Context) (err error) {
+	return lockType.impl.Lock(ctx)
+}
+
+func (lockType *T) Unlock() error {
+	return lockType.impl.Unlock()
+}
+
 type FileLock interface {
 	Lock(ctx context.Context) (err error)
 	Unlock() error
-}
-
-func New(path string) FileLock {
-	return NewLockPlatformSpecific(path)
 }

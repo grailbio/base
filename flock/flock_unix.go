@@ -11,20 +11,20 @@ import (
 	"github.com/grailbio/base/log"
 )
 
-type T struct {
+type unixlock struct {
 	name string
 	fd   int
 	mu   sync.Mutex
 }
 
 // New creates an object that locks the given path.
-func NewLockPlatformSpecific(path string) *T {
-	return &T{name: path}
+func PlatformSpecificLock(path string) FileLock {
+	return &unixlock{name: path}
 }
 
 // Lock locks the file. Iff Lock() returns nil, the caller must call Unlock()
 // later.
-func (f *T) Lock(ctx context.Context) (err error) {
+func (f *unixlock) Lock(ctx context.Context) (err error) {
 	reqCh := make(chan func() error, 2)
 	doneCh := make(chan error)
 	go func() {
@@ -48,11 +48,11 @@ func (f *T) Lock(ctx context.Context) (err error) {
 }
 
 // Unlock unlocks the file.
-func (f *T) Unlock() error {
+func (f *unixlock) Unlock() error {
 	return f.doUnlock()
 }
 
-func (f *T) doLock() error {
+func (f *unixlock) doLock() error {
 	f.mu.Lock() // Serialize the lock within one process.
 
 	var err error
@@ -72,7 +72,7 @@ func (f *T) doLock() error {
 	return err
 }
 
-func (f *T) doUnlock() error {
+func (f *unixlock) doUnlock() error {
 	err := syscall.Flock(f.fd, syscall.LOCK_UN)
 	if err := syscall.Close(f.fd); err != nil {
 		log.Error.Printf("close %s: %v", f.name, err)

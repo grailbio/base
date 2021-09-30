@@ -20,7 +20,7 @@ type winlock struct {
 	mu       sync.Mutex
 }
 
-func NewLockPlatformSpecific(path string) FileLock {
+func PlatformSpecificLock(path string) FileLock {
 	return &winlock{path, 0, sync.Mutex{}}
 }
 
