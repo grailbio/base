@@ -1,8 +1,6 @@
-// Copyright 2018 GRAIL, Inc. All rights reserved.
-// Use of this source code is governed by the Apache 2.0
-// license that can be found in the LICENSE file.
+//go:build !windows
+// +build !windows
 
-// Package flock implements a simple POSIX file-based advisory lock.
 package flock
 
 import (
@@ -20,7 +18,7 @@ type T struct {
 }
 
 // New creates an object that locks the given path.
-func New(path string) *T {
+func NewLockPlatformSpecific(path string) *T {
 	return &T{name: path}
 }
 
