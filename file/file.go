@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/ioctx"
 )
 
 // File defines operations on a file. Implementations must be thread safe.
@@ -54,13 +55,8 @@ type File interface {
 	Closer
 }
 
-// Closer cleans up a resource. Generally, resource provider implementations
-// will return a Closer when opening a resource (like File above).
-type Closer interface {
-	// Close tries to clean up the resource. Implementations can define whether
-	// Close can be called more than once and whether callers should retry on error.
-	Close(context.Context) error
-}
+// TODO: Migrate callers to use new location.
+type Closer = ioctx.Closer
 
 // ETagged defines a getter for a file with an ETag.
 type ETagged interface {
