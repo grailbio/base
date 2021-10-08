@@ -100,6 +100,7 @@ type (
 		// TODO: Make this a non-Duration type to avoid confusion with negatives?
 		CacheableFor() time.Duration
 	}
+	cacheableFor struct{ time.Duration }
 )
 
 const CacheForever = time.Duration(-1)
@@ -112,6 +113,8 @@ func CacheableFor(obj interface{}) time.Duration {
 	}
 	return cacheable.CacheableFor()
 }
+func NewCacheable(d time.Duration) Cacheable       { return cacheableFor{d} }
+func (c cacheableFor) CacheableFor() time.Duration { return c.Duration }
 
 // IterateFull reads the full len(dst) nodes from Iterator. If actual number read is less than
 // len(dst), error is non-nil. Error is io.EOF for EOF. Unlike io.ReadFull, this doesn't return
