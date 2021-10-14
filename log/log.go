@@ -145,7 +145,7 @@ func Printf(format string, v ...interface{}) {
 }
 
 // Errorf formats a message in the manner of fmt.Sprintf
-// and outputs it at the Info level to the current outputter.
+// and outputs it at the Error level to the current outputter.
 func Errorf(format string, v ...interface{}) {
 	out.Output(2, Error, fmt.Sprintf(format, v...))
 }
