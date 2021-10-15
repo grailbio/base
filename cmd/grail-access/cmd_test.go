@@ -16,6 +16,7 @@ import (
 
 	"github.com/grailbio/base/security/identity"
 	"github.com/grailbio/testutil"
+	_ "github.com/grailbio/v23/factories/grail"
 	"github.com/stretchr/testify/assert"
 	v23 "v.io/v23"
 	"v.io/v23/context"
