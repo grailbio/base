@@ -93,3 +93,27 @@ func (it *concatIterator) Close(ctx context.Context) error {
 	it.iters = nil
 	return err
 }
+
+type mapIterator struct {
+	iter Iterator
+	fn   func(context.Context, T) (T, error)
+}
+
+// MapIterator returns an Iterator that applies fn to each T yielded by iter.
+func MapIterator(iter Iterator, fn func(context.Context, T) (T, error)) Iterator {
+	return mapIterator{iter, fn}
+}
+func (it mapIterator) Next(ctx context.Context) (T, error) {
+	if it.fn == nil {
+		return nil, os.ErrClosed
+	}
+	node, err := it.iter.Next(ctx)
+	if err == nil && it.fn != nil {
+		node, err = it.fn(ctx, node)
+	}
+	return node, err
+}
+func (it mapIterator) Close(ctx context.Context) error {
+	it.fn = nil
+	return it.iter.Close(ctx)
+}

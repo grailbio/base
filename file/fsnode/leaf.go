@@ -1,6 +1,7 @@
 package fsnode
 
 import (
+	"bytes"
 	"context"
 	"os"
 
@@ -59,6 +60,13 @@ func (f *readerAtFile) Close(context.Context) error {
 	}
 	f.ReaderAt = nil
 	return nil
+}
+
+// ConstLeaf constructs a leaf with constant contents. Caller must not modify content after call.
+// Uses content's size (ignoring existing info.Size).
+func ConstLeaf(info FileInfo, content []byte) Leaf {
+	info = info.WithSize(int64(len(content)))
+	return ReaderAtLeaf(info, ioctx.FromStdReaderAt(bytes.NewReader(content)))
 }
 
 // TODO: From *os.File?
