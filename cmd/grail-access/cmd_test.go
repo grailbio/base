@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	ticketServerUtil "github.com/grailbio/base/cmd/ticket-server/testutil"
 	"github.com/grailbio/base/security/identity"
 	"github.com/grailbio/testutil"
 	_ "github.com/grailbio/v23/factories/grail"
@@ -42,7 +43,7 @@ func TestCmd(t *testing.T) {
 	t.Run("help", func(t *testing.T) {
 		cmd := exec.Command(exe, "-help")
 		cmd.Env = []string{pathEnv}
-		stdout, stderr := runAndCapture(t, cmd)
+		stdout, stderr := ticketServerUtil.RunAndCapture(t, cmd)
 		assert.NotEmpty(t, stdout)
 		assert.Empty(t, stderr)
 	})
@@ -65,7 +66,7 @@ func TestCmd(t *testing.T) {
 			cmd := exec.Command(exe, "-dump", "-dir", principalDir)
 			// Set $V23_CREDENTIALS to test that -dir takes priority.
 			cmd.Env = []string{pathEnv, "V23_CREDENTIALS=" + decoyPrincipalDir}
-			stdout, stderr := runAndCapture(t, cmd)
+			stdout, stderr := ticketServerUtil.RunAndCapture(t, cmd)
 			assert.Contains(t, stdout, blessingName)
 			assert.Empty(t, stderr)
 		})
@@ -73,7 +74,7 @@ func TestCmd(t *testing.T) {
 		t.Run("env_home", func(t *testing.T) {
 			cmd := exec.Command(exe, "-dump")
 			cmd.Env = []string{pathEnv, "HOME=" + homeDir}
-			stdout, stderr := runAndCapture(t, cmd)
+			stdout, stderr := ticketServerUtil.RunAndCapture(t, cmd)
 			assert.Contains(t, stdout, blessingName)
 			assert.Empty(t, stderr)
 		})
@@ -98,7 +99,7 @@ func TestCmd(t *testing.T) {
 			"-dir", principalDir,
 			"-do-not-refresh-duration", doNotRefreshDuration.String())
 		cmd.Env = []string{pathEnv}
-		stdout, stderr := runAndCapture(t, cmd)
+		stdout, stderr := ticketServerUtil.RunAndCapture(t, cmd)
 		assert.Contains(t, stdout, blessingName)
 		assert.Empty(t, stderr)
 	})
@@ -115,7 +116,7 @@ func TestCmd(t *testing.T) {
 
 			// Run fake ticket server: accepts EC2 instance identity document, returns blessings.
 			var blesserEndpoint naming.Endpoint
-			ctx, blesserEndpoint = runBlesserServer(ctx, t,
+			ctx, blesserEndpoint = ticketServerUtil.RunBlesserServer(ctx, t,
 				identity.Ec2BlesserServer(fakeBlesser(
 					func(gotDoc string, recipient security.PublicKey) security.Blessings {
 						assert.Equal(t, wantDoc, gotDoc)
@@ -152,7 +153,7 @@ func TestCmd(t *testing.T) {
 				"-blesser", fmt.Sprintf("/%s", blesserEndpoint.Address),
 				"-ec2-instance-identity-url", fmt.Sprintf("http://%s/", listener.Addr().String()))
 			cmd.Env = []string{pathEnv}
-			stdout, _ := runAndCapture(t, cmd)
+			stdout, _ := ticketServerUtil.RunAndCapture(t, cmd)
 			assert.Contains(t, stdout, wantClientBlessing)
 
 			// Make sure we got the right blessing.
@@ -172,7 +173,7 @@ func TestCmd(t *testing.T) {
 
 			// Run fake ticket server: accepts Google ID token, returns blessings.
 			var blesserEndpoint naming.Endpoint
-			ctx, blesserEndpoint = runBlesserServer(ctx, t,
+			ctx, blesserEndpoint = ticketServerUtil.RunBlesserServer(ctx, t,
 				identity.GoogleBlesserServer(fakeBlesser(
 					func(gotToken string, recipient security.PublicKey) security.Blessings {
 						assert.Equal(t, wantToken, gotToken)
@@ -220,7 +221,7 @@ func TestCmd(t *testing.T) {
 				"-google-oauth2-url", fmt.Sprintf("http://%s", listener.Addr().String()))
 			cmd.Env = []string{pathEnv}
 			cmd.Stdin = bytes.NewReader([]byte("testcode"))
-			stdout, _ := runAndCapture(t, cmd)
+			stdout, _ := ticketServerUtil.RunAndCapture(t, cmd)
 			assert.Contains(t, stdout, wantClientBlessing)
 
 			// Make sure we got the right blessing.
@@ -243,7 +244,7 @@ func TestCmd(t *testing.T) {
 
 			// Run fake ticket server: accepts (caCrt, namespace, token), returns blessings.
 			var blesserEndpoint naming.Endpoint
-			ctx, blesserEndpoint = runBlesserServer(ctx, t,
+			ctx, blesserEndpoint = ticketServerUtil.RunBlesserServer(ctx, t,
 				identity.K8sBlesserServer(fakeK8sBlesser(
 					func(gotCaCrt string, gotNamespace string, gotToken string, gotRegion string, recipient security.PublicKey) security.Blessings {
 						assert.Equal(t, gotCaCrt, wantCaCrt)
@@ -282,7 +283,7 @@ func TestCmd(t *testing.T) {
 				"-token", path.Join(tmpDir, "token"),
 			)
 			cmd.Env = []string{pathEnv}
-			stdout, _ := runAndCapture(t, cmd)
+			stdout, _ := ticketServerUtil.RunAndCapture(t, cmd)
 			assert.Contains(t, stdout, wantClientBlessing)
 
 			// Make sure we got the right blessing.
@@ -313,16 +314,6 @@ func TestCmd(t *testing.T) {
 	})
 }
 
-func runAndCapture(t *testing.T, cmd *exec.Cmd) (stdout, stderr string) {
-	var stdoutBuf, stderrBuf strings.Builder
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	err := cmd.Run()
-	stdout, stderr = stdoutBuf.String(), stderrBuf.String()
-	assert.NoError(t, err, fmt.Sprintf("stdout: '%s', stderr: '%s'", stdout, stderr))
-	return
-}
-
 type fakeBlesser func(arg string, recipientKey security.PublicKey) security.Blessings
 
 func (f fakeBlesser) BlessEc2(_ *context.T, call rpc.ServerCall, s string) (security.Blessings, error) {
@@ -337,15 +328,4 @@ type fakeK8sBlesser func(arg1, arg2, arg3, arg4 string, recipientKey security.Pu
 
 func (f fakeK8sBlesser) BlessK8s(_ *context.T, call rpc.ServerCall, s1, s2, s3, s4 string) (security.Blessings, error) {
 	return f(s1, s2, s3, s4, call.Security().RemoteBlessings().PublicKey()), nil
-}
-
-func runBlesserServer(ctx *context.T, t *testing.T, stub interface{}) (*context.T, naming.Endpoint) {
-	ctx = v23.WithListenSpec(ctx, rpc.ListenSpec{
-		Addrs: rpc.ListenAddrs{{"tcp", "localhost:0"}},
-	})
-	ctx, blesserServer, err := v23.WithNewServer(ctx, "", stub, security.AllowEveryone())
-	assert.NoError(t, err)
-	blesserEndpoints := blesserServer.Status().Endpoints
-	assert.Equal(t, 1, len(blesserEndpoints))
-	return ctx, blesserEndpoints[0]
 }

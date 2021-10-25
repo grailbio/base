@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["util.go"],
+    importpath = "github.com/grailbio/base/cmd/ticket-server/testutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_stretchr_testify//assert:go_default_library",
+        "@io_v//v23:go_default_library",
+        "@io_v//v23/context:go_default_library",
+        "@io_v//v23/naming:go_default_library",
+        "@io_v//v23/rpc:go_default_library",
+        "@io_v//v23/security:go_default_library",
+    ],
+)

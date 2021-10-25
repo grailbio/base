@@ -216,7 +216,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 		auth: securityflag.NewAuthorizerOrDie(ctx),
 	}
 	d.registry["blesser/k8s"] = entry{
-		service: identity.K8sBlesserServer(newK8sBlesser(awsSession, k8sExpirationIntervalFlag, k8sBlesserRoleFlag, strings.Split(awsAccountsFlag, ","), strings.Split(awsRegionsFlag, ","))),
+		service: identity.K8sBlesserServer(newK8sBlesser(newSessionWrapper(awsSession), k8sExpirationIntervalFlag, k8sBlesserRoleFlag, strings.Split(awsAccountsFlag, ","), strings.Split(awsRegionsFlag, ","))),
 		auth:    securityflag.NewAuthorizerOrDie(ctx),
 	}
 	if ec2BlesserRoleFlag != "" {
@@ -246,6 +246,7 @@ func newDispatcher(ctx *context.T, awsSession *session.Session, cfg config.Confi
 				n = n.children[p].(*node)
 			}
 		}
+
 		d.registry[k] = entry{
 			service: ticket.TicketServiceServer(&service{
 				name:       parts[len(parts)-1],
