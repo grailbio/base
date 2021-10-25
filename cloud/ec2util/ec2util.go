@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/fullsailor/pkcs7"
 	"v.io/x/lib/vlog"
+	"go.mozilla.org/pkcs7"
 )
 
 type IdentityDocument struct {
