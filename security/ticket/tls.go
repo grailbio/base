@@ -92,6 +92,16 @@ func (b *TlsCertAuthorityBuilder) genTlsCredentials(ctx *TicketContext) (TlsCred
 	return b.genTlsCredentialsWithKeyUsage(ctx, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 }
 
+func contains(array []string, entry string) bool {
+	for _, e := range array {
+		if e == entry {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(ctx *TicketContext, keyUsage []x509.ExtKeyUsage) (TlsCredentials, error) {
 	empty := TlsCredentials{}
 
@@ -108,7 +118,11 @@ func (b *TlsCertAuthorityBuilder) genTlsCredentialsWithKeyUsage(ctx *TicketConte
 	if commonName == "" {
 		commonName = ctx.remoteBlessings.String()
 	}
-	cert, key, err := authority.IssueWithKeyUsage(commonName, ttl, nil, b.San, keyUsage)
+	updatedSan := b.San
+	if !contains(updatedSan, commonName) {
+		updatedSan = append(updatedSan, commonName)
+	}
+	cert, key, err := authority.IssueWithKeyUsage(commonName, ttl, nil, updatedSan, keyUsage)
 	if err != nil {
 		return empty, err
 	}
