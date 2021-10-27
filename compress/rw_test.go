@@ -63,7 +63,9 @@ func bzip2Compress(t *testing.T, in []byte) []byte {
 
 func zstdCompress(t *testing.T, in []byte) []byte {
 	buf := bytes.Buffer{}
-	w, err := zstd.NewWriter(&buf)
+	// WithZeroFrames ensures that a zero-length input (like in TestReaderSmall) yields
+	// a non-empty output with a header that compress.NewReader can sniff.
+	w, err := zstd.NewWriter(&buf, zstd.WithZeroFrames(true))
 	assert.NoError(t, err)
 	_, err = io.Copy(w, bytes.NewReader(in))
 	assert.NoError(t, err)
