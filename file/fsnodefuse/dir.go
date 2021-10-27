@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/sync/loadingcache"
@@ -21,42 +22,41 @@ type dirInode struct {
 }
 
 var (
+	_ inodeEmbedder = (*dirInode)(nil)
+
 	_ fs.NodeReaddirer = (*dirInode)(nil)
 	_ fs.NodeLookuper  = (*dirInode)(nil)
 	_ fs.NodeGetattrer = (*dirInode)(nil)
 	_ fs.NodeSetattrer = (*dirInode)(nil)
 )
 
+// fsNode implements inodeEmbedder.
+func (n *dirInode) fsNode() fsnode.T {
+	return n.n
+}
+
 func (n *dirInode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	ctx = ctxloadingcache.With(ctx, &n.cache)
-	return newDirStream(ctx, n.StableAttr().Ino, n.n.Children()), fs.OK
+	return newDirStream(ctx, n), fs.OK
 }
 
 func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (_ *fs.Inode, errno syscall.Errno) {
+	if childInode := n.GetChild(name); childInode != nil {
+		embed := childInode.Operations().(inodeEmbedder)
+		setEntryOut(out, childInode.StableAttr().Ino, embed.fsNode())
+		return childInode, fs.OK
+	}
 	ctx = ctxloadingcache.With(ctx, &n.cache)
-
 	child, err := n.n.Child(ctx, name)
 	if err != nil {
 		return nil, errToErrno(err)
 	}
-	entry := fsEntryToFuseEntry(n.StableAttr().Ino, name, child.IsDir())
-	out.Ino = entry.Ino
-	setAttrFromFileInfo(&out.Attr, child)
-	cacheTimeout := getCacheTimeout(child)
-	out.SetEntryTimeout(cacheTimeout)
-	out.SetAttrTimeout(cacheTimeout)
-	// TODO: Set owner/UID?
-	var embed fs.InodeEmbedder
-	switch node := child.(type) {
-	case fsnode.Parent:
-		embed = &dirInode{n: node}
-	case fsnode.Leaf:
-		embed = &regInode{n: node}
-	default:
-		log.Error.Printf("BUG: invalid node type: %T", child)
-		return nil, syscall.ENOENT
+	entry, childInode, err := n.makeChild(ctx, child)
+	if err != nil {
+		return nil, errToErrno(err)
 	}
-	return n.NewInode(ctx, embed, fs.StableAttr{Mode: entry.Mode, Ino: entry.Ino}), fs.OK
+	setEntryOut(out, entry.Ino, child)
+	return childInode, fs.OK
 }
 
 func (n *dirInode) Getattr(_ context.Context, _ fs.FileHandle, a *fuse.AttrOut) syscall.Errno {
@@ -92,6 +92,43 @@ func (n *dirInode) Setattr(_ context.Context, _ fs.FileHandle, _ *fuse.SetAttrIn
 	setAttrFromFileInfo(&a.Attr, n.n)
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
+}
+
+func (n *dirInode) makeChild(
+	ctx context.Context,
+	fsNode fsnode.T,
+) (fuse.DirEntry, *fs.Inode, error) {
+	var (
+		name  = fsNode.Name()
+		ino   = hashParentInoAndName(n.StableAttr().Ino, name)
+		embed inodeEmbedder
+		mode  uint32
+	)
+	// TODO: Set owner/UID?
+	switch fsNode := fsNode.(type) {
+	case fsnode.Parent:
+		embed = &dirInode{n: fsNode}
+		mode |= syscall.S_IFDIR
+	case fsnode.Leaf:
+		embed = &regInode{n: fsNode}
+		mode |= syscall.S_IFREG
+	default:
+		log.Error.Printf("BUG: invalid node type: %T", fsNode)
+		return fuse.DirEntry{}, nil, errors.E(errors.Invalid)
+	}
+	var (
+		entry = fuse.DirEntry{Name: name, Mode: mode, Ino: ino}
+		inode = n.NewInode(ctx, embed, fs.StableAttr{Mode: mode, Ino: ino})
+	)
+	return entry, inode, nil
+}
+
+func setEntryOut(out *fuse.EntryOut, ino uint64, n fsnode.T) {
+	out.Ino = ino
+	setAttrFromFileInfo(&out.Attr, n)
+	cacheTimeout := getCacheTimeout(n)
+	out.SetEntryTimeout(cacheTimeout)
+	out.SetAttrTimeout(cacheTimeout)
 }
 
 func setAttrFromFileInfo(a *fuse.Attr, info os.FileInfo) {

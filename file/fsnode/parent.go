@@ -27,7 +27,9 @@ type (
 )
 
 // FuncChildren constructs a ChildrenGenerator that simply invokes fn, for convenience.
-func FuncChildren(fn func(context.Context) ([]T, error)) ChildrenGenerator { return childrenGenFunc(fn) }
+func FuncChildren(fn func(context.Context) ([]T, error)) ChildrenGenerator {
+	return childrenGenFunc(fn)
+}
 
 func (fn childrenGenFunc) GenerateChildren(ctx context.Context) ([]T, error) { return fn(ctx) }
 
@@ -57,44 +59,8 @@ func (n parentImpl) Child(ctx context.Context, name string) (T, error) {
 	return nil, os.ErrNotExist
 }
 
-func (n parentImpl) Children() Iterator { return &iterator{parentImpl: n} }
+func (n parentImpl) Children() Iterator {
+	return NewLazyIterator(n.gen.GenerateChildren)
+}
 
 func (l parentImpl) FSNodeT() {}
-
-type iterator struct {
-	parentImpl parentImpl
-	fetched    bool
-	delegate   Iterator
-}
-
-func (it *iterator) ensureFetched(ctx context.Context) error {
-	if it.fetched {
-		if it.delegate == nil {
-			return os.ErrClosed
-		}
-		return nil
-	}
-	children, err := it.parentImpl.gen.GenerateChildren(ctx)
-	if err != nil {
-		return err
-	}
-	it.delegate = NewIterator(children...)
-	it.fetched = true
-	return nil
-}
-
-func (it *iterator) Next(ctx context.Context) (T, error) {
-	if err := it.ensureFetched(ctx); err != nil {
-		return nil, err
-	}
-	return it.delegate.Next(ctx)
-}
-
-func (it *iterator) Close(ctx context.Context) error {
-	if it.delegate == nil {
-		return nil
-	}
-	err := it.delegate.Close(ctx)
-	it.delegate = nil
-	return err
-}

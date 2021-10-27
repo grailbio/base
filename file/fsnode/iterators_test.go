@@ -2,6 +2,7 @@ package fsnode
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -32,6 +33,27 @@ func TestSliceFull(t *testing.T) {
 	assert.ErrorIs(t, err, io.EOF)
 	assert.Equal(t, 1, got)
 	assert.Equal(t, []T{nodes[2]}, dst[:1])
+}
+
+func TestLazy(t *testing.T) {
+	ctx := context.Background()
+	nodes := []mockLeaf{{id: 0}, {id: 1}, {id: 2}}
+	makeNodes := func(context.Context) ([]T, error) {
+		return []T{nodes[0], nodes[1], nodes[2]}, nil
+	}
+	got, err := IterateAll(ctx, NewLazyIterator(makeNodes))
+	require.NoError(t, err)
+	assert.Equal(t, []T{nodes[0], nodes[1], nodes[2]}, got)
+}
+
+func TestLazyErr(t *testing.T) {
+	ctx := context.Background()
+	makeNodes := func(context.Context) ([]T, error) {
+		return nil, errors.New("test error")
+	}
+	_, err := IterateAll(ctx, NewLazyIterator(makeNodes))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "test error")
 }
 
 func TestConcatAll(t *testing.T) {

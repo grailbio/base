@@ -17,18 +17,18 @@ import (
 
 type dirStream struct {
 	ctx        context.Context
-	parentIno  uint64
+	dir        *dirInode
 	iter       fsnode.Iterator
 	eof        bool
 	current    fsnode.T
 	currentErr error
 }
 
-func newDirStream(ctx context.Context, parentIno uint64, iter fsnode.Iterator) *dirStream {
+func newDirStream(ctx context.Context, dir *dirInode) *dirStream {
 	return &dirStream{
-		ctx:       ctx,
-		parentIno: parentIno,
-		iter:      iter,
+		ctx:  ctx,
+		dir:  dir,
+		iter: dir.n.Children(),
 	}
 }
 
@@ -57,7 +57,12 @@ func (d *dirStream) Next() (fuse.DirEntry, syscall.Errno) {
 	}
 	current := d.current
 	d.current = nil
-	return fsEntryToFuseEntry(d.parentIno, current.Name(), current.IsDir()), fs.OK
+	entry, childInode, err := d.dir.makeChild(d.ctx, current)
+	if err != nil {
+		return fuse.DirEntry{}, errToErrno(err)
+	}
+	d.dir.AddChild(entry.Name, childInode, true)
+	return entry, fs.OK
 }
 
 func (d *dirStream) Close() {
@@ -68,25 +73,11 @@ func (d *dirStream) Close() {
 	d.current = nil
 }
 
-func fsEntryToFuseEntry(parentIno uint64, name string, isDir bool) fuse.DirEntry {
-	fe := fuse.DirEntry{
-		Name: name,
-		Ino:  hashParentInoAndName(parentIno, name),
-	}
-	if isDir {
-		fe.Mode |= syscall.S_IFDIR
-	} else {
-		fe.Mode |= syscall.S_IFREG
-	}
-	return fe
-}
-
 func hashParentInoAndName(parentIno uint64, name string) uint64 {
 	h := sha512.New()
 	writehash.Uint64(h, parentIno)
 	writehash.String(h, name)
 	return binary.LittleEndian.Uint64(h.Sum(nil)[:8])
-
 }
 
 func hashIno(parent fs.InodeEmbedder, name string) uint64 {

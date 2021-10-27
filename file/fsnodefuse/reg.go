@@ -23,10 +23,17 @@ type regInode struct {
 }
 
 var (
+	_ inodeEmbedder = (*regInode)(nil)
+
 	_ fs.NodeOpener    = (*regInode)(nil)
 	_ fs.NodeGetattrer = (*regInode)(nil)
 	_ fs.NodeSetattrer = (*regInode)(nil)
 )
+
+// fsNode implements inodeEmbedder.
+func (n *regInode) fsNode() fsnode.T {
+	return n.n
+}
 
 func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, outFlags uint32, _ syscall.Errno) {
 	ctx = ctxloadingcache.With(ctx, &n.cache)

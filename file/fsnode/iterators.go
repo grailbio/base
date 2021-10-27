@@ -13,11 +13,11 @@ type sliceIterator struct {
 
 var _ Iterator = (*sliceIterator)(nil)
 
-// NewIterator returns an iterator that yields the given children.
-func NewIterator(children ...T) Iterator {
+// NewIterator returns an iterator that yields the given nodes.
+func NewIterator(nodes ...T) Iterator {
 	// Copy the slice because we'll mutate to nil later.
-	children = append([]T{}, children...)
-	return &sliceIterator{remaining: children}
+	nodes = append([]T{}, nodes...)
+	return &sliceIterator{remaining: nodes}
 }
 
 func (it *sliceIterator) Next(ctx context.Context) (T, error) {
@@ -36,6 +36,52 @@ func (it *sliceIterator) Next(ctx context.Context) (T, error) {
 func (it *sliceIterator) Close(context.Context) error {
 	it.closed = true
 	it.remaining = nil
+	return nil
+}
+
+type lazyIterator struct {
+	make     func(context.Context) ([]T, error)
+	fetched  bool
+	delegate Iterator
+}
+
+var _ Iterator = (*lazyIterator)(nil)
+
+// NewLazyIterator uses the given make function upon the first call to Next to
+// make the nodes that it yields.
+func NewLazyIterator(make func(context.Context) ([]T, error)) Iterator {
+	return &lazyIterator{make: make}
+}
+
+func (it *lazyIterator) Next(ctx context.Context) (T, error) {
+	if err := it.ensureFetched(ctx); err != nil {
+		return nil, err
+	}
+	return it.delegate.Next(ctx)
+}
+
+func (it *lazyIterator) Close(ctx context.Context) error {
+	if it.delegate == nil {
+		return nil
+	}
+	err := it.delegate.Close(ctx)
+	it.delegate = nil
+	return err
+}
+
+func (it *lazyIterator) ensureFetched(ctx context.Context) error {
+	if it.fetched {
+		if it.delegate == nil {
+			return os.ErrClosed
+		}
+		return nil
+	}
+	nodes, err := it.make(ctx)
+	if err != nil {
+		return err
+	}
+	it.delegate = NewIterator(nodes...)
+	it.fetched = true
 	return nil
 }
 
