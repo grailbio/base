@@ -334,7 +334,6 @@ func CreateK8sExtension(ctx context.Context, cluster *eks.Cluster, username, nam
 		extension          string
 		err                error
 		clusterNameFromTag string
-		clusterModeFromTag string
 	)
 
 	arn, err := arn.Parse(*cluster.Arn)
@@ -355,12 +354,21 @@ func CreateK8sExtension(ctx context.Context, cluster *eks.Cluster, username, nam
 		clusterNameFromTag = *val
 	}
 
-	if val, ok := cluster.Tags["ClusterMode"]; ok {
-		clusterModeFromTag = strings.ToLower(*val)
-	}
+	/*
+		// leaving this implementation here, commented, as a relic of understanding; the intent was to use this to generate unique blessings
+		// for each cluster but allow the clusters blessing for vRPC calls to be authorized by parent blessing extensions, such as k8s:dev:svc:a
+		// authorizing when k8s:dev:svc is allowed. However, we cannot do this because Grailbook, and perhaps other services as well
+		// expect exact matches for blessings in some circumstances. In order to prevent a complicated rewrite of the code, we are removing
+		// the cluster mode specific blessings in order to keep implementation simple and plan to move out of vanadium sooner to something
+		// that better matches the authorization method desired.
 
-	if clusterNameFromTag != "" && clusterModeFromTag != "" {
-		extension = fmt.Sprintf("k8s:%s:%s:%s:%s", arn.AccountID, clusterNameFromTag, usernameSet[3], clusterModeFromTag)
+		if val, ok := cluster.Tags["ClusterMode"]; ok {
+			clusterModeFromTag = strings.ToLower(*val)
+		}
+	*/
+
+	if clusterNameFromTag != "" {
+		extension = fmt.Sprintf("k8s:%s:%s:%s", arn.AccountID, clusterNameFromTag, usernameSet[3])
 		log.Debug(ctx, "Using k8s cluster a/b extension generation.", "extension", extension)
 	} else {
 		extension = fmt.Sprintf("k8s:%s:%s:%s", arn.AccountID, *cluster.Name, usernameSet[3])

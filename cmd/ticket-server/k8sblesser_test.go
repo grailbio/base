@@ -268,7 +268,7 @@ func TestK8sBlesser(t *testing.T) {
 		cluster = newClusterHelper(clusterName+"-a", acctNum, "fake-crt", testRole, testRegion, tags)
 		extension, err = CreateK8sExtension(fakeContext, cluster.Cluster, testUsername, testNamespace)
 		assert.Nil(t, err)
-		assert.Equal(t, "k8s:"+acctNum+":"+clusterName+":"+serviceAccountName+":a", extension)
+		assert.Equal(t, "k8s:"+acctNum+":"+clusterName+":"+serviceAccountName, extension)
 	})
 
 	t.Run("BlessK8s", func(t *testing.T) {
@@ -394,6 +394,6 @@ func TestK8sBlesser(t *testing.T) {
 		)
 		cmd.Env = []string{pathEnv}
 		stdout, _ = ticketServerUtil.RunAndCapture(t, cmd)
-		assert.Contains(t, stdout, "k8s:111111111111:test-cluster:someService:a")
+		assert.Contains(t, stdout, "k8s:111111111111:test-cluster:someService")
 	})
 }
