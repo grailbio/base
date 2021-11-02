@@ -25,6 +25,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/grailbio/base/log"
 )
@@ -103,6 +104,28 @@ var kinds = map[Kind]string{
 // String returns a human-readable explanation of the error kind k.
 func (k Kind) String() string {
 	return kinds[k]
+}
+
+var kindErrnos = map[Kind]syscall.Errno{
+	Canceled:     syscall.EINTR,
+	Timeout:      syscall.ETIMEDOUT,
+	NotExist:     syscall.ENOENT,
+	NotAllowed:   syscall.EACCES,
+	NotSupported: syscall.ENOSYS,
+	Exists:       syscall.EEXIST,
+	Unavailable:  syscall.EAGAIN,
+	Invalid:      syscall.EINVAL,
+	Net:          syscall.ENETUNREACH,
+	TooManyTries: syscall.EINVAL,
+	Precondition: syscall.EAGAIN,
+	OOM:          syscall.ENOMEM,
+	Remote:       syscall.EREMOTE,
+}
+
+// Errno maps k to an equivalent Errno or returns false if there's no good match.
+func (k Kind) Errno() (syscall.Errno, bool) {
+	errno, ok := kindErrnos[k]
+	return errno, ok
 }
 
 // Severity defines an Error's severity. An Error's severity determines

@@ -36,6 +36,7 @@ func (d *dirStream) HasNext() bool {
 	if d.current != nil || d.currentErr != nil {
 		return true
 	}
+	defer handlePanicErr(&d.currentErr)
 	if d.eof {
 		return false
 	}
@@ -51,7 +52,8 @@ func (d *dirStream) HasNext() bool {
 	return true
 }
 
-func (d *dirStream) Next() (fuse.DirEntry, syscall.Errno) {
+func (d *dirStream) Next() (_ fuse.DirEntry, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	if err := d.currentErr; err != nil {
 		return fuse.DirEntry{}, errToErrno(err)
 	}
@@ -66,9 +68,14 @@ func (d *dirStream) Next() (fuse.DirEntry, syscall.Errno) {
 }
 
 func (d *dirStream) Close() {
-	if err := d.iter.Close(d.ctx); err != nil {
-		log.Error.Printf("fsnodefuse.dirStream: error on close: %v", err)
-	}
+	var err error
+	defer handlePanicErr(&err)
+	defer func() {
+		if err != nil {
+			log.Error.Printf("fsnodefuse.dirStream: error on close: %v", err)
+		}
+	}()
+	err = d.iter.Close(d.ctx)
 	d.iter = nil
 	d.current = nil
 }

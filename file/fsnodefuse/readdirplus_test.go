@@ -22,7 +22,8 @@ import (
 // (*os.File).Readdir to trigger the READDIRPLUS request.
 func TestReaddirplus(t *testing.T) {
 	children := makeTestChildren()
-	withMounted(t, children, func(root *parent, mountDir string) {
+	root := newParent("root", children)
+	withMounted(t, root, func(mountDir string) {
 		err := checkDir(t, children, mountDir)
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), root.childCalls)
@@ -35,7 +36,8 @@ func TestReaddirplus(t *testing.T) {
 // requests.
 func TestReaddirplusConcurrent(t *testing.T) {
 	children := makeTestChildren()
-	withMounted(t, children, func(root *parent, mountDir string) {
+	root := newParent("root", children)
+	withMounted(t, root, func(mountDir string) {
 		const Nreaddirs = 100
 		var grp errgroup.Group
 		for i := 0; i < Nreaddirs; i++ {
@@ -60,9 +62,8 @@ func makeTestChildren() []fsnode.T {
 	return children
 }
 
-func withMounted(t *testing.T, children []fsnode.T, f func(*parent, string)) {
-	root := newParent("root", children)
-	mountDir, cleanUp := testutil.TempDir(t, "", "fsnodefuse-testreaddirplus")
+func withMounted(t *testing.T, root fsnode.T, f func(string)) {
+	mountDir, cleanUp := testutil.TempDir(t, "", "fsnodefuse-"+t.Name())
 	defer cleanUp()
 	server, err := fs.Mount(mountDir, NewRoot(root), &fs.Options{
 		MountOptions: fuse.MountOptions{
@@ -77,7 +78,7 @@ func withMounted(t *testing.T, children []fsnode.T, f func(*parent, string)) {
 			mountDir,
 		)
 	}()
-	f(root, mountDir)
+	f(mountDir)
 }
 
 func checkDir(t *testing.T, children []fsnode.T, path string) (err error) {

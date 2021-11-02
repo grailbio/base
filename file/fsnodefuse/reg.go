@@ -35,7 +35,8 @@ func (n *regInode) fsNode() fsnode.T {
 	return n.n
 }
 
-func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, outFlags uint32, _ syscall.Errno) {
+func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, outFlags uint32, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
 
 	file, err := n.n.Open(ctx)
@@ -51,7 +52,8 @@ func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, o
 	return &defaultHandle{f: file, cache: &n.cache}, 0, fs.OK
 }
 
-func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut) syscall.Errno {
+func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
 
 	if h != nil {
@@ -65,7 +67,8 @@ func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut
 	return fs.OK
 }
 
-func (n *regInode) Setattr(_ context.Context, _ fs.FileHandle, _ *fuse.SetAttrIn, a *fuse.AttrOut) syscall.Errno {
+func (n *regInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttrIn, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	n.cache.DeleteAll()
 	if errno := n.NotifyContent(0 /* offset */, 0 /* len, zero means all */); errno != fs.OK {
 		log.Error.Printf("regInode.Setattr %s: error from NotifyContent: %v", n.Path(nil), errno)
@@ -84,7 +87,8 @@ type spliceHandle struct {
 	cache *loadingcache.Map
 }
 
-func (h *spliceHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+func (h *spliceHandle) Read(ctx context.Context, dst []byte, off int64) (_ fuse.ReadResult, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	fd, fdSize, fdOff, err := h.r.SpliceReadAt(ctx, len(dst), off)
 	if err != nil {
 		return nil, errToErrno(err)
@@ -92,7 +96,8 @@ func (h *spliceHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.Re
 	return fuse.ReadResultFd(fd, fdOff, fdSize), fs.OK
 }
 
-func (h *spliceHandle) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Errno {
+func (h *spliceHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, h.cache)
 
 	info, err := h.f.Stat(ctx)
@@ -104,7 +109,8 @@ func (h *spliceHandle) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Err
 	return fs.OK
 }
 
-func (h *spliceHandle) Release(ctx context.Context) syscall.Errno {
+func (h *spliceHandle) Release(ctx context.Context) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	if h.f == nil {
 		return syscall.EBADF
 	}
@@ -123,7 +129,8 @@ type readerAtHandle struct {
 	cache *loadingcache.Map
 }
 
-func (h *readerAtHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+func (h *readerAtHandle) Read(ctx context.Context, dst []byte, off int64) (_ fuse.ReadResult, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, h.cache)
 
 	var (
@@ -144,7 +151,8 @@ func (h *readerAtHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.
 	return fuse.ReadResultData(dst[:len(dst)-len(rest)]), errToErrno(err)
 }
 
-func (h *readerAtHandle) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Errno {
+func (h *readerAtHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, h.cache)
 
 	info, err := h.f.Stat(ctx)
@@ -156,7 +164,8 @@ func (h *readerAtHandle) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.E
 	return fs.OK
 }
 
-func (h *readerAtHandle) Release(ctx context.Context) syscall.Errno {
+func (h *readerAtHandle) Release(ctx context.Context) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	if h.f == nil {
 		return syscall.EBADF
 	}
@@ -176,7 +185,8 @@ type defaultHandle struct {
 	cache *loadingcache.Map
 }
 
-func (h *defaultHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+func (h *defaultHandle) Read(ctx context.Context, dst []byte, off int64) (_ fuse.ReadResult, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, h.cache)
 
 	if h.eof {
@@ -186,7 +196,7 @@ func (h *defaultHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.R
 		return fuse.ReadResultData(dst), 0
 	}
 	if off != h.pos {
-		log.Debug.Printf("fsnodefuse.defaultHandle.Read: refusing seek: pos: %d, off: %d", h.pos, off)
+		log.Debug.Printf("fsnodefuse.default.Read: refusing seek: pos: %d, off: %d", h.pos, off)
 		return nil, syscall.EINVAL
 	}
 
@@ -210,7 +220,8 @@ func (h *defaultHandle) Read(ctx context.Context, dst []byte, off int64) (fuse.R
 	return fuse.ReadResultData(dst[:nTotal]), 0
 }
 
-func (h *defaultHandle) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Errno {
+func (h *defaultHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, h.cache)
 
 	info, err := h.f.Stat(ctx)
@@ -226,7 +237,8 @@ func (h *defaultHandle) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Er
 	return fs.OK
 }
 
-func (h *defaultHandle) Release(ctx context.Context) syscall.Errno {
+func (h *defaultHandle) Release(ctx context.Context) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	if h.f == nil {
 		return syscall.EBADF
 	}

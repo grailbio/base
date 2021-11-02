@@ -35,12 +35,14 @@ func (n *dirInode) fsNode() fsnode.T {
 	return n.n
 }
 
-func (n *dirInode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+func (n *dirInode) Readdir(ctx context.Context) (_ fs.DirStream, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
 	return newDirStream(ctx, n), fs.OK
 }
 
 func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (_ *fs.Inode, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	if childInode := n.GetChild(name); childInode != nil {
 		embed := childInode.Operations().(inodeEmbedder)
 		setEntryOut(out, childInode.StableAttr().Ino, embed.fsNode())
@@ -59,13 +61,15 @@ func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 	return childInode, fs.OK
 }
 
-func (n *dirInode) Getattr(_ context.Context, _ fs.FileHandle, a *fuse.AttrOut) syscall.Errno {
+func (n *dirInode) Getattr(ctx context.Context, _ fs.FileHandle, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	setAttrFromFileInfo(&a.Attr, n.n)
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
 }
 
-func (n *dirInode) Setattr(_ context.Context, _ fs.FileHandle, _ *fuse.SetAttrIn, a *fuse.AttrOut) syscall.Errno {
+func (n *dirInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttrIn, a *fuse.AttrOut) (errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
 	n.cache.DeleteAll()
 
 	// To avoid deadlock we must notify invalidations while not holding certain inode locks.

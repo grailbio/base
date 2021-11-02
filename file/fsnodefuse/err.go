@@ -1,6 +1,7 @@
 package fsnodefuse
 
 import (
+	"fmt"
 	"runtime/debug"
 	"syscall"
 
@@ -9,36 +10,41 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 )
 
-// TODO: Dedupe with gfs.go.
+// handlePanicErrno is a last resort to prevent panics from reaching go-fuse and breaking the FUSE mount.
+// All go-fuse-facing APIs that return Errno should defer it.
+func handlePanicErrno(errno *syscall.Errno) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	*errno = errToErrno(makePanicErr(r))
+}
+
+// handlePanicErr is like handlePanicErrno but for APIs that don't return Errno.
+func handlePanicErr(dst *error) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	*dst = makePanicErr(r)
+}
+
+func makePanicErr(recovered interface{}) error {
+	if err, ok := recovered.(error); ok {
+		return errors.E(err, fmt.Sprintf("recovered panic, stack:\n%v", string(debug.Stack())))
+	}
+	return errors.E(fmt.Sprintf("recovered panic: %v, stack:\n%v", recovered, string(debug.Stack())))
+}
+
 func errToErrno(err error) syscall.Errno {
 	if err == nil {
-		return 0
+		return fs.OK
 	}
-	log.Debug.Printf("error %v: stack=%s", err, string(debug.Stack()))
-	switch {
-	case err == nil:
-		return 0
-	case errors.Is(errors.Timeout, err):
-		return syscall.ETIMEDOUT
-	case errors.Is(errors.Canceled, err):
-		return syscall.EINTR
-	case errors.Is(errors.NotExist, err):
-		return syscall.ENOENT
-	case errors.Is(errors.Exists, err):
-		return syscall.EEXIST
-	case errors.Is(errors.NotAllowed, err):
-		return syscall.EACCES
-	case errors.Is(errors.Integrity, err):
-		return syscall.EIO
-	case errors.Is(errors.Invalid, err):
-		return syscall.EINVAL
-	case errors.Is(errors.Precondition, err), errors.Is(errors.Unavailable, err):
-		return syscall.EAGAIN
-	case errors.Is(errors.Net, err):
-		return syscall.ENETUNREACH
-	case errors.Is(errors.TooManyTries, err):
-		log.Error.Print(err)
-		return syscall.EINVAL
+	kind := errors.Recover(err).Kind
+	errno, ok := kind.Errno()
+	if ok {
+		return errno
 	}
-	return fs.ToErrno(err)
+	log.Error.Printf("error with no good errno match: kind: %v, err: %v", kind, err)
+	return syscall.EIO
 }
