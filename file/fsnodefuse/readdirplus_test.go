@@ -17,9 +17,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Set these to lower numbers for easier debugging.
+const (
+	NumChildren           = 1000
+	NumConcurrentReaddirs = 100
+)
+
 // TestReaddirplus verifies that servicing a READDIRPLUS request does not
 // trigger calls to (fsnode.Parent).Child.  Note that this test uses
-// (*os.File).Readdir to trigger the READDIRPLUS request.
+// (*os.File).Readdirnames to trigger the READDIRPLUS request.
 func TestReaddirplus(t *testing.T) {
 	children := makeTestChildren()
 	root := newParent("root", children)
@@ -32,15 +38,14 @@ func TestReaddirplus(t *testing.T) {
 
 // TestReaddirplusConcurrent verifies that servicing many concurrent
 // READDIRPLUS requests does not trigger any calls to (fsnode.Parent).Child.
-// Note that this test uses (*os.File).Readdir to trigger the READDIRPLUS
+// Note that this test uses (*os.File).Readdirnames to trigger the READDIRPLUS
 // requests.
 func TestReaddirplusConcurrent(t *testing.T) {
 	children := makeTestChildren()
 	root := newParent("root", children)
 	withMounted(t, root, func(mountDir string) {
-		const Nreaddirs = 100
 		var grp errgroup.Group
-		for i := 0; i < Nreaddirs; i++ {
+		for i := 0; i < NumConcurrentReaddirs; i++ {
 			grp.Go(func() error {
 				return checkDir(t, children, mountDir)
 			})
@@ -51,8 +56,7 @@ func TestReaddirplusConcurrent(t *testing.T) {
 }
 
 func makeTestChildren() []fsnode.T {
-	const Nchildren = 2
-	children := make([]fsnode.T, Nchildren)
+	children := make([]fsnode.T, NumChildren)
 	for i := range children {
 		children[i] = fsnode.ConstLeaf(
 			fsnode.NewRegInfo(fmt.Sprintf("%04d", i)),
@@ -62,8 +66,10 @@ func makeTestChildren() []fsnode.T {
 	return children
 }
 
-func withMounted(t *testing.T, root fsnode.T, f func(string)) {
-	mountDir, cleanUp := testutil.TempDir(t, "", "fsnodefuse-"+t.Name())
+// withMounted sets up and tears down a FUSE mount for root.
+// f is called with the path where root is mounted.
+func withMounted(t *testing.T, root fsnode.T, f func(rootPath string)) {
+	mountDir, cleanUp := testutil.TempDir(t, "", "fsnodefuse-testreaddirplus")
 	defer cleanUp()
 	server, err := fs.Mount(mountDir, NewRoot(root), &fs.Options{
 		MountOptions: fuse.MountOptions{
@@ -91,10 +97,12 @@ func checkDir(t *testing.T, children []fsnode.T, path string) (err error) {
 		return err
 	}
 	defer func() { assert.NoError(t, f.Close()) }()
-	infos, err := f.Readdir(0)
+	// Use Readdirnames instead of Readdir because Readdir adds an extra call
+	// lstat outside of the READDIRPLUS operation.
+	names, err := f.Readdirnames(0)
 	got := make(map[string]struct{})
-	for _, info := range infos {
-		got[info.Name()] = struct{}{}
+	for _, name := range names {
+		got[name] = struct{}{}
 	}
 	// Sanity check that the names of the entries match the children.
 	assert.Equal(t, want, got)
@@ -119,7 +127,7 @@ func (p parent) CacheableFor() time.Duration {
 func newParent(name string, children []fsnode.T) *parent {
 	return &parent{
 		Parent: fsnode.NewParent(
-			fsnode.NewDirInfo("root").WithCacheableFor(1*time.Hour),
+			fsnode.NewDirInfo("root"),
 			fsnode.ConstChildren(children...),
 		),
 	}

@@ -3,6 +3,7 @@ package fsnodefuse
 import (
 	"context"
 	"os"
+	"sync"
 	"syscall"
 	"time"
 
@@ -17,8 +18,11 @@ import (
 
 type dirInode struct {
 	fs.Inode
-	n     fsnode.Parent
+	dirStreamUsageImpl
 	cache loadingcache.Map
+
+	mu sync.Mutex
+	n  fsnode.Parent
 }
 
 var (
@@ -30,11 +34,6 @@ var (
 	_ fs.NodeSetattrer = (*dirInode)(nil)
 )
 
-// fsNode implements inodeEmbedder.
-func (n *dirInode) fsNode() fsnode.T {
-	return n.n
-}
-
 func (n *dirInode) Readdir(ctx context.Context) (_ fs.DirStream, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
@@ -44,20 +43,32 @@ func (n *dirInode) Readdir(ctx context.Context) (_ fs.DirStream, errno syscall.E
 func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (_ *fs.Inode, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
 	if childInode := n.GetChild(name); childInode != nil {
-		embed := childInode.Operations().(inodeEmbedder)
-		setEntryOut(out, childInode.StableAttr().Ino, embed.fsNode())
-		return childInode, fs.OK
+		if embed := childInode.Operations().(inodeEmbedder); embed.PreviousOfAnyDirStream() {
+			var fsNode fsnode.T
+			switch embed := embed.(type) {
+			case *dirInode:
+				embed.mu.Lock()
+				fsNode = embed.n
+				embed.mu.Unlock()
+			case *regInode:
+				embed.mu.Lock()
+				fsNode = embed.n
+				embed.mu.Unlock()
+			}
+			setEntryOut(out, childInode.StableAttr().Ino, fsNode)
+			return childInode, fs.OK
+		}
 	}
 	ctx = ctxloadingcache.With(ctx, &n.cache)
-	child, err := n.n.Child(ctx, name)
+	childFSNode, err := n.n.Child(ctx, name)
 	if err != nil {
 		return nil, errToErrno(err)
 	}
-	entry, childInode, err := n.makeChild(ctx, child)
+	childInode, entry, err := n.makeChild(ctx, childFSNode)
 	if err != nil {
 		return nil, errToErrno(err)
 	}
-	setEntryOut(out, entry.Ino, child)
+	setEntryOut(out, entry.Ino, childFSNode)
 	return childInode, fs.OK
 }
 
@@ -98,33 +109,52 @@ func (n *dirInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttr
 	return fs.OK
 }
 
+// makeChild returns a child inode of n, along with a DirEntry that represents
+// it.  Note that it does not add the returned inode as a child of n.  That is
+// the responsibility of the caller.
 func (n *dirInode) makeChild(
 	ctx context.Context,
 	fsNode fsnode.T,
-) (fuse.DirEntry, *fs.Inode, error) {
+) (*fs.Inode, fuse.DirEntry, error) {
 	var (
 		name  = fsNode.Name()
-		ino   = hashParentInoAndName(n.StableAttr().Ino, name)
+		ino   = hashIno(n, name)
 		embed inodeEmbedder
 		mode  uint32
 	)
 	// TODO: Set owner/UID?
-	switch fsNode := fsNode.(type) {
+	switch fsNode.(type) {
 	case fsnode.Parent:
-		embed = &dirInode{n: fsNode}
+		embed = &dirInode{}
 		mode |= syscall.S_IFDIR
 	case fsnode.Leaf:
-		embed = &regInode{n: fsNode}
+		embed = &regInode{}
 		mode |= syscall.S_IFREG
 	default:
 		log.Error.Printf("BUG: invalid node type: %T", fsNode)
-		return fuse.DirEntry{}, nil, errors.E(errors.Invalid)
+		return nil, fuse.DirEntry{}, errors.E(errors.Invalid)
 	}
-	var (
-		entry = fuse.DirEntry{Name: name, Mode: mode, Ino: ino}
-		inode = n.NewInode(ctx, embed, fs.StableAttr{Mode: mode, Ino: ino})
-	)
-	return entry, inode, nil
+	// inode is either 1) a newly-constructed inode containing embed, or 2) a
+	// previously existing one which doesn't use embed at all, as NewInode may
+	// return existing nodes.
+	inode := n.NewInode(ctx, embed, fs.StableAttr{Mode: mode, Ino: ino})
+	// Overwrite the new or existing embedder's node with fsNode to cover both
+	// cases.
+	embed = inode.Operations().(inodeEmbedder)
+	switch embed := embed.(type) {
+	case *dirInode:
+		embed.mu.Lock()
+		embed.n = fsNode.(fsnode.Parent)
+		embed.mu.Unlock()
+	case *regInode:
+		embed.mu.Lock()
+		embed.n = fsNode.(fsnode.Leaf)
+		embed.mu.Unlock()
+	default:
+		log.Panicf("unexpected inodeEmbedder: %T", embed)
+	}
+	entry := fuse.DirEntry{Name: name, Mode: mode, Ino: ino}
+	return inode, entry, nil
 }
 
 func setEntryOut(out *fuse.EntryOut, ino uint64, n fsnode.T) {

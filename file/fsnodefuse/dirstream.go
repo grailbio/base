@@ -16,12 +16,17 @@ import (
 )
 
 type dirStream struct {
-	ctx        context.Context
-	dir        *dirInode
-	iter       fsnode.Iterator
-	eof        bool
-	current    fsnode.T
-	currentErr error
+	ctx     context.Context
+	dir     *dirInode
+	iter    fsnode.Iterator
+	eof     bool
+	next    fsnode.T
+	nextErr error
+	// previousInode is the inode of the previous entry, i.e. the most recent
+	// entry returned by Next.  We hold a reference to service LOOKUP
+	// operations that go-fuse issues when servicing READDIRPLUS.  See
+	// dirStreamUsage.
+	previousInode *fs.Inode
 }
 
 func newDirStream(ctx context.Context, dir *dirInode) *dirStream {
@@ -33,10 +38,10 @@ func newDirStream(ctx context.Context, dir *dirInode) *dirStream {
 }
 
 func (d *dirStream) HasNext() bool {
-	if d.current != nil || d.currentErr != nil {
+	if d.next != nil || d.nextErr != nil {
 		return true
 	}
-	defer handlePanicErr(&d.currentErr)
+	defer handlePanicErr(&d.nextErr)
 	if d.eof {
 		return false
 	}
@@ -45,25 +50,27 @@ func (d *dirStream) HasNext() bool {
 		d.eof = true
 		return false
 	} else if err != nil {
-		d.currentErr = fmt.Errorf("fsnodefuse.dirStream: %w", err)
+		d.nextErr = fmt.Errorf("fsnodefuse.dirStream: %w", err)
 		return false
 	}
-	d.current = next
+	d.next = next
 	return true
 }
 
 func (d *dirStream) Next() (_ fuse.DirEntry, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
-	if err := d.currentErr; err != nil {
+	if err := d.nextErr; err != nil {
 		return fuse.DirEntry{}, errToErrno(err)
 	}
-	current := d.current
-	d.current = nil
-	entry, childInode, err := d.dir.makeChild(d.ctx, current)
+	next := d.next
+	d.next = nil
+	inode, entry, err := d.dir.makeChild(d.ctx, next)
 	if err != nil {
 		return fuse.DirEntry{}, errToErrno(err)
 	}
-	d.dir.AddChild(entry.Name, childInode, true)
+	// We are passing overwrite == true, so the return value is meaningless.
+	_ = d.dir.AddChild(entry.Name, inode, true)
+	d.setPreviousInode(inode)
 	return entry, fs.OK
 }
 
@@ -77,7 +84,22 @@ func (d *dirStream) Close() {
 	}()
 	err = d.iter.Close(d.ctx)
 	d.iter = nil
-	d.current = nil
+	d.next = nil
+	d.clearPreviousInode()
+}
+
+func (d *dirStream) setPreviousInode(n *fs.Inode) {
+	d.clearPreviousInode()
+	d.previousInode = n
+	d.previousInode.Operations().(inodeEmbedder).AddRef()
+}
+
+func (d *dirStream) clearPreviousInode() {
+	if d.previousInode == nil {
+		return
+	}
+	d.previousInode.Operations().(inodeEmbedder).DropRef()
+	d.previousInode = nil
 }
 
 func hashParentInoAndName(parentIno uint64, name string) uint64 {

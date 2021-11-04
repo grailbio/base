@@ -3,6 +3,7 @@ package fsnodefuse
 import (
 	"context"
 	"io"
+	"sync"
 	"syscall"
 
 	"github.com/grailbio/base/file/fsnode"
@@ -18,8 +19,11 @@ import (
 
 type regInode struct {
 	fs.Inode
-	n     fsnode.Leaf
+	dirStreamUsageImpl
 	cache loadingcache.Map
+
+	mu sync.Mutex
+	n  fsnode.Leaf
 }
 
 var (
@@ -29,11 +33,6 @@ var (
 	_ fs.NodeGetattrer = (*regInode)(nil)
 	_ fs.NodeSetattrer = (*regInode)(nil)
 )
-
-// fsNode implements inodeEmbedder.
-func (n *regInode) fsNode() fsnode.T {
-	return n.n
-}
 
 func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, outFlags uint32, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
