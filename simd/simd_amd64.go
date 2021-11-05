@@ -1,7 +1,8 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2021 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:build amd64 && !appengine
 // +build amd64,!appengine
 
 package simd
@@ -212,7 +213,7 @@ func Memset8Unsafe(dst []byte, val byte) {
 	dstWordsIter := unsafe.Pointer(dstHeader.Data)
 	for widx := 0; widx < nWord; widx++ {
 		*((*uintptr)(dstWordsIter)) = valWord
-		dstWordsIter = unsafe.Pointer(uintptr(dstWordsIter) + BytesPerWord)
+		dstWordsIter = unsafe.Add(dstWordsIter, BytesPerWord)
 	}
 }
 
@@ -228,15 +229,15 @@ func Memset8(dst []byte, val byte) {
 		}
 		return
 	}
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
+	dstData := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&dst)).Data)
 	valWord := uintptr(0x0101010101010101) * uintptr(val)
 	nWordMinus1 := (dstLen - 1) >> Log2BytesPerWord
-	dstWordsIter := unsafe.Pointer(dstHeader.Data)
+	dstWordsIter := dstData
 	for widx := 0; widx < nWordMinus1; widx++ {
 		*((*uintptr)(dstWordsIter)) = valWord
-		dstWordsIter = unsafe.Pointer(uintptr(dstWordsIter) + BytesPerWord)
+		dstWordsIter = unsafe.Add(dstWordsIter, BytesPerWord)
 	}
-	dstWordsIter = unsafe.Pointer(dstHeader.Data + uintptr(dstLen) - BytesPerWord)
+	dstWordsIter = unsafe.Add(dstData, dstLen-BytesPerWord)
 	*((*uintptr)(dstWordsIter)) = valWord
 }
 
@@ -512,27 +513,27 @@ func Reverse8Unsafe(dst, src []byte) {
 		}
 		return
 	}
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
+	srcData := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&src)).Data)
+	dstData := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&dst)).Data)
 	if nByte < 16 {
 		// use bswap64 on a word at a time
 		nWordMinus1 := (nByte - 1) >> Log2BytesPerWord
 		finalOffset := uintptr(nByte) - BytesPerWord
-		srcIter := unsafe.Pointer(srcHeader.Data + finalOffset)
-		dstIter := unsafe.Pointer(dstHeader.Data)
+		srcIter := unsafe.Add(srcData, finalOffset)
+		dstIter := dstData
 		for widx := 0; widx < nWordMinus1; widx++ {
 			srcWord := *((*uintptr)(srcIter))
 			*((*uintptr)(dstIter)) = uintptr(bits.ReverseBytes64(uint64(srcWord)))
-			srcIter = unsafe.Pointer(uintptr(srcIter) - BytesPerWord)
-			dstIter = unsafe.Pointer(uintptr(dstIter) - BytesPerWord)
+			srcIter = unsafe.Add(srcIter, -BytesPerWord)
+			dstIter = unsafe.Add(dstIter, -BytesPerWord)
 		}
-		srcFirstWordPtr := unsafe.Pointer(srcHeader.Data)
-		dstLastWordPtr := unsafe.Pointer(dstHeader.Data + finalOffset)
+		srcFirstWordPtr := unsafe.Pointer(srcData)
+		dstLastWordPtr := unsafe.Add(dstData, finalOffset)
 		srcWord := *((*uintptr)(srcFirstWordPtr))
 		*((*uintptr)(dstLastWordPtr)) = uintptr(bits.ReverseBytes64(uint64(srcWord)))
 		return
 	}
-	reverse8SSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), nByte)
+	reverse8SSSE3Asm(dstData, srcData, nByte)
 }
 
 // Reverse8 sets dst[pos] := src[len(src) - 1 - pos] for every position in src.
@@ -550,27 +551,27 @@ func Reverse8(dst, src []byte) {
 		}
 		return
 	}
-	srcHeader := (*reflect.SliceHeader)(unsafe.Pointer(&src))
-	dstHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
+	srcData := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&src)).Data)
+	dstData := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&dst)).Data)
 	if nByte < 16 {
 		// use bswap64 on a word at a time
 		nWordMinus1 := (nByte - 1) >> Log2BytesPerWord
 		finalOffset := uintptr(nByte) - BytesPerWord
-		srcIter := unsafe.Pointer(srcHeader.Data + finalOffset)
-		dstIter := unsafe.Pointer(dstHeader.Data)
+		srcIter := unsafe.Add(srcData, finalOffset)
+		dstIter := dstData
 		for widx := 0; widx < nWordMinus1; widx++ {
 			srcWord := *((*uintptr)(srcIter))
 			*((*uintptr)(dstIter)) = uintptr(bits.ReverseBytes64(uint64(srcWord)))
-			srcIter = unsafe.Pointer(uintptr(srcIter) - BytesPerWord)
-			dstIter = unsafe.Pointer(uintptr(dstIter) - BytesPerWord)
+			srcIter = unsafe.Add(srcIter, -BytesPerWord)
+			dstIter = unsafe.Add(dstIter, -BytesPerWord)
 		}
-		srcFirstWordPtr := unsafe.Pointer(srcHeader.Data)
-		dstLastWordPtr := unsafe.Pointer(dstHeader.Data + finalOffset)
+		srcFirstWordPtr := srcData
+		dstLastWordPtr := unsafe.Add(dstData, finalOffset)
 		srcWord := *((*uintptr)(srcFirstWordPtr))
 		*((*uintptr)(dstLastWordPtr)) = uintptr(bits.ReverseBytes64(uint64(srcWord)))
 		return
 	}
-	reverse8SSSE3Asm(unsafe.Pointer(dstHeader.Data), unsafe.Pointer(srcHeader.Data), nByte)
+	reverse8SSSE3Asm(dstData, srcData, nByte)
 }
 
 // BitFromEveryByte fills dst[] with a bitarray containing every 8th bit from

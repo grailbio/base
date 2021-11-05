@@ -1,16 +1,19 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2021 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:build amd64 && !appengine
 // +build amd64,!appengine
 
 // This is derived from github.com/willf/bitset .
 
 package simd
 
-import "math/bits"
-import "reflect"
-import "unsafe"
+import (
+	"math/bits"
+	"reflect"
+	"unsafe"
+)
 
 // *** the following function is defined in count_amd64.s
 
@@ -89,7 +92,7 @@ func Popcnt(bytes []byte) int {
 		leadingWord := uint64(0)
 		if (nLeadingByte & 1) != 0 {
 			leadingWord = (uint64)(*(*byte)(bytearr))
-			bytearr = unsafe.Pointer(uintptr(bytearr) + 1)
+			bytearr = unsafe.Add(bytearr, 1)
 		}
 		if (nLeadingByte & 2) != 0 {
 			// Note that this does not keep the bytes in the original little-endian
@@ -98,12 +101,12 @@ func Popcnt(bytes []byte) int {
 			// plink2_base.h for code which does keep the bytes in order.
 			leadingWord <<= 16
 			leadingWord |= (uint64)(*(*uint16)(bytearr))
-			bytearr = unsafe.Pointer(uintptr(bytearr) + 2)
+			bytearr = unsafe.Add(bytearr, 2)
 		}
 		if (nLeadingByte & 4) != 0 {
 			leadingWord <<= 32
 			leadingWord |= (uint64)(*(*uint32)(bytearr))
-			bytearr = unsafe.Pointer(uintptr(bytearr) + 4)
+			bytearr = unsafe.Add(bytearr, 4)
 		}
 		tot = bits.OnesCount64(leadingWord)
 	}

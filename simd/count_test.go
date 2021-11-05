@@ -1,4 +1,4 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2021 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
@@ -28,24 +28,24 @@ func popcntBytesNoasm(byteslice []byte) int {
 	ct := uintptr(len(byteslice))
 
 	bytearr := unsafe.Pointer(bytesliceHeader.Data)
-	endptr := unsafe.Pointer(uintptr(bytearr) + ct)
+	endptr := unsafe.Add(bytearr, ct)
 	tot := 0
 	nLeadingByte := ct % 8
 	if nLeadingByte != 0 {
 		leadingWord := uint64(0)
 		if (nLeadingByte & 1) != 0 {
 			leadingWord = (uint64)(*(*byte)(bytearr))
-			bytearr = unsafe.Pointer(uintptr(bytearr) + 1)
+			bytearr = unsafe.Add(bytearr, 1)
 		}
 		if (nLeadingByte & 2) != 0 {
 			leadingWord <<= 16
 			leadingWord |= (uint64)(*(*uint16)(bytearr))
-			bytearr = unsafe.Pointer(uintptr(bytearr) + 2)
+			bytearr = unsafe.Add(bytearr, 2)
 		}
 		if (nLeadingByte & 4) != 0 {
 			leadingWord <<= 32
 			leadingWord |= (uint64)(*(*uint32)(bytearr))
-			bytearr = unsafe.Pointer(uintptr(bytearr) + 4)
+			bytearr = unsafe.Add(bytearr, 4)
 		}
 		tot = bits.OnesCount64(leadingWord)
 	}
@@ -53,7 +53,7 @@ func popcntBytesNoasm(byteslice []byte) int {
 	// depending on which of several equivalent ways I use to write it.
 	for bytearr != endptr {
 		tot += bits.OnesCount64((uint64)(*((*uint64)(bytearr))))
-		bytearr = unsafe.Pointer(uintptr(bytearr) + 8)
+		bytearr = unsafe.Add(bytearr, 8)
 	}
 	return tot
 }

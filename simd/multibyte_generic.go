@@ -1,7 +1,8 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2021 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:build !amd64 && !appengine
 // +build !amd64,!appengine
 
 package simd
@@ -29,7 +30,7 @@ func Memset16Raw(dst, valPtr unsafe.Pointer, nElem int) {
 	val := *((*uint16)(valPtr))
 	for idx := 0; idx != nElem; idx++ {
 		*((*uint16)(dst)) = val
-		dst = unsafe.Pointer(uintptr(dst) + 2)
+		dst = unsafe.Add(dst, 2)
 	}
 }
 
@@ -40,7 +41,7 @@ func Memset32Raw(dst, valPtr unsafe.Pointer, nElem int) {
 	val := *((*uint32)(valPtr))
 	for idx := 0; idx != nElem; idx++ {
 		*((*uint32)(dst)) = val
-		dst = unsafe.Pointer(uintptr(dst) + 4)
+		dst = unsafe.Add(dst, 4)
 	}
 }
 
@@ -75,25 +76,25 @@ func IndexU16(main []uint16, val uint16) int {
 func Reverse16InplaceRaw(main unsafe.Pointer, nElem int) {
 	nElemDiv2 := nElem >> 1
 	fwdIter := main
-	revIter := unsafe.Pointer(uintptr(main) + uintptr((nElem-1)*2))
+	revIter := unsafe.Add(main, (nElem-1)*2)
 	for idx := 0; idx != nElemDiv2; idx++ {
 		origLeftVal := *((*uint16)(fwdIter))
 		*((*uint16)(fwdIter)) = *((*uint16)(revIter))
 		*((*uint16)(revIter)) = origLeftVal
-		fwdIter = unsafe.Pointer(uintptr(fwdIter) + 2)
-		revIter = unsafe.Pointer(uintptr(revIter) - 2)
+		fwdIter = unsafe.Add(fwdIter, 2)
+		revIter = unsafe.Add(revIter, -2)
 	}
 }
 
 // Reverse16Raw assumes dst and src both point to arrays of ct 2-byte elements,
 // and sets dst[pos] := src[ct - 1 - pos] for each position.
 func Reverse16Raw(dst, src unsafe.Pointer, nElem int) {
-	srcIter := unsafe.Pointer(uintptr(src) + uintptr((nElem-1)*2))
+	srcIter := unsafe.Add(src, (nElem-1)*2)
 	dstIter := dst
 	for idx := 0; idx != nElem; idx++ {
 		*((*uint16)(dstIter)) = *((*uint16)(srcIter))
-		srcIter = unsafe.Pointer(uintptr(srcIter) - 2)
-		dstIter = unsafe.Pointer(uintptr(dstIter) + 2)
+		srcIter = unsafe.Add(srcIter, -2)
+		dstIter = unsafe.Add(dstIter, 2)
 	}
 }
 

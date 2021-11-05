@@ -1,7 +1,8 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2021 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:build amd64 && !appengine
 // +build amd64,!appengine
 
 package simd
@@ -41,11 +42,11 @@ func FirstUnequal8Unsafe(arg1, arg2 []byte, startPos int) int {
 	if nByte <= 0 {
 		return endPos
 	}
-	arg1Header := (*reflect.SliceHeader)(unsafe.Pointer(&arg1))
-	arg2Header := (*reflect.SliceHeader)(unsafe.Pointer(&arg2))
+	arg1Data := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&arg1)).Data)
+	arg2Data := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&arg2)).Data)
 	nWordMinus1 := (nByte - 1) >> Log2BytesPerWord
-	arg1Iter := unsafe.Pointer(arg1Header.Data + uintptr(startPos))
-	arg2Iter := unsafe.Pointer(arg2Header.Data + uintptr(startPos))
+	arg1Iter := unsafe.Add(arg1Data, startPos)
+	arg2Iter := unsafe.Add(arg2Data, startPos)
 	// Tried replacing this with simple (non-unrolled) vector-based loops very
 	// similar to the main runtime's go/src/internal/bytealg/compare_amd64.s, but
 	// they were actually worse than the safe function on the short-array
@@ -65,8 +66,8 @@ func FirstUnequal8Unsafe(arg1, arg2 []byte, startPos int) int {
 			// matter at all.
 			return startPos + (widx * BytesPerWord) + (bits.TrailingZeros64(uint64(xorWord)) >> 3)
 		}
-		arg1Iter = unsafe.Pointer(uintptr(arg1Iter) + BytesPerWord)
-		arg2Iter = unsafe.Pointer(uintptr(arg2Iter) + BytesPerWord)
+		arg1Iter = unsafe.Add(arg1Iter, BytesPerWord)
+		arg2Iter = unsafe.Add(arg2Iter, BytesPerWord)
 	}
 	xorWord := (*((*uintptr)(arg1Iter))) ^ (*((*uintptr)(arg2Iter)))
 	if xorWord == 0 {
@@ -90,11 +91,10 @@ func FirstUnequal8(arg1, arg2 []byte, startPos int) int {
 	endPos := len(arg1)
 	if endPos != len(arg2) || (startPos < 0) {
 		// The startPos < 0 check is kind of paranoid.  It's here because
-		// unsafe.Pointer(arg1Header.Data + uintptr(startPos)) does not
-		// automatically error out on negative startPos, and it also doesn't hurt
-		// to protect against (endPos - startPos) integer overflow; but feel free
-		// to request its removal if you are using this function in a time-critical
-		// loop.
+		// unsafe.Add(arg1Data, startPos) does not automatically error out on
+		// negative startPos, and it also doesn't hurt to protect against (endPos -
+		// startPos) integer overflow; but feel free to request its removal if you
+		// are using this function in a time-critical loop.
 		panic("FirstUnequal8() requires len(arg1) == len(arg2) and nonnegative startPos.")
 	}
 	nByte := endPos - startPos
@@ -106,22 +106,22 @@ func FirstUnequal8(arg1, arg2 []byte, startPos int) int {
 		}
 		return endPos
 	}
-	arg1Header := (*reflect.SliceHeader)(unsafe.Pointer(&arg1))
-	arg2Header := (*reflect.SliceHeader)(unsafe.Pointer(&arg2))
+	arg1Data := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&arg1)).Data)
+	arg2Data := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&arg2)).Data)
 	nWordMinus1 := (nByte - 1) >> Log2BytesPerWord
-	arg1Iter := unsafe.Pointer(arg1Header.Data + uintptr(startPos))
-	arg2Iter := unsafe.Pointer(arg2Header.Data + uintptr(startPos))
+	arg1Iter := unsafe.Add(arg1Data, startPos)
+	arg2Iter := unsafe.Add(arg2Data, startPos)
 	for widx := 0; widx < nWordMinus1; widx++ {
 		xorWord := (*((*uintptr)(arg1Iter))) ^ (*((*uintptr)(arg2Iter)))
 		if xorWord != 0 {
 			return startPos + (widx * BytesPerWord) + (bits.TrailingZeros64(uint64(xorWord)) >> 3)
 		}
-		arg1Iter = unsafe.Pointer(uintptr(arg1Iter) + BytesPerWord)
-		arg2Iter = unsafe.Pointer(uintptr(arg2Iter) + BytesPerWord)
+		arg1Iter = unsafe.Add(arg1Iter, BytesPerWord)
+		arg2Iter = unsafe.Add(arg2Iter, BytesPerWord)
 	}
 	finalOffset := uintptr(endPos - BytesPerWord)
-	arg1FinalPtr := unsafe.Pointer(arg1Header.Data + finalOffset)
-	arg2FinalPtr := unsafe.Pointer(arg2Header.Data + finalOffset)
+	arg1FinalPtr := unsafe.Add(arg1Data, finalOffset)
+	arg2FinalPtr := unsafe.Add(arg2Data, finalOffset)
 	xorWord := (*((*uintptr)(arg1FinalPtr))) ^ (*((*uintptr)(arg2FinalPtr)))
 	if xorWord == 0 {
 		return endPos

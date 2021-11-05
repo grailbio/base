@@ -1,7 +1,8 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2021 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
+//go:build amd64 && !appengine
 // +build amd64,!appengine
 
 package simd
@@ -47,7 +48,7 @@ func Memset16Raw(dst, valPtr unsafe.Pointer, nElem int) {
 	if nElem < BytesPerWord/2 {
 		for idx := 0; idx != nElem; idx++ {
 			*((*uint16)(dst)) = val
-			dst = unsafe.Pointer(uintptr(dst) + 2)
+			dst = unsafe.Add(dst, 2)
 		}
 		return
 	}
@@ -56,9 +57,9 @@ func Memset16Raw(dst, valPtr unsafe.Pointer, nElem int) {
 	dstWordsIter := dst
 	for widx := 0; widx != nWordMinus1; widx++ {
 		*((*uintptr)(dstWordsIter)) = valWord
-		dstWordsIter = unsafe.Pointer(uintptr(dstWordsIter) + BytesPerWord)
+		dstWordsIter = unsafe.Add(dstWordsIter, BytesPerWord)
 	}
-	dstWordsIter = unsafe.Pointer(uintptr(dst) + uintptr(nElem)*2 - BytesPerWord)
+	dstWordsIter = unsafe.Add(dst, nElem*2-BytesPerWord)
 	*((*uintptr)(dstWordsIter)) = valWord
 }
 
@@ -78,9 +79,9 @@ func Memset32Raw(dst, valPtr unsafe.Pointer, nElem int) {
 	dstWordsIter := dst
 	for widx := 0; widx != nWordMinus1; widx++ {
 		*((*uintptr)(dstWordsIter)) = valWord
-		dstWordsIter = unsafe.Pointer(uintptr(dstWordsIter) + BytesPerWord)
+		dstWordsIter = unsafe.Add(dstWordsIter, BytesPerWord)
 	}
-	dstWordsIter = unsafe.Pointer(uintptr(dst) + uintptr(nElem)*4 - BytesPerWord)
+	dstWordsIter = unsafe.Add(dst, nElem*4-BytesPerWord)
 	*((*uintptr)(dstWordsIter)) = valWord
 }
 
@@ -120,13 +121,13 @@ func Reverse16InplaceRaw(main unsafe.Pointer, nElem int) {
 	if nElem <= 8 {
 		nElemDiv2 := nElem >> 1
 		fwdIter := main
-		revIter := unsafe.Pointer(uintptr(main) + uintptr((nElem-1)*2))
+		revIter := unsafe.Add(main, (nElem-1)*2)
 		for idx := 0; idx != nElemDiv2; idx++ {
 			origLeftVal := *((*uint16)(fwdIter))
 			*((*uint16)(fwdIter)) = *((*uint16)(revIter))
 			*((*uint16)(revIter)) = origLeftVal
-			fwdIter = unsafe.Pointer(uintptr(fwdIter) + 2)
-			revIter = unsafe.Pointer(uintptr(revIter) - 2)
+			fwdIter = unsafe.Add(fwdIter, 2)
+			revIter = unsafe.Add(revIter, -2)
 		}
 		return
 	}
@@ -137,12 +138,12 @@ func Reverse16InplaceRaw(main unsafe.Pointer, nElem int) {
 // and sets dst[pos] := src[ct - 1 - pos] for each position.
 func Reverse16Raw(dst, src unsafe.Pointer, nElem int) {
 	if nElem < 8 {
-		srcIter := unsafe.Pointer(uintptr(src) + uintptr((nElem-1)*2))
+		srcIter := unsafe.Add(src, (nElem-1)*2)
 		dstIter := dst
 		for idx := 0; idx != nElem; idx++ {
 			*((*uint16)(dstIter)) = *((*uint16)(srcIter))
-			srcIter = unsafe.Pointer(uintptr(srcIter) - 2)
-			dstIter = unsafe.Pointer(uintptr(dstIter) + 2)
+			srcIter = unsafe.Add(srcIter, -2)
+			dstIter = unsafe.Add(dstIter, 2)
 		}
 		return
 	}
