@@ -173,6 +173,11 @@ func setAttrFromFileInfo(a *fuse.Attr, info os.FileInfo) {
 	}
 	a.Mode |= uint32(info.Mode() & os.ModePerm)
 	a.Size = uint64(info.Size())
+	a.Blocks = a.Size / blockSize
+	// We want to encourage large reads to reduce syscall overhead. FUSE has a 128 KiB read
+	// size limit anyway.
+	// TODO: Is there a better way to set this, in case size limits ever change?
+	setBlockSize(a, 128*1024)
 	if mod := info.ModTime(); !mod.IsZero() {
 		a.SetTimes(nil, &mod, nil)
 	}
