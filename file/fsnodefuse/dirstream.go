@@ -51,7 +51,8 @@ func (d *dirStream) HasNext() bool {
 		return false
 	} else if err != nil {
 		d.nextErr = fmt.Errorf("fsnodefuse.dirStream: %w", err)
-		return false
+		// Return true here so Next() has a chance to return d.nextErr.
+		return true
 	}
 	d.next = next
 	return true
