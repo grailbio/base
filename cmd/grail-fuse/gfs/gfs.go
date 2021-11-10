@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -33,6 +34,21 @@ type inode struct {
 
 	mu   sync.Mutex // guards the following fields.
 	stat cachedStat // TODO: Remove this since we're now using kernel caching.
+
+	// nDirStreamRef tracks the usage of this inode in DirStreams. It is used
+	// to decide whether an inode can be reused to service LOOKUP
+	// operations. To handle READDIRPLUS, go-fuse interleaves LOOKUP calls for
+	// each directory entry. We allow the inode associated with the previous
+	// directory entry to be used in LOOKUP to avoid costly API calls.
+	//
+	// Because an inode can be the previous entry in multiple DirStreams, we
+	// maintain a reference count.
+	//
+	// It is possible for the inode to be forgotten, e.g. when the kernel is
+	// low on memory, before the LOOKUP call. If this happens, LOOKUP will not
+	// be able to reuse it. This seems to happen rarely, if at all, in
+	// practice.
+	nDirStreamRef int32
 }
 
 // Amount of time to cache directory entries and file stats (size, mtime).
@@ -215,6 +231,25 @@ func (n *inode) root() *rootInode { return n.Root().Operations().(*rootInode) }
 // Ctx reports the context passed from the application when mounting the
 // filesystem.
 func (n *inode) ctx() context.Context { return n.root().ctx }
+
+// addDirStreamRef adds a single reference to this inode. It must be eventually
+// followed by a dropRef.
+func (n *inode) addDirStreamRef() {
+	_ = atomic.AddInt32(&n.nDirStreamRef, 1)
+}
+
+// dropDirStreamRef drops a single reference to this inode.
+func (n *inode) dropDirStreamRef() {
+	if x := atomic.AddInt32(&n.nDirStreamRef, -1); x < 0 {
+		panic("negative reference count; unmatched drop")
+	}
+}
+
+// previousOfAnyDirStream returns true iff the inode is the previous entry
+// returned by any outstanding DirStream.
+func (n *inode) previousOfAnyDirStream() bool {
+	return atomic.LoadInt32(&n.nDirStreamRef) > 0
+}
 
 // Access is called to implement access(2).
 func (n *inode) Access(_ context.Context, mask uint32) syscall.Errno {
@@ -747,16 +782,16 @@ type fsDirStream struct {
 	lister file.Lister
 	err    error
 
-	// plus* serve the Plus() call following a Next().
-	plusEnt  fuse.DirEntry
-	plusStat cachedStat
-
 	seenParent  bool // Whether Next has already returned '..'.
 	seenSelf    bool // Whether Next has already returned '.'.
 	peekedChild bool // Whether HasNext has Scan()-ed a child that Next hasn't returned yet.
-}
 
-var _ = (fs.DirPlusStream)((*fsDirStream)(nil))
+	// previousInode is the inode of the previous entry, i.e. the most recent
+	// entry returned by Next.  We hold a reference to service LOOKUP
+	// operations that go-fuse issues when servicing READDIRPLUS.  See
+	// dirStreamUsage.
+	previousInode *fs.Inode
+}
 
 // HasNext implements fs.DirStream
 func (s *fsDirStream) HasNext() bool {
@@ -799,8 +834,8 @@ func (s *fsDirStream) Next() (fuse.DirEntry, syscall.Errno) {
 		return fuse.DirEntry{}, errToErrno(s.err)
 	}
 
-	s.plusEnt = fuse.DirEntry{}
-	s.plusStat = cachedStat{expiration: time.Now().Add(cacheExpiration)}
+	ent := fuse.DirEntry{}
+	stat := cachedStat{expiration: time.Now().Add(cacheExpiration)}
 
 	if !s.seenParent {
 		s.seenParent = true
@@ -808,103 +843,116 @@ func (s *fsDirStream) Next() (fuse.DirEntry, syscall.Errno) {
 		if parent != nil {
 			// Not root.
 			parentDir := downCast(parent)
-			s.plusEnt = parentDir.ent
-			s.plusEnt.Name = ".."
-			s.plusStat = parentDir.stat
-			return s.plusEnt, 0
+			ent = parentDir.ent
+			ent.Name = ".."
+			stat = parentDir.stat
+			return ent, 0
 		}
 	}
 	if !s.seenSelf {
 		s.seenSelf = true
-		s.plusEnt = s.dir.ent
-		s.plusEnt.Name = "."
-		s.plusStat = s.dir.stat
-		return s.plusEnt, 0
+		ent = s.dir.ent
+		ent.Name = "."
+		stat = s.dir.stat
+		return ent, 0
 	}
 	s.peekedChild = false
 
-	s.plusEnt = fuse.DirEntry{
+	ent = fuse.DirEntry{
 		Name: getFileName(s.dir, s.lister.Path()),
 		Mode: getModeBits(s.lister.IsDir()),
 		Ino:  getIno(s.lister.Path()),
 	}
 	if info := s.lister.Info(); info != nil {
-		s.plusStat.size, s.plusStat.modTime = info.Size(), info.ModTime()
+		stat.size, stat.modTime = info.Size(), info.ModTime()
 	}
-
-	return s.plusEnt, 0
-}
-
-func (s *fsDirStream) Plus(out *fuse.EntryOut) {
-	_ = s.dir.AddChild(
-		s.plusEnt.Name,
-		s.dir.NewInode(
-			s.ctx,
-			&inode{path: file.Join(s.dir.path, s.plusEnt.Name), ent: s.plusEnt, stat: s.plusStat},
-			fs.StableAttr{Mode: s.plusEnt.Mode, Ino: s.plusEnt.Ino},
-		),
-		true)
-	out.NodeId = s.plusEnt.Ino
-	out.Attr = newAttr(s.plusEnt.Ino, s.plusEnt.Mode, uint64(s.plusStat.size), s.plusStat.modTime)
-	out.SetEntryTimeout(cacheExpiration)
-	out.SetAttrTimeout(cacheExpiration)
+	inode := s.dir.NewInode(
+		s.ctx,
+		&inode{path: file.Join(s.dir.path, ent.Name), ent: ent, stat: stat},
+		fs.StableAttr{Mode: ent.Mode, Ino: ent.Ino},
+	)
+	_ = s.dir.AddChild(ent.Name, inode, true)
+	s.lockedSetPreviousInode(inode)
+	return ent, 0
 }
 
 // Close implements fs.DirStream
-func (s *fsDirStream) Close() {}
+func (s *fsDirStream) Close() {
+	s.dir.mu.Lock()
+	s.lockedClearPreviousInode()
+	s.dir.mu.Unlock()
+}
+
+func (s *fsDirStream) lockedSetPreviousInode(n *fs.Inode) {
+	s.lockedClearPreviousInode()
+	s.previousInode = n
+	s.previousInode.Operations().(*inode).addDirStreamRef()
+}
+
+func (s *fsDirStream) lockedClearPreviousInode() {
+	if s.previousInode == nil {
+		return
+	}
+	s.previousInode.Operations().(*inode).dropDirStreamRef()
+	s.previousInode = nil
+}
 
 func (n *inode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	log.Debug.Printf("lookup %s: name=%s start", n.path, name)
 
-	var (
-		childPath = file.Join(n.path, name)
-		foundDir  bool
-		foundFile cachedStat
-		lister    = file.List(ctx, childPath, true /* recursive */)
-	)
-	// Look for either a file or a directory at this path.
-	// If both exist, assume file is a directory marker.
-	for lister.Scan() {
-		if lister.IsDir() || // We've found an exact match, and it's a directory.
-			lister.Path() != childPath { // We're seeing children, so childPath must be a directory.
-			foundDir = true
-			break
+	childInode := n.GetChild(name)
+	if childInode != nil && childInode.Operations().(*inode).previousOfAnyDirStream() {
+		log.Debug.Printf("lookup %s: name=%s using existing child inode", n.path, name)
+	} else {
+		var (
+			childPath = file.Join(n.path, name)
+			foundDir  bool
+			foundFile cachedStat
+			lister    = file.List(ctx, childPath, true /* recursive */)
+		)
+		// Look for either a file or a directory at this path.
+		// If both exist, assume file is a directory marker.
+		for lister.Scan() {
+			if lister.IsDir() || // We've found an exact match, and it's a directory.
+				lister.Path() != childPath { // We're seeing children, so childPath must be a directory.
+				foundDir = true
+				break
+			}
+			info := lister.Info()
+			foundFile = cachedStat{time.Now().Add(cacheExpiration), info.Size(), info.ModTime()}
 		}
-		info := lister.Info()
-		foundFile = cachedStat{time.Now().Add(cacheExpiration), info.Size(), info.ModTime()}
-	}
-	if err := lister.Err(); err != nil {
-		if errors.Is(errors.NotExist, err) || errors.Is(errors.NotAllowed, err) {
-			// Ignore.
-		} else {
-			return nil, errToErrno(err)
+		if err := lister.Err(); err != nil {
+			if errors.Is(errors.NotExist, err) || errors.Is(errors.NotAllowed, err) {
+				// Ignore.
+			} else {
+				return nil, errToErrno(err)
+			}
 		}
-	}
 
-	if !foundDir && foundFile == (cachedStat{}) {
-		log.Debug.Printf("lookup: %s name='%s' not found", n.path, name)
-		return nil, syscall.ENOENT
-	}
+		if !foundDir && foundFile == (cachedStat{}) {
+			log.Debug.Printf("lookup: %s name='%s' not found", n.path, name)
+			return nil, syscall.ENOENT
+		}
 
-	var (
-		ent = fuse.DirEntry{
+		ent := fuse.DirEntry{
 			Name: childPath,
 			Mode: getModeBits(foundDir),
 			Ino:  getIno(childPath),
 		}
-		child = n.NewInode(
+		childInode = n.NewInode(
 			ctx,
 			&inode{path: childPath, ent: ent, stat: foundFile},
 			fs.StableAttr{
 				Mode: ent.Mode,
 				Ino:  ent.Ino,
 			})
-	)
-	out.Attr = newAttr(ent.Ino, ent.Mode, uint64(foundFile.size), foundFile.modTime)
+	}
+	ops := childInode.Operations().(*inode)
+	out.Attr = newAttr(ops.ent.Ino, ops.ent.Mode, uint64(ops.stat.size), ops.stat.modTime)
 	out.SetEntryTimeout(cacheExpiration)
 	out.SetAttrTimeout(cacheExpiration)
-	log.Debug.Printf("lookup %s name='%s' done: mode=%o ino=%d stat=%+v", n.path, name, ent.Mode, ent.Ino, foundFile)
-	return child, 0
+	log.Debug.Printf("lookup %s name='%s' done: mode=%o ino=%d stat=%+v", n.path, name, ops.ent.Mode, ops.ent.Ino, ops.stat)
+	return childInode, 0
 }
 
 func (n *inode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
