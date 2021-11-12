@@ -6,35 +6,27 @@ package once
 
 import (
 	"errors"
-	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/grailbio/base/traverse"
 )
 
 func TestMapOnceConcurrency(t *testing.T) {
 	const N = 10
 	var (
-		once        Map
-		start, done sync.WaitGroup
-		count       uint32
+		once  Map
+		count uint32
 	)
-	start.Add(N)
-	done.Add(N)
-	for i := 0; i < N; i++ {
-		go func() {
-			start.Done()
-			start.Wait()
-			err := once.Do(123, func() error {
-				atomic.AddUint32(&count, 1)
-				return nil
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			done.Done()
-		}()
+	err := traverse.Each(N, func(jobIdx int) error {
+		return once.Do(123, func() error {
+			atomic.AddUint32(&count, 1)
+			return nil
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	done.Wait()
 	if got, want := count, uint32(1); got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}

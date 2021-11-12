@@ -213,7 +213,6 @@ func Sniff(r io.ReaderAt, size int64) (goos, goarch string, offset int64, err er
 		goos, goarch, ok = s(r)
 		if ok {
 			break
-			return
 		}
 	}
 	if goos == "" {

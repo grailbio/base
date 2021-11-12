@@ -208,7 +208,8 @@ func TestDo(t *testing.T) {
 	c.Acquire(context.Background(), 35)
 	checkState(t, c, 135, 35)
 	// can go upto 1.1*135 = 148, so should timeout for 114.
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	if want, got := context.DeadlineExceeded, Do(ctx, c, 114, func() (bool, error) { return true, nil }); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}

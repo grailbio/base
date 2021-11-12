@@ -67,7 +67,7 @@ func TestLog(t *testing.T) {
 	}
 }
 
-func ExampleDefault() {
+func Example() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(0)
 	log.Print("hello, world!")

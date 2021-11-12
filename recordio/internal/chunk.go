@@ -243,7 +243,7 @@ func (r *ChunkScanner) Tell() int64 {
 
 // Seek moves the read pointer so that next Scan() will move to the block at the
 // given file offset. Any error is reported in r.Err()
-func (r *ChunkScanner) Seek(off int64) {
+func (r *ChunkScanner) Seek(off int64) { // "go vet" complaint expected
 	r.off = off
 	r.err.Set(Seek(r.r, off))
 }

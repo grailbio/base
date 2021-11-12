@@ -37,7 +37,7 @@ func TestDepth(t *testing.T) {
 	must.Neverf("")
 }
 
-func ExampleMust() {
+func Example() {
 	must.Func = func(depth int, v ...interface{}) {
 		fmt.Print(v...)
 		fmt.Print("\n")

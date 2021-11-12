@@ -55,7 +55,6 @@ func (f *CompressionLevelFlag) String() string {
 		return "huffman-only"
 	}
 	panic(fmt.Sprintf("unrecognised compression constant: %v", f.Level))
-	return "unknown"
 }
 
 // WriterFlags represents the flags required to configure a recordioutil.Writer.

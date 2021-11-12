@@ -23,7 +23,8 @@ func TestLimiter(t *testing.T) {
 	if err := l.Acquire(context.Background(), 5); err != nil {
 		t.Fatal(err)
 	}
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	if want, got := context.DeadlineExceeded, l.Acquire(ctx, 10); got != want {
 		t.Fatalf("got %v, want %v", got, want)
 	}

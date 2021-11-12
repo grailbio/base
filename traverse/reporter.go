@@ -38,18 +38,18 @@ type simpleReporter struct {
 	queued, running, done int
 }
 
-func (r simpleReporter) Init(n int) {
+func (r *simpleReporter) Init(n int) {
 	r.mu.Lock()
 	r.queued = n
 	r.update()
 	r.mu.Unlock()
 }
 
-func (r simpleReporter) Complete() {
+func (r *simpleReporter) Complete() {
 	fmt.Fprintf(os.Stderr, "\n")
 }
 
-func (r simpleReporter) Begin(i int) {
+func (r *simpleReporter) Begin(i int) {
 	r.mu.Lock()
 	r.queued--
 	r.running++
@@ -57,7 +57,7 @@ func (r simpleReporter) Begin(i int) {
 	r.mu.Unlock()
 }
 
-func (r simpleReporter) End(i int) {
+func (r *simpleReporter) End(i int) {
 	r.mu.Lock()
 	r.running--
 	r.done++
@@ -65,6 +65,6 @@ func (r simpleReporter) End(i int) {
 	r.mu.Unlock()
 }
 
-func (r simpleReporter) update() {
+func (r *simpleReporter) update() {
 	fmt.Fprintf(os.Stderr, "%s: (queued: %d -> running: %d -> done: %d) \r", r.name, r.queued, r.running, r.done)
 }

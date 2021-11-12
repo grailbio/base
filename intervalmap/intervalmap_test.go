@@ -233,7 +233,9 @@ func (i testInterval) Overlap(b interval.IntRange) bool {
 func (i testInterval) ID() uintptr { return i.id }
 
 // Range implements interval.IntInterface.
-func (i testInterval) Range() interval.IntRange { return interval.IntRange{int(i.start), int(i.limit)} }
+func (i testInterval) Range() interval.IntRange {
+	return interval.IntRange{Start: int(i.start), End: int(i.limit)}
+}
 
 // String implements interval.IntInterface
 func (i testInterval) String() string { return fmt.Sprintf("[%d,%d)#%d", i.start, i.limit, i.id) }
@@ -304,8 +306,8 @@ func Example() {
 	// [3,5),[6,7)
 }
 
-// ExampleGob is an example of serializing an intervalmap using Gob.
-func ExampleGob() {
+// Example_gob is an example of serializing an intervalmap using Gob.
+func Example_gob() {
 	newEntry := func(start, limit Key) Entry {
 		return Entry{
 			Interval: Interval{start, limit},

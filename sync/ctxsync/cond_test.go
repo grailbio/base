@@ -19,16 +19,17 @@ func TestContextCond(t *testing.T) {
 	const N = 100
 	start.Add(N)
 	done.Add(N)
+	errs := make([]error, N)
 	for i := 0; i < N; i++ {
-		go func() {
+		go func(idx int) {
 			mu.Lock()
 			start.Done()
 			if err := cond.Wait(context.Background()); err != nil {
-				t.Fatal(err)
+				errs[idx] = err
 			}
 			mu.Unlock()
 			done.Done()
-		}()
+		}(i)
 	}
 
 	start.Wait()
@@ -36,6 +37,11 @@ func TestContextCond(t *testing.T) {
 	cond.Broadcast()
 	mu.Unlock()
 	done.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestContextCondErr(t *testing.T) {

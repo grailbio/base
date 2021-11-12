@@ -52,7 +52,7 @@ func BenchmarkSet(b *testing.B) {
 	}
 }
 
-func ExampleErrorReporter() {
+func ExampleOnce() {
 	e := errors.Once{}
 	fmt.Printf("Error: %v\n", e.Err())
 	e.Set(errors.New("test error 0"))

@@ -13,11 +13,11 @@ func TestBuildTimeLeftStr(t *testing.T) {
 	currentTime := time.Now()
 
 	tests := []struct {
-		reporter timeEstimateReporter
+		reporter *timeEstimateReporter
 		expected string
 	}{
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        1,
 				numQueued:         10,
 				numRunning:        0,
@@ -28,7 +28,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(0s left  0s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        1,
 				numQueued:         9,
 				numRunning:        1,
@@ -40,7 +40,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(>9s left  1s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        1,
 				numQueued:         9,
 				numRunning:        0,
@@ -52,7 +52,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~45s left  5s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        1,
 				numQueued:         8,
 				numRunning:        1,
@@ -64,7 +64,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~41s left  5s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        1,
 				numQueued:         0,
 				numRunning:        1,
@@ -76,7 +76,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~4s left  5s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        2,
 				numQueued:         8,
 				numRunning:        2,
@@ -88,7 +88,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(>6s left  2s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        2,
 				numQueued:         6,
 				numRunning:        2,
@@ -100,7 +100,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~17s left  5s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        2,
 				numQueued:         2,
 				numRunning:        0,
@@ -112,7 +112,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~5s left  5s avg)",
 		},
 		{ // Note even though we have 2 workers, only one can process the single queued job, so expected time left is 5s.
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        2,
 				numQueued:         1,
 				numRunning:        0,
@@ -124,7 +124,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~5s left  5s avg)",
 		},
 		{
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        2,
 				numQueued:         0,
 				numRunning:        1,
@@ -136,7 +136,7 @@ func TestBuildTimeLeftStr(t *testing.T) {
 			expected: "(~2s left  5s avg)",
 		},
 		{ // Last job is taking longer than average to run.
-			reporter: timeEstimateReporter{
+			reporter: &timeEstimateReporter{
 				numWorkers:        2,
 				numQueued:         0,
 				numRunning:        1,

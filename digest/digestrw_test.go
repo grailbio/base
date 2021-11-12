@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/grailbio/base/digest"
+	"github.com/grailbio/base/traverse"
 	"github.com/grailbio/testutil"
 	"github.com/grailbio/testutil/s3test"
 )
@@ -45,15 +46,15 @@ func TestDigestReader(t *testing.T) {
 		order  []int64
 	}{
 		{
-			&testutil.FakeContentAt{t, dataSize, 0, 0},
+			&testutil.FakeContentAt{T: t, SizeInBytes: dataSize, Current: 0, FailureRate: 0},
 			[]int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 		},
 		{
-			&testutil.FakeContentAt{t, dataSize, 0, 0},
+			&testutil.FakeContentAt{T: t, SizeInBytes: dataSize, Current: 0, FailureRate: 0},
 			[]int64{1, 0, 3, 2, 5, 4, 7, 6, 9, 8},
 		},
 		{
-			&testutil.FakeContentAt{t, dataSize, 0, 0},
+			&testutil.FakeContentAt{T: t, SizeInBytes: dataSize, Current: 0, FailureRate: 0},
 			[]int64{9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 		},
 	} {
@@ -63,22 +64,17 @@ func TestDigestReader(t *testing.T) {
 			t.Fatal("reader does not support ReaderAt")
 		}
 
-		wg := sync.WaitGroup{}
-		wg.Add(len(test.order))
-		for _, i := range test.order {
-			go func(index int64) {
-				defer wg.Done()
-
-				size := min(segmentSize, (dataSize-index)*segmentSize)
-				d := make([]byte, size)
-				_, err := readerAt.ReadAt(d, index*int64(segmentSize))
-				if err != nil {
-					t.Fatal(err)
-				}
-			}(i)
-			time.Sleep(10 * time.Millisecond)
+		err := traverse.Each(len(test.order), func(jobIdx int) error {
+			time.Sleep(10 * time.Duration(jobIdx) * time.Millisecond)
+			index := test.order[jobIdx]
+			size := min(segmentSize, (dataSize-index)*segmentSize)
+			d := make([]byte, size)
+			_, err := readerAt.ReadAt(d, index*int64(segmentSize))
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		wg.Wait()
 
 		actual, err := dra.Digest()
 		if err != nil {
@@ -86,7 +82,7 @@ func TestDigestReader(t *testing.T) {
 		}
 
 		writer := digester.NewWriter()
-		content := &testutil.FakeContentAt{t, dataSize, 0, 0}
+		content := &testutil.FakeContentAt{T: t, SizeInBytes: dataSize, Current: 0, FailureRate: 0}
 		if _, err := io.Copy(writer, content); err != nil {
 			t.Fatal(err)
 		}
@@ -125,23 +121,19 @@ func TestDigestWriter(t *testing.T) {
 
 		dwa := digester.NewWriterAt(context.Background(), output)
 
-		wg := sync.WaitGroup{}
-		wg.Add(len(test))
-		for _, i := range test {
+		err = traverse.Each(len(test), func(jobIdx int) error {
+			time.Sleep(5 * time.Duration(jobIdx) * time.Millisecond)
+			i := test[jobIdx]
 			segmentString := strings.Repeat(fmt.Sprintf("%c", 'a'+i), 100)
 			offset := int64(i * len(segmentString))
 
-			go func() {
-				_, err := dwa.WriteAt([]byte(segmentString), offset)
-				if err != nil {
-					t.Fatal(err)
-				}
-				wg.Done()
-			}()
-			time.Sleep(5 * time.Millisecond)
-		}
-		wg.Wait()
+			_, e := dwa.WriteAt([]byte(segmentString), offset)
+			return e
+		})
 		output.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		expected, err := dwa.Digest()
 		if err != nil {
@@ -203,7 +195,7 @@ func TestS3ManagerUpload(t *testing.T) {
 	size := int64(93384620) // Completely random number.
 
 	digester := digest.Digester(crypto.SHA256)
-	contentAt := &testutil.FakeContentAt{t, size, 0, 0}
+	contentAt := &testutil.FakeContentAt{T: t, SizeInBytes: size, Current: 0, FailureRate: 0}
 	client.SetFileContentAt("test/test/test", contentAt, "fakesha")
 	reader := digester.NewReader(contentAt)
 
@@ -232,7 +224,7 @@ func TestS3ManagerUpload(t *testing.T) {
 	}
 
 	dw := digester.NewWriter()
-	content := &testutil.FakeContentAt{t, size, 0, 0}
+	content := &testutil.FakeContentAt{T: t, SizeInBytes: size, Current: 0, FailureRate: 0}
 	if _, err := io.Copy(dw, content); err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +242,7 @@ func TestS3ManagerDownload(t *testing.T) {
 	size := int64(86738922) // Completely random number.
 
 	digester := digest.Digester(crypto.SHA256)
-	contentAt := &testutil.FakeContentAt{t, size, 0, 0.001}
+	contentAt := &testutil.FakeContentAt{T: t, SizeInBytes: size, Current: 0, FailureRate: 0.001}
 	client.SetFileContentAt("test/test/test", contentAt, "fakesha")
 	writer := digester.NewWriterAt(context.Background(), contentAt)
 
@@ -280,7 +272,7 @@ func TestS3ManagerDownload(t *testing.T) {
 	}
 
 	dw := digester.NewWriter()
-	content := &testutil.FakeContentAt{t, size, 0, 0}
+	content := &testutil.FakeContentAt{T: t, SizeInBytes: size, Current: 0, FailureRate: 0}
 	if _, err := io.Copy(dw, content); err != nil {
 		t.Fatal(err)
 	}

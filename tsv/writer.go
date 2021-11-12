@@ -74,7 +74,7 @@ func (w *Writer) WriteFloat64(f float64, fmt byte, prec int) {
 
 // WriteByte appends the given literal byte (no number->string conversion) and
 // a tab to the current line.
-func (w *Writer) WriteByte(b byte) {
+func (w *Writer) WriteByte(b byte) { // "go vet" complaint expected
 	w.line = append(w.line, b)
 	w.line = append(w.line, '\t')
 }
