@@ -101,6 +101,16 @@ var kinds = map[Kind]string{
 	ResourcesExhausted: "resources exhausted",
 }
 
+// kindStdErrs maps some Kinds to the standard library's equivalent.
+var kindStdErrs = map[Kind]error{
+	Canceled:   context.Canceled,
+	Timeout:    context.DeadlineExceeded,
+	NotExist:   os.ErrNotExist,
+	NotAllowed: os.ErrPermission,
+	Exists:     os.ErrExist,
+	Invalid:    os.ErrInvalid,
+}
+
 // String returns a human-readable explanation of the error kind k.
 func (k Kind) String() string {
 	return kinds[k]
@@ -272,17 +282,27 @@ func E(args ...interface{}) error {
 		if e.Kind != Other {
 			break
 		}
-		if os.IsNotExist(e.Err) {
-			e.Kind = NotExist
-		} else if e.Err == context.Canceled {
-			e.Kind = Canceled
-		} else if err, ok := e.Err.(interface {
-			Timeout() bool
-		}); ok && err.Timeout() {
+		// Note: Loop over kind instead of kindStdErrs for determinism.
+		for kind := Kind(0); kind < maxKind; kind++ {
+			stdErr := kindStdErrs[kind]
+			if stdErr != nil && errors.Is(e.Err, stdErr) {
+				e.Kind = kind
+				break
+			}
+		}
+		if e.Kind != Other {
+			break
+		}
+		if isTimeoutErr(e.Err) {
 			e.Kind = Timeout
 		}
 	}
 	return e
+}
+
+func isTimeoutErr(err error) bool {
+	t, ok := err.(interface{ Timeout() bool })
+	return ok && t.Timeout()
 }
 
 // Recover recovers any error into an *Error. If the passed-in Error is already
@@ -344,6 +364,36 @@ func (e *Error) Timeout() bool {
 // Temporary tells whether this error is temporary.
 func (e *Error) Temporary() bool {
 	return e.Severity <= Temporary
+}
+
+// Unwrap returns e's cause, if any, or nil. It lets the standard library's
+// errors.Unwrap work with *Error.
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+// Is tells whether e.Kind is equivalent to err.
+//
+// This implements interoperability with the standard library's errors.Is:
+//   errors.Is(e, errors.Canceled)
+// works if e.Kind corresponds (in this example, Canceled). This is useful when
+// passing *Error to third-party libraries, for example. Users should still
+// prefer this package's Is for their own tests because it's less prone to error
+// (type checking disallows accidentally swapped arguments).
+//
+// Note: This match does not recurse into err's cause, if any; see the standard
+// library's errors.Is for how this is used.
+func (e *Error) Is(err error) bool {
+	if err == nil {
+		return false
+	}
+	if err == kindStdErrs[e.Kind] {
+		return true
+	}
+	if e.Kind == Timeout && isTimeoutErr(err) {
+		return true
+	}
+	return false
 }
 
 type gobError struct {
@@ -408,6 +458,12 @@ func (e *Error) GobDecode(p []byte) error {
 // Is tells whether an error has a specified kind, except for the
 // indeterminate kind Other. In the case an error has kind Other, the
 // chain is traversed until a non-Other error is encountered.
+//
+// This is similar to the standard library's errors.Is(err, target). That
+// traverses err's chain looking for one that matches target, where target may
+// be os.ErrNotExist, etc. *Error has an explicit Kind instead of an error-typed
+// target, but (*Error).Is defines an error -> Kind relationship to allow
+// interoperability.
 func Is(kind Kind, err error) bool {
 	if err == nil {
 		return false

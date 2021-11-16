@@ -11,7 +11,9 @@ import (
 	goerrors "errors"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/grailbio/base/errors"
@@ -139,5 +141,120 @@ func TestMessage(t *testing.T) {
 		if got, want := c.err.Error(), c.message; got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
+	}
+}
+
+func TestStdInterop(t *testing.T) {
+	tests := []struct {
+		name    string
+		makeErr func() (cleanUp func(), _ error)
+		kind    errors.Kind
+		target  error
+	}{
+		{
+			"not exist",
+			func() (cleanUp func(), _ error) {
+				_, err := os.Open("/dev/notexist")
+				return func() {}, err
+			},
+			errors.NotExist,
+			os.ErrNotExist,
+		},
+		{
+			"canceled",
+			func() (cleanUp func(), _ error) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				<-ctx.Done()
+				return func() {}, ctx.Err()
+			},
+			errors.Canceled,
+			context.Canceled,
+		},
+		{
+			"timeout",
+			func() (cleanUp func(), _ error) {
+				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Minute))
+				<-ctx.Done()
+				return cancel, ctx.Err()
+			},
+			errors.Timeout,
+			context.DeadlineExceeded,
+		},
+		{
+			"timeout interface",
+			func() (cleanUp func(), _ error) {
+				return func() {}, apparentTimeoutError{}
+			},
+			errors.Timeout,
+			nil, // Doesn't match a stdlib error.
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cleanUp, err := test.makeErr()
+			defer cleanUp()
+			for errIdx, err := range []error{
+				err,
+				errors.E(err),
+				errors.E(err, "wrapped", errors.Fatal),
+			} {
+				t.Run(strconv.Itoa(errIdx), func(t *testing.T) {
+					if got, want := errors.Is(test.kind, err), true; got != want {
+						t.Errorf("got %v, want %v", got, want)
+					}
+					if test.target != nil {
+						if got, want := goerrors.Is(err, test.target), true; got != want {
+							t.Errorf("got %v, want %v", got, want)
+						}
+					}
+					// err should not match wrapped target.
+					if got, want := goerrors.Is(err, fmt.Errorf("%w", test.target)), false; got != want {
+						t.Errorf("got %v, want %v", got, want)
+					}
+				})
+			}
+		})
+	}
+}
+
+type apparentTimeoutError struct{}
+
+func (e apparentTimeoutError) Error() string { return "timeout" }
+func (e apparentTimeoutError) Timeout() bool { return true }
+
+// TestEKindDeterminism ensures that errors.E's Kind detection (based on the
+// cause chain of the input error) is deterministic. That is, if the input
+// error has multiple causes (according to goerrors.Is), E chooses one
+// consistently. User code that handles errors based on Kind will behave
+// predictably.
+//
+// This is a regression test for an issue found while introducing (*Error).Is
+// (D65766) which makes it easier for an error chain to match multiple causes.
+func TestEKindDeterminism(t *testing.T) {
+	const N = 100
+	numKind := make(map[errors.Kind]int)
+	for i := 0; i < N; i++ {
+		// Construct err with a cause chain that matches Canceled due to a
+		// Kind and NotExist by wrapping the stdlib error.
+		err := errors.E(
+			fmt.Errorf("%w",
+				errors.E("canceled", errors.Canceled,
+					fmt.Errorf("%w", os.ErrNotExist))))
+		// Sanity check: err is detected as both targets.
+		if got, want := goerrors.Is(err, os.ErrNotExist), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if got, want := goerrors.Is(err, context.Canceled), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		numKind[err.(*errors.Error).Kind]++
+	}
+	// Now, ensure the assigned Kind is Canceled, the lower number.
+	if got, want := len(numKind), 1; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got, want := numKind[errors.Canceled], N; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
