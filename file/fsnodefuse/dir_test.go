@@ -48,7 +48,10 @@ func TestLookupCaching(t *testing.T) {
 		sleep := waitTime.Sub(time.Now())
 		time.Sleep(sleep)
 		secondListingTime := readUnixNanosFile(t, childPath)
-		assert.NotEqual(t, listingTime, secondListingTime, "first: %d", listingTime.UnixNano())
+		assert.NotEqual(t,
+			listingTime.UnixNano(), secondListingTime.UnixNano(),
+			"second listing should have different timestamp",
+		)
 	})
 }
 

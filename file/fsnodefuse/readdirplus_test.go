@@ -3,6 +3,7 @@ package fsnodefuse
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -17,17 +18,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Set these to lower numbers for easier debugging.
-const (
-	NumChildren           = 1000
-	NumConcurrentReaddirs = 100
-)
-
 // TestReaddirplus verifies that servicing a READDIRPLUS request does not
 // trigger calls to (fsnode.Parent).Child.  Note that this test uses
 // (*os.File).Readdirnames to trigger the READDIRPLUS request.
 func TestReaddirplus(t *testing.T) {
-	children := makeTestChildren()
+	const NumChildren = 1000
+	children := makeTestChildren(NumChildren)
 	root := newParent("root", children)
 	withMounted(t, root, func(mountDir string) {
 		err := checkDir(t, children, mountDir)
@@ -41,22 +37,44 @@ func TestReaddirplus(t *testing.T) {
 // Note that this test uses (*os.File).Readdirnames to trigger the READDIRPLUS
 // requests.
 func TestReaddirplusConcurrent(t *testing.T) {
-	children := makeTestChildren()
-	root := newParent("root", children)
-	withMounted(t, root, func(mountDir string) {
-		var grp errgroup.Group
-		for i := 0; i < NumConcurrentReaddirs; i++ {
-			grp.Go(func() error {
-				return checkDir(t, children, mountDir)
+	const (
+		NumIter               = 20
+		MaxNumChildren        = 1000
+		MaxConcurrentReaddirs = 100
+	)
+	// Note that specifying a constant seed does not make this test
+	// deterministic, as the concurrent READDIRPLUS callers race
+	// non-deterministically.
+	r := rand.New(rand.NewSource(0))
+	for i := 0; i < NumIter; i++ {
+		var (
+			numChildren        = r.Intn(MaxNumChildren-1) + 1
+			concurrentReaddirs = r.Intn(MaxConcurrentReaddirs-2) + 2
+			children           = makeTestChildren(numChildren)
+			root               = newParent("root", children)
+		)
+		t.Run(fmt.Sprintf("iter%02d", i), func(t *testing.T) {
+			t.Logf(
+				"numChildren=%d concurrentReaddirs=%d",
+				numChildren,
+				concurrentReaddirs,
+			)
+			withMounted(t, root, func(mountDir string) {
+				var grp errgroup.Group
+				for j := 0; j < concurrentReaddirs; j++ {
+					grp.Go(func() error {
+						return checkDir(t, children, mountDir)
+					})
+				}
+				require.NoError(t, grp.Wait())
+				assert.Equal(t, int64(0), root.childCalls)
 			})
-		}
-		require.NoError(t, grp.Wait())
-		assert.Equal(t, int64(0), root.childCalls)
-	})
+		})
+	}
 }
 
-func makeTestChildren() []fsnode.T {
-	children := make([]fsnode.T, NumChildren)
+func makeTestChildren(n int) []fsnode.T {
+	children := make([]fsnode.T, n)
 	for i := range children {
 		children[i] = fsnode.ConstLeaf(
 			fsnode.NewRegInfo(fmt.Sprintf("%04d", i)),
@@ -88,9 +106,9 @@ func withMounted(t *testing.T, root fsnode.T, f func(rootPath string)) {
 }
 
 func checkDir(t *testing.T, children []fsnode.T, path string) (err error) {
-	want := make(map[string]struct{})
+	var want []string
 	for _, c := range children {
-		want[c.Name()] = struct{}{}
+		want = append(want, c.Name())
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -99,13 +117,9 @@ func checkDir(t *testing.T, children []fsnode.T, path string) (err error) {
 	defer func() { assert.NoError(t, f.Close()) }()
 	// Use Readdirnames instead of Readdir because Readdir adds an extra call
 	// lstat outside of the READDIRPLUS operation.
-	names, err := f.Readdirnames(0)
-	got := make(map[string]struct{})
-	for _, name := range names {
-		got[name] = struct{}{}
-	}
+	got, err := f.Readdirnames(0)
 	// Sanity check that the names of the entries match the children.
-	assert.Equal(t, want, got)
+	assert.ElementsMatch(t, want, got)
 	return err
 }
 

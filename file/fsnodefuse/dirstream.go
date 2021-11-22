@@ -65,14 +65,28 @@ func (d *dirStream) Next() (_ fuse.DirEntry, errno syscall.Errno) {
 	}
 	next := d.next
 	d.next = nil
-	inode, entry, err := d.dir.makeChild(d.ctx, next)
-	if err != nil {
-		return fuse.DirEntry{}, errToErrno(err)
+	var (
+		name  = next.Name()
+		inode = d.dir.GetChild(name)
+	)
+	if inode == nil {
+		inode = d.dir.newInode(d.ctx, next)
+		// Add the new inode as a child, so it can be retrieved and reused to
+		// service LOOKUP operations.  See dirStreamUsage.
+		//
+		// We are passing overwrite == true, so the return value is
+		// meaningless.
+		_ = d.dir.AddChild(name, inode, true)
+	} else {
+		// Existing inode; make it current.
+		setFSNode(inode, next)
 	}
-	// We are passing overwrite == true, so the return value is meaningless.
-	_ = d.dir.AddChild(entry.Name, inode, true)
 	d.setPreviousInode(inode)
-	return entry, fs.OK
+	return fuse.DirEntry{
+		Name: name,
+		Mode: inode.Mode(),
+		Ino:  inode.StableAttr().Ino,
+	}, fs.OK
 }
 
 func (d *dirStream) Close() {
