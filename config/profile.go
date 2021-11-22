@@ -380,6 +380,17 @@ func (p *Profile) Parse(r io.Reader) error {
 	return nil
 }
 
+// InstanceNames returns the set of names of instances provided by p.
+func (p *Profile) InstanceNames() map[string]struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	names := make(map[string]struct{}, len(p.instances))
+	for name := range p.instances {
+		names[name] = struct{}{}
+	}
+	return names
+}
+
 // Instance retrieves the named instance from this profile into the
 // pointer ptr. All of its parameters are fully resolved and the
 // underlying global object is instantiated according to the desired

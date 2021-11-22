@@ -155,3 +155,21 @@ instance testy test/1
 	mustGet("testy.x", "100")
 
 }
+
+// TestInstanceNames verifies that InstanceNames returns the correct set of
+// instance names.
+func TestInstanceNames(t *testing.T) {
+	p := New()
+	names := p.InstanceNames()
+	// Because global instances can be added from anywhere, we only verify that
+	// the returned names contains the instances added by this file.
+	for _, name := range []string{
+		"test/1",
+		"test/custom",
+		"test/default",
+	} {
+		if _, ok := names[name]; !ok {
+			t.Errorf("missing instance name=%v", name)
+		}
+	}
+}
