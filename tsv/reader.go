@@ -44,8 +44,9 @@ type Reader struct {
 	// any data.
 	//
 	// If not set, struct fields are filled in order, EVEN IF HasHeaderRow=true.
-	// If set, all struct fields must have a corresponding column in the file.
-	// An error will be reported through Read().
+	// If set, all struct fields must have a corresponding column in the file or
+	// IgnoreMissingColumns must also be set. An error will be reported through
+	// Read().
 	//
 	// REQUIRES: HasHeaderRow=true
 	UseHeaderNames bool
@@ -55,6 +56,13 @@ type Reader struct {
 	//
 	// REQUIRES: HasHeaderRow=true
 	RequireParseAllColumns bool
+
+	// IgnoreMissingColumns causes the reader to ignore any struct fields that are
+	// not present as columns in the file. It must be set before reading any
+	// data.
+	//
+	// REQUIRES: HasHeaderRow=true AND UseHeaderNames=true
+	IgnoreMissingColumns bool
 
 	nRow int // # of rows read so far, excluding the header.
 
@@ -76,21 +84,37 @@ func NewReader(in io.Reader) *Reader {
 	return r
 }
 
-func (r *Reader) validateRowFormat(format rowFormat) error {
+// Filter columns from the row format that are not present in the file being read.
+func (r *Reader) filterRowFormat(format rowFormat) rowFormat {
+	var filtered rowFormat
+	for _, f := range format {
+		if _, ok := r.columnIndex[f.columnName]; ok {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// Validates and canonicalizes the given row format object when column names
+// are being used from the header row. This method may modify the input.
+func (r *Reader) validateRowFormat(format rowFormat) (rowFormat, error) {
+	if r.IgnoreMissingColumns {
+		format = r.filterRowFormat(format)
+	}
 	if r.RequireParseAllColumns && len(format) != len(r.columnIndex) {
-		return fmt.Errorf("extra columns found in %+v does not match format %v", r.columnIndex, format)
+		return format, fmt.Errorf("number of columns found in %+v does not match format %v", r.columnIndex, format)
 	}
 	for i := range format {
 		col := &format[i]
 		var ok bool
 		if col.index, ok = r.columnIndex[col.columnName]; !ok {
-			return fmt.Errorf("column %s does not appear in the header: %+v", col.columnName, r.columnIndex)
+			return format, fmt.Errorf("column %s does not appear in the header: %+v", col.columnName, r.columnIndex)
 		}
 	}
 	sort.Slice(format, func(i, j int) bool {
 		return format[i].index < format[j].index
 	})
-	return nil
+	return format, nil
 }
 
 func parseRowFormat(typ reflect.Type) (rowFormat, error) {
@@ -386,7 +410,8 @@ func (r *Reader) Read(v interface{}) error {
 			return err
 		}
 		if r.UseHeaderNames {
-			if err = r.validateRowFormat(rowFormat); err != nil {
+			rowFormat, err = r.validateRowFormat(rowFormat)
+			if err != nil {
 				return err
 			}
 		}

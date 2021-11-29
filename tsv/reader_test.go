@@ -237,7 +237,60 @@ key2	3	33
 	r.UseHeaderNames = true
 	r.RequireParseAllColumns = true
 	var v row
-	expect.Regexp(t, r.Read(&v), "extra columns found")
+	expect.Regexp(t, r.Read(&v), "number of columns found")
+}
+
+func TestReadMissingColumns(t *testing.T) {
+	type row struct {
+		ColA string
+		ColB int
+	}
+	r := tsv.NewReader(bytes.NewReader([]byte(`ColA
+key1
+key2
+`)))
+	r.HasHeaderRow = true
+	r.UseHeaderNames = true
+	r.RequireParseAllColumns = true
+	var v row
+	expect.Regexp(t, r.Read(&v), "number of columns found")
+}
+
+func TestReadMismatchedColumns(t *testing.T) {
+	type row struct {
+		ColA string
+		ColB int
+	}
+	r := tsv.NewReader(bytes.NewReader([]byte(`ColA	ColC
+key1	2
+key2	3
+`)))
+	r.HasHeaderRow = true
+	r.UseHeaderNames = true
+	r.RequireParseAllColumns = true
+	var v row
+	expect.Regexp(t, r.Read(&v), "does not appear in the header")
+}
+
+func TestReadPartialStruct(t *testing.T) {
+	type row struct {
+		ColA string
+		ColB int
+	}
+	r := tsv.NewReader(bytes.NewReader([]byte(`ColA
+key1
+key2
+`)))
+	r.HasHeaderRow = true
+	r.UseHeaderNames = true
+	r.RequireParseAllColumns = true
+	r.IgnoreMissingColumns = true
+	var v row
+	assert.NoError(t, r.Read(&v))
+	expect.EQ(t, v, row{"key1", 0})
+	assert.NoError(t, r.Read(&v))
+	expect.EQ(t, v, row{"key2", 0})
+	assert.EQ(t, r.Read(&v), io.EOF)
 }
 
 func TestReadAllowExtraNamedColumns(t *testing.T) {
