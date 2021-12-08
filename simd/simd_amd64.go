@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	gunsafe "github.com/grailbio/base/unsafe"
 	"golang.org/x/sys/cpu"
 )
 
@@ -159,7 +158,7 @@ func MakeUnsafe(len int) []byte {
 func RemakeUnsafe(bufptr *[]byte, len int) {
 	minCap := len + bytesPerVec
 	if minCap <= cap(*bufptr) {
-		gunsafe.ExtendBytes(bufptr, len)
+		*bufptr = (*bufptr)[:len]
 		return
 	}
 	// This is likely to be called in an inner loop processing variable-size
@@ -174,7 +173,7 @@ func RemakeUnsafe(bufptr *[]byte, len int) {
 func ResizeUnsafe(bufptr *[]byte, len int) {
 	minCap := len + bytesPerVec
 	if minCap <= cap(*bufptr) {
-		gunsafe.ExtendBytes(bufptr, len)
+		*bufptr = (*bufptr)[:len]
 		return
 	}
 	dst := make([]byte, len, RoundUpPow2(minCap+(minCap/8), bytesPerVec))

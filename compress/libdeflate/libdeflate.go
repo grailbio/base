@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-
-	"github.com/grailbio/base/unsafe"
 )
 
 // This is a slightly modified version of klauspost/compress/gzip/gzip.go , and
@@ -220,7 +218,7 @@ func (z *Writer) Write(p []byte) (int, error) {
 			z.buf = make([]byte, z.bufCap)
 		} else {
 			// No need to zero-reinitialize.
-			unsafe.ExtendBytes(&z.buf, z.bufCap)
+			z.buf = z.buf[:z.bufCap]
 		}
 	} else if len(z.buf) > z.bufCap {
 		// Likely to be irrelevant, but may as well maintain this invariant

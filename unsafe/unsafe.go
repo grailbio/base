@@ -29,17 +29,3 @@ func StringToBytes(src string) (d []byte) {
 	dh.Cap = sh.Len
 	return d
 }
-
-// ExtendBytes extends the given byte slice, without zero-initializing the new
-// storage space.  The caller must guarantee that cap(d) >= newLen (using e.g.
-// a Grow() call on the parent buffer).
-func ExtendBytes(dptr *[]byte, newLen int) {
-	// An earlier version of this function returned a new byte slice.  However, I
-	// don't see a use case where you'd want to keep the old slice object, so
-	// I've changed the function to modify the slice object in-place.
-	if cap(*dptr) < newLen {
-		panic(newLen)
-	}
-	dh := (*reflect.SliceHeader)(unsafe.Pointer(dptr))
-	dh.Len = newLen
-}
