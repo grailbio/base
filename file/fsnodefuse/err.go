@@ -40,9 +40,11 @@ func errToErrno(err error) syscall.Errno {
 	if err == nil {
 		return fs.OK
 	}
-	kind := errors.Recover(err).Kind
+	e := errors.Recover(err)
+	kind := e.Kind
 	errno, ok := kind.Errno()
 	if ok {
+		log.Error.Printf("returning errno: %v for error: %v", errno, e)
 		return errno
 	}
 	log.Error.Printf("error with no good errno match: kind: %v, err: %v", kind, err)

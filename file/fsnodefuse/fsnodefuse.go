@@ -21,9 +21,11 @@ import (
 
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 // NewRoot creates a FUSE inode whose contents are the given fsnode.T.
+// Note that this inode must be mounted with options from ConfigureMount.
 func NewRoot(node fsnode.T) fs.InodeEmbedder {
 	switch n := node.(type) {
 	case fsnode.Parent:
@@ -33,4 +35,10 @@ func NewRoot(node fsnode.T) fs.InodeEmbedder {
 		return &regInode{n: n}
 	}
 	panic(fmt.Sprintf("unrecognized fsnode type: %T, %[1]v", node))
+}
+
+// ConfigureMount sets values in opts to be compatible with fsnodefuse's implementation.
+// Users of NewRoot must use these options.
+func ConfigureMount(opts *fuse.MountOptions) {
+	opts.MaxReadAhead = maxReadAhead
 }
