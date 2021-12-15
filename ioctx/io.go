@@ -17,11 +17,22 @@ type Closer interface {
 	Close(context.Context) error
 }
 
+// Seeker is io.Seeker with context added.
+type Seeker interface {
+	Seek(_ context.Context, offset int64, whence int) (int64, error)
+}
+
 // ReadCloser is io.ReadCloser with context added.
 
 type ReadCloser interface {
 	Reader
 	Closer
+}
+
+// ReadSeeker is io.ReadSeeker with context added.
+type ReadSeeker interface {
+	Reader
+	Seeker
 }
 
 // ReaderAt is io.ReaderAt with context added.
