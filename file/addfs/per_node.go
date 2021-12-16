@@ -156,8 +156,10 @@ func (n *perNodeAdds) newAddsForChild(original fsnode.T) fsnode.Parent {
 					return nil, fmt.Errorf("addfs: error running func %v: %w", fn, err)
 				}
 				for _, add := range fnAdds {
-					log.Debug.Printf("addfs %s: conflict for added name: %s", n.Name(), add.Name())
-					// TODO: Consider returning an error here. Or merging the added trees?
+					if _, exists := adds[add.Name()]; exists {
+						// TODO: Consider returning an error here. Or merging the added trees?
+						log.Error.Printf("addfs %s: conflict for added name: %s", original.Name(), add.Name())
+					}
 					adds[add.Name()] = add
 				}
 			}
