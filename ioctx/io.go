@@ -5,7 +5,9 @@
 // than conversions to and from stdlib types) should be added elsewhere.
 package ioctx
 
-import "context"
+import (
+	"context"
+)
 
 // Reader is io.Reader with context added.
 type Reader interface {

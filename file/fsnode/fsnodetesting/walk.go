@@ -15,13 +15,21 @@ import (
 // TODO: Add (Walker).Walk* variant that inspects FileInfo, too, not just content.
 type Walker struct {
 	IgnoredNames map[string]struct{}
+	// Info makes WalkContents return InfoT recursively. See that function.
+	Info bool
 }
 
 // T, Parent, and Leaf are aliases to improve readability of fixture definitions.
+// InfoT augments T with its FileInfo for tests that want to check mode, size, etc.
 type (
 	T      = interface{}
 	Parent = map[string]T
 	Leaf   = []byte
+
+	InfoT = struct {
+		fsnode.FileInfo
+		T
+	}
 )
 
 // WalkContents traverses all of node and returns map and []byte objects representing
@@ -33,6 +41,25 @@ type (
 //   	"a":      Leaf("a's content"),
 //   	"b":      Leaf("b's content"),
 //   	"subdir": Parent{},
+//   }
+//
+// If w.Info, the returned contents will include fsnode.FileInfo, for example:
+//   InfoT{
+//   	fsnode.NewDirInfo("parent"),
+//   	Parent{
+//   		"a": InfoT{
+//   			fsnode.NewRegInfo("a").WithSize(11),
+//   			Leaf("a's content"),
+//   		},
+//   		"b": InfoT{
+//   			fsnode.NewRegInfo("b").WithModePerm(0755),
+//   			Leaf("b's content"),
+//   		},
+//   		"subdir": InfoT{
+//   			fsnode.NewDirInfo("subdir")
+//   			Parent{},
+//   		},
+//   	},
 //   }
 func (w Walker) WalkContents(ctx context.Context, t testing.TB, node fsnode.T) T {
 	switch n := node.(type) {
@@ -48,9 +75,16 @@ func (w Walker) WalkContents(ctx context.Context, t testing.TB, node fsnode.T) T
 			require.Falsef(t, collision, "name %q is repeated", child.Name())
 			dir[child.Name()] = w.WalkContents(ctx, t, child)
 		}
+		if w.Info {
+			return InfoT{fsnode.CopyFileInfo(n), dir}
+		}
 		return dir
 	case fsnode.Leaf:
-		return LeafReadAll(ctx, t, n)
+		leaf := LeafReadAll(ctx, t, n)
+		if w.Info {
+			return InfoT{fsnode.CopyFileInfo(n), leaf}
+		}
+		return leaf
 	}
 	require.Failf(t, "invalid node type", "node: %T", node)
 	panic("unreachable")

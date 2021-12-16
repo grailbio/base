@@ -80,3 +80,11 @@ func (f FileInfo) WithCacheableFor(d time.Duration) FileInfo {
 	cp.cacheableFor = d
 	return cp
 }
+
+func (f FileInfo) Equal(g FileInfo) bool {
+	if !f.mod.Equal(g.mod) {
+		return false
+	}
+	f.mod = g.mod
+	return f == g
+}

@@ -11,16 +11,16 @@ type (
 	fromStdSeeker   struct{ io.Seeker }
 	fromStdReaderAt struct{ io.ReaderAt }
 
-	toStdReader struct {
-		ctx context.Context
+	StdReader struct {
+		Ctx context.Context
 		Reader
 	}
-	toStdSeeker struct {
-		ctx context.Context
+	StdSeeker struct {
+		Ctx context.Context
 		Seeker
 	}
-	toStdReaderAt struct {
-		ctx context.Context
+	StdReaderAt struct {
+		Ctx context.Context
 		ReaderAt
 	}
 )
@@ -68,17 +68,17 @@ func (r fromStdReaderAt) ReadAt(_ context.Context, dst []byte, off int64) (n int
 }
 
 // ToStdReader wraps Reader as io.Reader.
-func ToStdReader(ctx context.Context, r Reader) io.Reader { return toStdReader{ctx, r} }
+func ToStdReader(ctx context.Context, r Reader) io.Reader { return StdReader{ctx, r} }
 
-func (r toStdReader) Read(dst []byte) (n int, err error) {
-	return r.Reader.Read(r.ctx, dst)
+func (r StdReader) Read(dst []byte) (n int, err error) {
+	return r.Reader.Read(r.Ctx, dst)
 }
 
 // ToStdSeeker wraps Seeker as io.Seeker.
-func ToStdSeeker(ctx context.Context, s Seeker) io.Seeker { return toStdSeeker{ctx, s} }
+func ToStdSeeker(ctx context.Context, s Seeker) io.Seeker { return StdSeeker{ctx, s} }
 
-func (r toStdSeeker) Seek(offset int64, whence int) (int64, error) {
-	return r.Seeker.Seek(r.ctx, offset, whence)
+func (r StdSeeker) Seek(offset int64, whence int) (int64, error) {
+	return r.Seeker.Seek(r.Ctx, offset, whence)
 }
 
 // ToStdReadSeeker wraps ReadSeeker as io.ReadSeeker.
@@ -90,8 +90,8 @@ func ToStdReadSeeker(ctx context.Context, rs ReadSeeker) io.ReadSeeker {
 }
 
 // ToStdReaderAt wraps ReaderAt as io.ReaderAt.
-func ToStdReaderAt(ctx context.Context, r ReaderAt) io.ReaderAt { return toStdReaderAt{ctx, r} }
+func ToStdReaderAt(ctx context.Context, r ReaderAt) io.ReaderAt { return StdReaderAt{ctx, r} }
 
-func (r toStdReaderAt) ReadAt(dst []byte, off int64) (n int, err error) {
-	return r.ReaderAt.ReadAt(r.ctx, dst, off)
+func (r StdReaderAt) ReadAt(dst []byte, off int64) (n int, err error) {
+	return r.ReaderAt.ReadAt(r.Ctx, dst, off)
 }
