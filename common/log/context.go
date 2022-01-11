@@ -8,7 +8,9 @@ import (
 )
 
 const (
-	RequestIDContextKey = "requestID"
+	// Best practices for avoiding key collisions in context say this shouldn't be a string type.
+	// Gin forces us to use a string for their context, so choose a name that is unlikely to collide with anything else.
+	RequestIDContextKey = "grail_logger_request_id"
 )
 
 // WithRequestID sets the uuid value for the RequestIDContextKey key in the context.
@@ -22,6 +24,9 @@ func WithRequestID(ctx context.Context, requestID uuid.UUID) context.Context {
 func WithGinRequestID(ctx *gin.Context) {
 	requuid := uuid.New()
 	uuidStr := requuid.String()
+	if _, ok := ctx.Get(RequestIDContextKey); ok {
+		return // Avoid overwriting the original value in case this middleware is invoked twice
+	}
 	ctx.Set(RequestIDContextKey, uuidStr)
 	// TODO: ideally we'd pass the  X-Amzn-Trace-Id header from our ALB, but we're not using ALBs yet.
 	ctx.Request = ctx.Request.WithContext(WithRequestID(ctx.Request.Context(), requuid))
