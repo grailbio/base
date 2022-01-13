@@ -165,6 +165,7 @@ func (blesser *ec2Blesser) BlessEc2(ctx *context.T, call rpc.ServerCall, pkcs7b6
 		Retryer: client.DefaultRetryer{
 			NumMaxRetries: 100,
 		},
+		Region: aws.String(doc.Region),
 	}
 	validateRemoteAddr := remoteAddress
 	if ec2DisableAddrCheckFlag {
