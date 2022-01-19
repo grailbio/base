@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/grailbio/base/traverse"
 )
@@ -61,17 +62,17 @@ func TestTraverseLarge(t *testing.T) {
 			Limit: 2,
 		},
 		{
-			N:     9999999,
+			N:     2999999,
 			Limit: 5,
 		},
 		{
-			N:     10000001,
+			N:     3000001,
 			Limit: 5,
 		},
 	}
 	for testId, test := range tests {
 		data := make([]int32, test.N)
-		traverse.Limit(test.Limit).Each(test.N, func(i int) error {
+		_ = traverse.Limit(test.Limit).Each(test.N, func(i int) error {
 			atomic.AddInt32(&data[i], 1)
 			return nil
 		})
@@ -81,8 +82,9 @@ func TestTraverseLarge(t *testing.T) {
 				break
 			}
 		}
+
 		data = make([]int32, test.N)
-		traverse.Limit(test.Limit).Range(test.N, func(i, j int) error {
+		_ = traverse.Limit(test.Limit).Range(test.N, func(i, j int) error {
 			for k := i; k < j; k++ {
 				atomic.AddInt32(&data[k], 1)
 			}
@@ -94,6 +96,39 @@ func TestTraverseLarge(t *testing.T) {
 				break
 			}
 		}
+
+		// Emulate a sequential writer.
+		// The test still passes if LimitSequential is replaced with Limit, but it
+		// should take noticeably longer to execute.
+		// (Note that we can't just e.g. guard 'data' with a mutex.  Just because
+		// tasks are launched in numerical order does not mean that they will be
+		// completed in numerical order.)
+		data = data[:0]
+		const cachelineSize = 64
+		var nextWriteIndex struct {
+			_ [cachelineSize - 8]byte
+			N int64
+			_ [cachelineSize - 8]byte
+		}
+		_ = traverse.LimitSequential(test.Limit).Each(test.N, func(i int) error {
+			time.Sleep(50 * time.Nanosecond)
+			for {
+				j := atomic.LoadInt64(&nextWriteIndex.N)
+				if int(j) == i {
+					break
+				}
+			}
+			data = append(data, int32(i))
+			_ = atomic.AddInt64(&nextWriteIndex.N, 1)
+			return nil
+		})
+		for i, d := range data {
+			if int(d) != i {
+				t.Errorf("Test %d - LimitSequential. element %d is %d.  Expected %d", testId, i, d, i)
+				break
+			}
+		}
+
 	}
 }
 

@@ -26,6 +26,22 @@ type T struct {
 	// than Limit concurrent invocations per traversal. A limit value of
 	// zero (the default value) denotes no limit.
 	Limit int
+	// Sequential indicates that early indexes should be handled before later
+	// ones.  E.g. if there are 40000 tasks and Limit == 40, the initial
+	// assignment is usually
+	//   worker 0 <- tasks 0-999
+	//   worker 1 <- tasks 1000-1999
+	//   ...
+	//   worker 39 <- tasks 39000-39999
+	// but when Sequential == true, only tasks 0-39 are initially assigned, then
+	// task 40 goes to the first worker to finish, etc.
+	// Note that this increases synchronization overhead.  It should not be used
+	// with e.g. > 1 billion tiny tasks; in that scenario, the caller should
+	// organize such tasks into e.g. 10000-task chunks and perform a
+	// sequential-traverse on the chunks.
+	// This scheduling algorithm does perform well when tasks are sorted in order
+	// of decreasing size.
+	Sequential bool
 	// Reporter receives status reports for each traversal. It is
 	// intended for users who wish to monitor the progress of large
 	// traversal jobs.
@@ -38,6 +54,14 @@ func Limit(n int) T {
 		log.Panicf("traverse.Limit: invalid limit: %d", n)
 	}
 	return T{Limit: n}
+}
+
+// LimitSequential returns a sequential traverser with limit n.
+func LimitSequential(n int) T {
+	if n <= 0 {
+		log.Panicf("traverse.LimitSequential: invalid limit: %d", n)
+	}
+	return T{Limit: n, Sequential: true}
 }
 
 // Parallel is the default traverser for parallel traversal, intended
@@ -64,6 +88,8 @@ func (t T) Each(n int, fn func(i int) error) error {
 		err = t.eachSerial(n, fn)
 	} else if t.Limit == 0 || t.Limit >= n {
 		err = t.each(n, fn)
+	} else if t.Sequential {
+		err = t.eachSequential(n, fn)
 	} else {
 		err = t.eachLimit(n, fn)
 	}
@@ -118,6 +144,47 @@ func (t T) eachSerial(n int, fn func(i int) error) error {
 	return nil
 }
 
+// eachSequential performs a concurrent run where tasks are assigned in strict
+// numerical order.  Unlike eachLimit(), it can be used when the traversal must
+// be done sequentially.
+func (t T) eachSequential(n int, fn func(i int) error) error {
+	var (
+		errors     errors.Once
+		wg         sync.WaitGroup
+		syncStruct struct {
+			_ [cachelineSize - 8]byte // cache padding
+			N int64
+			_ [cachelineSize - 8]byte // cache padding
+		}
+	)
+	syncStruct.N = -1
+	wg.Add(t.Limit)
+	for i := 0; i < t.Limit; i++ {
+		go func() {
+			for errors.Err() == nil {
+				idx := int(atomic.AddInt64(&syncStruct.N, 1))
+				if idx >= n {
+					break
+				}
+				if t.Reporter != nil {
+					t.Reporter.Begin(idx)
+				}
+				if err := apply(fn, idx); err != nil {
+					errors.Set(err)
+				}
+				if t.Reporter != nil {
+					t.Reporter.End(idx)
+				}
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	return errors.Err()
+}
+
+// eachLimit performs a concurrent run where tasks can be assigned in any
+// order.
 func (t T) eachLimit(n int, fn func(i int) error) error {
 	var (
 		errors errors.Once
@@ -169,6 +236,10 @@ func (t T) eachLimit(n int, fn func(i int) error) error {
 // parallel traversal over large collections, where each item's
 // processing time is comparatively small.
 func (t T) Range(n int, fn func(start, end int) error) error {
+	if t.Sequential {
+		// interface for this should take a chunk size.
+		log.Panicf("traverse.Range: sequential traversal unsupported")
+	}
 	m := n
 	if t.Limit > 0 && t.Limit < n {
 		m = t.Limit
