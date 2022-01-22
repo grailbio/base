@@ -35,6 +35,14 @@ func (o *Task) Do(do func() error) error {
 	return o.err
 }
 
+// Reset resets the task effectively making it possible for `Do` to invoke the underlying do func again.
+// Reset will only reset the task if it was already completed.
+func (o *Task) Reset() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	atomic.CompareAndSwapUint32(&o.done, 1, 0)
+}
+
 // Map coordinates actions that must happen exactly once, keyed
 // by user-defined keys.
 type Map sync.Map

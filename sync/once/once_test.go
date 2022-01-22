@@ -12,6 +12,32 @@ import (
 	"github.com/grailbio/base/traverse"
 )
 
+func TestTaskOnceConcurrency(t *testing.T) {
+	const (
+		N      = 10
+		resets = 2
+	)
+	var (
+		o     Task
+		count int32
+	)
+	for r := 0; r < resets; r++ {
+		err := traverse.Each(N, func(_ int) error {
+			return o.Do(func() error {
+				atomic.AddInt32(&count, 1)
+				return nil
+			})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := atomic.LoadInt32(&count), int32(r+1); got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		o.Reset()
+	}
+}
+
 func TestMapOnceConcurrency(t *testing.T) {
 	const N = 10
 	var (
