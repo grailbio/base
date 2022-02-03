@@ -89,7 +89,7 @@ func (w *AWSSessionWrapper) GetAuthV1Client(ctx context.Context, headers map[str
 		err          error
 		authV1Client *client.AuthenticationV1Client
 	)
-	svc := sts.New(w.session)
+	svc := sts.New(w.session, aws.NewConfig().WithRegion(region))
 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/?Action=GetCallerIdentity&Version=2011-06-15", svc.Client.Endpoint), nil)
 
 	for key, header := range headers {
