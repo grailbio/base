@@ -70,7 +70,7 @@ func New(ctx context.Context, concurrency int) *WorkerPool {
 // specific subgroup of Tasks to Wait.
 type TaskGroup struct {
 	Name       string
-	ErrHandler *multierror.MultiError
+	ErrHandler *multierror.Builder
 	Wp         *WorkerPool
 	activity   sync.WaitGroup // Count active tasks
 }
@@ -81,7 +81,7 @@ type TaskGroup struct {
 // separate from the WorkerPool context.Context.
 //
 // TODO(pknudsgaard): Should return a closure calling Wait.
-func (wp *WorkerPool) NewTaskGroup(name string, errHandler *multierror.MultiError) *TaskGroup {
+func (wp *WorkerPool) NewTaskGroup(name string, errHandler *multierror.Builder) *TaskGroup {
 	vlog.VI(2).Infof("Creating TaskGroup: %s", name)
 
 	grp := &TaskGroup{

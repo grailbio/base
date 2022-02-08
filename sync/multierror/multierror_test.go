@@ -6,9 +6,9 @@ import (
 )
 
 func TestMultiError(t *testing.T) {
-	me2a := NewMultiError(2)
+	me2a := NewBuilder(2)
 	me2a.Add(errors.New("a"))
-	me1ab := NewMultiError(1)
+	me1ab := NewBuilder(1)
 	me1ab.Add(errors.New("a"))
 	me1ab.Add(errors.New("b"))
 
@@ -40,7 +40,7 @@ a]`),
 a] [plus 1 other error(s)]`),
 		},
 	} {
-		errs := NewMultiError(2)
+		errs := NewBuilder(2)
 
 		for _, e := range test.errs {
 			errs.Add(e)
