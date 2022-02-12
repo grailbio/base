@@ -34,7 +34,13 @@ func TestTaskOnceConcurrency(t *testing.T) {
 		if got, want := atomic.LoadInt32(&count), int32(r+1); got != want {
 			t.Errorf("got %v, want %v", got, want)
 		}
+		if got, want := o.Done(), true; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 		o.Reset()
+		if got, want := o.Done(), false; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
 	}
 }
 

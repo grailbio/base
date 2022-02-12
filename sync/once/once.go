@@ -35,6 +35,13 @@ func (o *Task) Do(do func() error) error {
 	return o.err
 }
 
+// Done returns whether the task is done.
+func (o *Task) Done() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return 1 == atomic.LoadUint32(&o.done)
+}
+
 // Reset resets the task effectively making it possible for `Do` to invoke the underlying do func again.
 // Reset will only reset the task if it was already completed.
 func (o *Task) Reset() {
