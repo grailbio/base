@@ -30,14 +30,9 @@ func TestMultiError(t *testing.T) {
 2] [plus 1 other error(s)]`),
 		},
 		{
-			[]error{errors.New("1"), me2a},
+			[]error{errors.New("1"), me2a.Err()},
 			errors.New(`[1
 a]`),
-		},
-		{
-			[]error{errors.New("1"), me1ab},
-			errors.New(`[1
-a] [plus 1 other error(s)]`),
 		},
 	} {
 		errs := NewBuilder(2)

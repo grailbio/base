@@ -7,13 +7,12 @@ import (
 )
 
 type multiError struct {
-	errs  []error
-	count int64
+	errs    []error
+	dropped int
 }
 
-// Err returns an non-nil error representing all reported errors. Err
-// returns nil when no errors where reported.
-func (e *multiError) Error() string {
+// Error returns a string describing the multiple errors represented by e.
+func (e multiError) Error() string {
 	switch len(e.errs) {
 	case 0, 1:
 		panic("invalid multiError")
@@ -27,97 +26,59 @@ func (e *multiError) Error() string {
 			b.WriteString(err.Error())
 		}
 		b.WriteString("]")
-		if e.count > 0 {
-			fmt.Fprintf(&b, " [plus %d other error(s)]", e.count)
+		if e.dropped > 0 {
+			fmt.Fprintf(&b, " [plus %d other error(s)]", e.dropped)
 		}
 		return b.String()
 	}
 }
 
-// Builder is a mechanism for capturing errors from parallel
-// go-routines. Usage:
+// Builder captures errors from parallel goroutines.
 //
-//      errs := NewBuilder(3)
-//      do := func(f foo) error {...}
-//      for foo in range foos {
-//          go errs.capture(do(foo))
-//      }
-//      // Wait for completion
-//      if errs.Err() != nil { /* handle error */ }
+// Example usage:
+// 	var (
+// 		errs = multierror.NewBuilder(3)
+// 		wg   sync.WaitGroup
+// 	)
+// 	for _, foo := range foos {
+// 		wg.Add(1)
+// 		go func() {
+// 			defer wg.Done()
+// 			errs.Add(someWork(foo))
+// 		}()
+// 	}
+// 	wg.Wait()
+// 	if err := errs.Err(); err != nil {
+// 		// handle err
+// 	}
 type Builder struct {
-	mu    sync.Mutex // mu guards all fields
-	errs  []error
-	count int64
+	mu      sync.Mutex // mu guards all fields
+	errs    []error
+	dropped int
 }
 
 func NewBuilder(max int) *Builder {
 	return &Builder{errs: make([]error, 0, max)}
 }
 
-func (b *Builder) add(err error) {
-	if len(b.errs) == cap(b.errs) {
-		b.count++
+// Add adds an error to b. b must be non-nil.
+func (b *Builder) Add(err error) {
+	if err == nil {
 		return
 	}
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.errs) == cap(b.errs) {
+		b.dropped++
+		return
+	}
 	b.errs = append(b.errs, err)
 }
 
-// Add captures an error from a go-routine and adds it to the Builder.
-func (b *Builder) Add(err error) {
-	if err == nil || b == nil {
-		return
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	multi, ok := err.(*Builder)
-	if ok {
-		// Aggregate if it is a Builder.
-		for _, e := range multi.errs {
-			b.add(e)
-		}
-		b.count += multi.count
-		return
-	}
-
-	b.add(err)
-}
-
-// Error returns a string version of the Builder. This implements the error
-// interface.
-func (b *Builder) Error() string {
-	if b == nil {
-		return ""
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if len(b.errs) == 0 {
-		return ""
-	}
-
-	if len(b.errs) == 1 {
-		return b.errs[0].Error()
-	}
-
-	s := make([]string, len(b.errs))
-	for i, e := range b.errs {
-		s[i] = e.Error()
-	}
-	errs := strings.Join(s, "\n")
-
-	if b.count == 0 {
-		return fmt.Sprintf("[%s]", errs)
-	}
-
-	return fmt.Sprintf("[%s] [plus %d other error(s)]", errs, b.count)
-}
-
-// Err returns an non-nil error representing all reported errors. Err
-// returns nil when no errors where reported.
+// Err returns an error combining all the errors that were already Add-ed. Otherwise returns nil.
+// b may be nil.
 func (b *Builder) Err() error {
 	if b == nil {
 		return nil
@@ -128,15 +89,15 @@ func (b *Builder) Err() error {
 	case 0:
 		return nil
 	case 1:
+		// TODO: This silently ignores b.dropped which is bad because it may be non-zero.
+		// Maybe we should make multiError{*, 1} legal. Or, maybe forbid max < 2.
 		return b.errs[0]
 	default:
-		err := &multiError{
-			errs:  make([]error, len(b.errs)),
-			count: b.count,
+		return multiError{
+			// Sharing b.errs is ok because multiError doesn't mutate or append and Builder
+			// only appends.
+			errs:    b.errs,
+			dropped: b.dropped,
 		}
-		for i := range err.errs {
-			err.errs[i] = b.errs[i]
-		}
-		return err
 	}
 }
