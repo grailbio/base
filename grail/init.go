@@ -66,13 +66,7 @@ func Init() Shutdown {
 		return profile
 	}
 	profile.RegisterFlags(flag.CommandLine, "", os.ExpandEnv("$HOME/grail/profile"))
-	flag.CommandLine.Init(os.Args[0], flag.ContinueOnError)
-	err := flag.CommandLine.Parse(os.Args[1:])
-	if err == flag.ErrHelp {
-		os.Exit(0)
-	} else if err != nil {
-		os.Exit(2)
-	}
+	flag.Parse()
 	if err := vlog.ConfigureLibraryLoggerFromFlags(); err != nil {
 		vlog.Error(err)
 	}
