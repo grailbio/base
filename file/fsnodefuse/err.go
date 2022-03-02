@@ -3,12 +3,19 @@ package fsnodefuse
 import (
 	"fmt"
 	"runtime/debug"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/log"
 	"github.com/hanwen/go-fuse/v2/fs"
 )
+
+// numHandledPanics is the total number of panics handled by handlePanicErrno.
+// It can be used in testing to verify whether we triggered panics when
+// handling operations.  It must be accessed atomically, i.e. using atomic.*
+// functions.
+var numHandledPanics uint32
 
 // handlePanicErrno is a last resort to prevent panics from reaching go-fuse and breaking the FUSE mount.
 // All go-fuse-facing APIs that return Errno should defer it.
@@ -17,6 +24,7 @@ func handlePanicErrno(errno *syscall.Errno) {
 	if r == nil {
 		return
 	}
+	atomic.AddUint32(&numHandledPanics, 1)
 	*errno = errToErrno(makePanicErr(r))
 }
 

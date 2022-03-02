@@ -2,15 +2,12 @@ package fsnodefuse
 
 import (
 	"context"
-	"crypto/sha512"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"syscall"
 
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/log"
-	"github.com/grailbio/base/writehash"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -92,15 +89,4 @@ func (d *dirStream) Close() {
 		d.dir.readdirplusCache.Drop(d.prev)
 		d.prev = nil
 	}
-}
-
-func hashParentInoAndName(parentIno uint64, name string) uint64 {
-	h := sha512.New()
-	writehash.Uint64(h, parentIno)
-	writehash.String(h, name)
-	return binary.LittleEndian.Uint64(h.Sum(nil)[:8])
-}
-
-func hashIno(parent fs.InodeEmbedder, name string) uint64 {
-	return hashParentInoAndName(parent.EmbeddedInode().StableAttr().Ino, name)
 }

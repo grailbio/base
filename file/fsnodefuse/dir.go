@@ -2,6 +2,8 @@ package fsnodefuse
 
 import (
 	"context"
+	"crypto/sha512"
+	"encoding/binary"
 	"os"
 	"sync"
 	"syscall"
@@ -11,6 +13,7 @@ import (
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/sync/loadingcache"
 	"github.com/grailbio/base/sync/loadingcache/ctxloadingcache"
+	"github.com/grailbio/base/writehash"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -51,7 +54,7 @@ func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 		}
 	}
 	childInode := n.GetChild(name)
-	if childInode == nil {
+	if childInode == nil || stableAttr(n, childFSNode) != childInode.StableAttr() {
 		childInode = n.newInode(ctx, childFSNode)
 	}
 	setFSNode(childInode, childFSNode)
@@ -109,10 +112,7 @@ func (n *dirInode) newInode(ctx context.Context, fsNode fsnode.T) *fs.Inode {
 	default:
 		log.Panicf("invalid node type: %T", fsNode)
 	}
-	var (
-		ino   = hashIno(n, fsNode.Name())
-		inode = n.NewInode(ctx, embed, fs.StableAttr{Mode: mode(fsNode), Ino: ino})
-	)
+	inode := n.NewInode(ctx, embed, stableAttr(n, fsNode))
 	// inode may be an existing inode with an existing embedder.  Regardless,
 	// update the underlying fsnode.T.
 	setFSNode(inode, fsNode)
@@ -231,4 +231,31 @@ func (c *readdirplusCache) Drop(n fsnode.T) {
 	ns[last] = nil
 	ns = ns[:last]
 	c.m[name] = ns
+}
+
+func stableAttr(parent fs.InodeEmbedder, n fsnode.T) fs.StableAttr {
+	var mode uint32
+	switch n.(type) {
+	case fsnode.Parent:
+		mode |= syscall.S_IFDIR
+	case fsnode.Leaf:
+		mode |= syscall.S_IFREG
+	default:
+		log.Panicf("invalid node type: %T", n)
+	}
+	return fs.StableAttr{
+		Mode: mode,
+		Ino:  hashIno(parent, n.Name()),
+	}
+}
+
+func hashParentInoAndName(parentIno uint64, name string) uint64 {
+	h := sha512.New()
+	writehash.Uint64(h, parentIno)
+	writehash.String(h, name)
+	return binary.LittleEndian.Uint64(h.Sum(nil)[:8])
+}
+
+func hashIno(parent fs.InodeEmbedder, name string) uint64 {
+	return hashParentInoAndName(parent.EmbeddedInode().StableAttr().Ino, name)
 }
