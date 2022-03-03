@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -18,6 +19,9 @@ import (
 
 // Write to /dev/stdout. This test only checks that the write succeeds.
 func TestStdout(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("This test does not consistently work on macOS")
+	}
 	ctx := context.Background()
 	w, err := file.Create(ctx, "/dev/stdout")
 	assert.Nil(t, err)

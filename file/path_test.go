@@ -57,6 +57,10 @@ func TestJoin(t *testing.T) {
 			[]string{"s3://", "/bar"},
 			"s3://bar",
 		},
+		{
+			[]string{"//go/src/grailbio/base/file", "path_test.go"},
+			"//go/src/grailbio/base/file/path_test.go",
+		},
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {

@@ -108,12 +108,15 @@ func Dir(path string) string {
 	return path[:len(scheme)+3]
 }
 
-// Join joins any number of path elements into a single path, adding a separator
-// if necessary. It is the same as filepath.Join if elems[0] is a local
-// filesystem path. Else, it works like filepath.Join, with the following
-// differences: (1) the path separator is always '/'. (2) Each element is
-// not cleaned; for example if an element contains repeated "/"s in the middle,
-// they are preserved.
+// Join joins any number of path elements into a single path, adding a
+// separator if necessary. It works like filepath.Join, with the following
+// differences:
+// 1. The path separator is always '/' (so this doesn't work on Windows).
+// 2. The interior of each element is not cleaned; for example if an element
+//    contains repeated "/"s in the middle, they are preserved.
+// 3. If elems[0] has a prefix of the form "<scheme>://" or "//", that prefix
+//    is retained.  (A prefix of "/" is also retained; that matches
+//    filepath.Join's behavior.)
 func Join(elems ...string) string {
 	if len(elems) == 0 {
 		return filepath.Join(elems...)
@@ -124,8 +127,13 @@ func Join(elems ...string) string {
 		prefix = elems[0][:n+3]
 		elems[0] = elems[0][n+3:]
 	} else if len(elems[0]) > 0 && elems[0][0] == '/' {
-		prefix = "/"
-		elems[0] = elems[0][1:]
+		if elems[0][1] == '/' {
+			prefix = "//"
+			elems[0] = elems[0][2:]
+		} else {
+			prefix = "/"
+			elems[0] = elems[0][1:]
+		}
 	}
 
 	// Remove leading (optional) or trailing "/"s from the string.
