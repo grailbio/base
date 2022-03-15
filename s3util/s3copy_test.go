@@ -31,6 +31,7 @@ var (
 		"key_deadlineexceeded":  context.DeadlineExceeded,
 		"key_awsrequesttimeout": awserr.New("RequestTimeout", "test", nil),
 		"key_nestedEOFrequest":  awserr.New("MultipartUpload", "test", awserr.New("SerializationError", "test2", fmt.Errorf("unexpected EOF"))),
+		"key_awsinternalerror":  awserr.New("InternalError", "test", nil),
 	}
 )
 
@@ -108,15 +109,31 @@ func TestCopyWithRetry(t *testing.T) {
 	retrier := retry.MaxRetries(retry.Jitter(retry.Backoff(10*time.Millisecond, 50*time.Millisecond, 2), 0.25), 4)
 	copier := NewCopierWithParams(client, retrier, 1<<10, 1<<10, testDebugger{t})
 
-	srcKey, srcSize, dstKey := "test/x", testKeys["test/x"].Size(), "key_awsrequesttimeout"
-	srcUrl := fmt.Sprintf("s3://%s/%s", testBucket, srcKey)
-	dstUrl := fmt.Sprintf("s3://%s/%s", testBucket, dstKey)
-
-	checkObject(t, client, srcKey, testKeys[srcKey])
-	if err := copier.Copy(context.Background(), srcUrl, dstUrl, srcSize, nil); err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		srcKey  string
+		dstKey  string
+		srcSize int64
+	}{
+		{
+			srcKey:  "test/x",
+			dstKey:  "key_awsrequesttimeout",
+			srcSize: testKeys["test/x"].Size(),
+		},
+		{
+			srcKey:  "test/x",
+			dstKey:  "key_awsinternalerror",
+			srcSize: testKeys["test/x"].Size(),
+		},
+	} {
+		srcUrl := fmt.Sprintf("s3://%s/%s", testBucket, tc.srcKey)
+		dstUrl := fmt.Sprintf("s3://%s/%s", testBucket, tc.dstKey)
+		checkObject(t, client, tc.srcKey, testKeys[tc.srcKey])
+		if err := copier.Copy(context.Background(), srcUrl, dstUrl, tc.srcSize, nil); err != nil {
+			t.Fatal(err)
+		}
+		checkObject(t, client, tc.dstKey, testKeys[tc.srcKey])
 	}
-	checkObject(t, client, dstKey, testKeys[srcKey])
+
 }
 
 func TestCopyMultipart(t *testing.T) {

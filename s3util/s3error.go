@@ -72,6 +72,11 @@ func KindAndSeverity(err error) (errors.Kind, errors.Severity) {
 			return errors.ResourcesExhausted, errors.Temporary
 		case "BadRequest":
 			return errors.Other, errors.Temporary
+		case "InternalError":
+			// AWS recommends retrying InternalErrors:
+			// https://aws.amazon.com/premiumsupport/knowledge-center/s3-resolve-200-internalerror/
+			// https://aws.amazon.com/premiumsupport/knowledge-center/http-5xx-errors-s3/
+			return errors.Other, errors.Retriable
 		case "XAmzContentSHA256Mismatch":
 			// Example:
 			//
