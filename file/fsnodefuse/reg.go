@@ -22,7 +22,6 @@ import (
 // concurrent readers of such files may see corruption.
 type regInode struct {
 	fs.Inode
-	dirStreamUsageImpl
 	cache loadingcache.Map
 
 	mu sync.Mutex
@@ -54,7 +53,7 @@ type regInode struct {
 }
 
 var (
-	_ inodeEmbedder = (*regInode)(nil)
+	_ fs.InodeEmbedder = (*regInode)(nil)
 
 	_ fs.NodeOpener    = (*regInode)(nil)
 	_ fs.NodeGetattrer = (*regInode)(nil)

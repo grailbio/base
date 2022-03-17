@@ -22,11 +22,10 @@ type dirStream struct {
 	eof     bool
 	next    fsnode.T
 	nextErr error
-	// previousInode is the inode of the previous entry, i.e. the most recent
-	// entry returned by Next.  We hold a reference to service LOOKUP
-	// operations that go-fuse issues when servicing READDIRPLUS.  See
-	// dirStreamUsage.
-	previousInode *fs.Inode
+	// prev is the node of the previous entry, i.e. the node of the most recent
+	// entry returned by Next.  We cache this node to service LOOKUP operations
+	// that go-fuse issues when servicing READDIRPLUS.  See lookupCache.
+	prev fsnode.T
 }
 
 func newDirStream(ctx context.Context, dir *dirInode) *dirStream {
@@ -65,27 +64,16 @@ func (d *dirStream) Next() (_ fuse.DirEntry, errno syscall.Errno) {
 	}
 	next := d.next
 	d.next = nil
-	var (
-		name  = next.Name()
-		inode = d.dir.GetChild(name)
-	)
-	if inode == nil {
-		inode = d.dir.newInode(d.ctx, next)
-		// Add the new inode as a child, so it can be retrieved and reused to
-		// service LOOKUP operations.  See dirStreamUsage.
-		//
-		// We are passing overwrite == true, so the return value is
-		// meaningless.
-		_ = d.dir.AddChild(name, inode, true)
-	} else {
-		// Existing inode; make it current.
-		setFSNode(inode, next)
+	if d.prev != nil {
+		d.dir.readdirplusCache.Drop(d.prev)
 	}
-	d.setPreviousInode(inode)
+	d.prev = next
+	d.dir.readdirplusCache.Put(next)
+	name := next.Name()
 	return fuse.DirEntry{
 		Name: name,
-		Mode: inode.Mode(),
-		Ino:  inode.StableAttr().Ino,
+		Mode: mode(next),
+		Ino:  hashIno(d.dir, name),
 	}, fs.OK
 }
 
@@ -100,21 +88,10 @@ func (d *dirStream) Close() {
 	err = d.iter.Close(d.ctx)
 	d.iter = nil
 	d.next = nil
-	d.clearPreviousInode()
-}
-
-func (d *dirStream) setPreviousInode(n *fs.Inode) {
-	d.clearPreviousInode()
-	d.previousInode = n
-	d.previousInode.Operations().(inodeEmbedder).AddRef()
-}
-
-func (d *dirStream) clearPreviousInode() {
-	if d.previousInode == nil {
-		return
+	if d.prev != nil {
+		d.dir.readdirplusCache.Drop(d.prev)
+		d.prev = nil
 	}
-	d.previousInode.Operations().(inodeEmbedder).DropRef()
-	d.previousInode = nil
 }
 
 func hashParentInoAndName(parentIno uint64, name string) uint64 {

@@ -17,15 +17,15 @@ import (
 
 type dirInode struct {
 	fs.Inode
-	dirStreamUsageImpl
-	cache loadingcache.Map
+	cache            loadingcache.Map
+	readdirplusCache readdirplusCache
 
 	mu sync.Mutex
 	n  fsnode.Parent
 }
 
 var (
-	_ inodeEmbedder = (*dirInode)(nil)
+	_ fs.InodeEmbedder = (*dirInode)(nil)
 
 	_ fs.NodeReaddirer = (*dirInode)(nil)
 	_ fs.NodeLookuper  = (*dirInode)(nil)
@@ -42,40 +42,19 @@ func (n *dirInode) Readdir(ctx context.Context) (_ fs.DirStream, errno syscall.E
 func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (_ *fs.Inode, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
-	if childInode := n.GetChild(name); childInode != nil {
-		if embed := childInode.Operations().(inodeEmbedder); embed.PreviousOfAnyDirStream() {
-			// We can reuse the existing inode without calling (Parent).Child.
-			// See dirStreamUsage.
-			var childFSNode fsnode.T
-			switch embed := embed.(type) {
-			case *dirInode:
-				embed.mu.Lock()
-				childFSNode = embed.n
-				embed.mu.Unlock()
-			case *regInode:
-				embed.mu.Lock()
-				childFSNode = embed.n
-				embed.mu.Unlock()
-			}
-			setEntryOut(out, childInode.StableAttr().Ino, childFSNode)
-			return childInode, fs.OK
-		}
-		// We need to call (Parent).Child to re-fetch and ensure the inode is
-		// current.
-		childFSNode, err := n.n.Child(ctx, name)
+	childFSNode := n.readdirplusCache.Get(name)
+	if childFSNode == nil {
+		var err error
+		childFSNode, err = n.n.Child(ctx, name)
 		if err != nil {
 			return nil, errToErrno(err)
 		}
-		setFSNode(childInode, childFSNode)
-		setEntryOut(out, childInode.StableAttr().Ino, childFSNode)
-		return childInode, fs.OK
 	}
-	// There is no existing child inode, so we construct it.
-	childFSNode, err := n.n.Child(ctx, name)
-	if err != nil {
-		return nil, errToErrno(err)
+	childInode := n.GetChild(name)
+	if childInode == nil {
+		childInode = n.newInode(ctx, childFSNode)
 	}
-	childInode := n.newInode(ctx, childFSNode)
+	setFSNode(childInode, childFSNode)
 	setEntryOut(out, childInode.StableAttr().Ino, childFSNode)
 	return childInode, fs.OK
 }
@@ -120,24 +99,19 @@ func (n *dirInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttr
 // newInode returns an inode that wraps fsNode.  The type of inode (embedder)
 // to create is inferred from the type of fsNode.
 func (n *dirInode) newInode(ctx context.Context, fsNode fsnode.T) *fs.Inode {
-	var (
-		embed inodeEmbedder
-		mode  uint32
-	)
+	var embed fs.InodeEmbedder
 	// TODO: Set owner/UID?
 	switch fsNode.(type) {
 	case fsnode.Parent:
 		embed = &dirInode{}
-		mode |= syscall.S_IFDIR
 	case fsnode.Leaf:
 		embed = &regInode{}
-		mode |= syscall.S_IFREG
 	default:
 		log.Panicf("invalid node type: %T", fsNode)
 	}
 	var (
 		ino   = hashIno(n, fsNode.Name())
-		inode = n.NewInode(ctx, embed, fs.StableAttr{Mode: mode, Ino: ino})
+		inode = n.NewInode(ctx, embed, fs.StableAttr{Mode: mode(fsNode), Ino: ino})
 	)
 	// inode may be an existing inode with an existing embedder.  Regardless,
 	// update the underlying fsnode.T.
@@ -177,4 +151,84 @@ func getCacheTimeout(any interface{}) time.Duration {
 		return 365 * 24 * time.Hour
 	}
 	return cacheableFor
+}
+
+func mode(n fsnode.T) uint32 {
+	switch n.(type) {
+	case fsnode.Parent:
+		return syscall.S_IFDIR
+	case fsnode.Leaf:
+		return syscall.S_IFREG
+	default:
+		log.Panicf("invalid node type: %T", n)
+		panic("unreachable")
+	}
+}
+
+// readdirplusCache caches nodes for calls to Lookup that go-fuse issues when
+// servicing READDIRPLUS.  To handle READDIRPLUS, go-fuse interleaves LOOKUP
+// calls for each directory entry.  dirStream populates this cache with the
+// last returned entry so that it can be used in Lookup, saving a possibly
+// costly (fsnode.Parent).Child call.
+type readdirplusCache struct {
+	// mu is used to provide exclusive access to the fields below.
+	mu sync.Mutex
+	// m maps child node names to the set of cached nodes for each name.  The
+	// calls to Lookup do not indicate whether they are for a READDIRPLUS, so
+	// if there are two dirStream instances which each cached a node for a
+	// given name, Lookup will use an arbitrary node in the cache, as we don't
+	// know which Lookup is associated with which dirStream.  This might cause
+	// transiently stale information but keeps the implementation simple.
+	m map[string][]fsnode.T
+}
+
+// Put puts a node n in the cache.
+func (c *readdirplusCache) Put(n fsnode.T) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil {
+		c.m = make(map[string][]fsnode.T)
+	}
+	name := n.Name()
+	c.m[name] = append(c.m[name], n)
+}
+
+// Get gets a node in the cache for the given name.  If no node is cached,
+// returns nil.
+func (c *readdirplusCache) Get(name string) fsnode.T {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil {
+		return nil
+	}
+	ns, ok := c.m[name]
+	if !ok {
+		return nil
+	}
+	return ns[0]
+}
+
+// Drop drops the node n from the cache.  n must have been previously added as
+// an entry for name using Put.
+func (c *readdirplusCache) Drop(n fsnode.T) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	name := n.Name()
+	ns, _ := c.m[name]
+	if len(ns) == 1 {
+		delete(c.m, name)
+		return
+	}
+	var dropIndex int
+	for i := range ns {
+		if n == ns[i] {
+			dropIndex = i
+			break
+		}
+	}
+	last := len(ns) - 1
+	ns[dropIndex] = ns[last]
+	ns[last] = nil
+	ns = ns[:last]
+	c.m[name] = ns
 }
