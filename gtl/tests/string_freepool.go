@@ -32,8 +32,8 @@
 // //go:nosplit
 // func runtime_procUnpin()
 //
-// //go:linkname fastrandn sync.fastrandn
-// func fastrandn(n uint32) uint32
+// //go:linkname fastrand sync.fastrand
+// func fastrand() uint32
 //
 // 2. An empty .s file.
 
@@ -128,7 +128,7 @@ func (p *StringsFreePool) Put(x []string) {
 		// queues to log(log(#queues)) .
 		//
 		// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf
-		l2 := &p.local[int(fastrandn(uint32(len(p.local))))]
+		l2 := &p.local[int(fastrand())%len(p.local)]
 		lSize := atomic.LoadInt64(&l.sharedSize)
 		l2Size := atomic.LoadInt64(&l2.sharedSize)
 		if l2Size < lSize {
