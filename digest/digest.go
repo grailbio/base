@@ -8,6 +8,7 @@
 package digest
 
 import (
+	"bufio"
 	"bytes"
 	"crypto"
 	"crypto/rand"
@@ -436,27 +437,43 @@ func (d Digester) Rand(r *mathrand.Rand) Digest {
 	return dg
 }
 
-// NewWriter returns a Writer that can be used to compute
-// Digests of long inputs.
+// NewWriter returns a Writer that can be used to compute Digests of long inputs.
 func (d Digester) NewWriter() Writer {
-	return Writer{crypto.Hash(d), crypto.Hash(d).New()}
+	hw := crypto.Hash(d).New()
+	return Writer{h: crypto.Hash(d), hw: hw, w: bufio.NewWriter(hw)}
+}
+
+const digesterBufferSize = 256
+
+// NewWriterShort returns a Writer that can be used to compute Digests of short inputs (ie, order of KBs)
+func (d Digester) NewWriterShort() Writer {
+	hw := crypto.Hash(d).New()
+	return Writer{h: crypto.Hash(d), hw: hw, w: bufio.NewWriterSize(hw, digesterBufferSize)}
 }
 
 // Writer provides an io.Writer to which digested bytes are
 // written and from which a Digest is produced.
 type Writer struct {
 	h crypto.Hash
-	w hash.Hash
+	hw hash.Hash
+	w *bufio.Writer
 }
 
 func (d Writer) Write(p []byte) (n int, err error) {
 	return d.w.Write(p)
 }
 
+func (d Writer) WriteString(s string) (n int, err error) {
+	return d.w.WriteString(s)
+}
+
 // Digest produces the current Digest of the Writer.
 // It does not reset its internal state.
 func (d Writer) Digest() Digest {
-	return New(d.h, d.w.Sum(nil))
+	if err := d.w.Flush(); err != nil {
+		panic(fmt.Sprintf("digest.Digest.Flush: %v", err))
+	}
+	return New(d.h, d.hw.Sum(nil))
 }
 
 // WriteDigest is a convenience function to write a (binary)
