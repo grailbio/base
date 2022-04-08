@@ -117,11 +117,16 @@ func (k Kind) String() string {
 }
 
 var kindErrnos = map[Kind]syscall.Errno{
-	Canceled:     syscall.EINTR,
-	Timeout:      syscall.ETIMEDOUT,
-	NotExist:     syscall.ENOENT,
-	NotAllowed:   syscall.EACCES,
-	NotSupported: syscall.ENOSYS,
+	Canceled:   syscall.EINTR,
+	Timeout:    syscall.ETIMEDOUT,
+	NotExist:   syscall.ENOENT,
+	NotAllowed: syscall.EACCES,
+	// We map to ENOTSUP instead of ENOSYS, as ENOTSUP is more granular,
+	// signifying that there may be configurations of a functionality that may
+	// be supported. ENOSYS, in contrast, signals that an entire
+	// function(ality) is not supported. If we need to express the distinction
+	// in the future, we can add a new kind.
+	NotSupported: syscall.ENOTSUP,
 	Exists:       syscall.EEXIST,
 	Unavailable:  syscall.EAGAIN,
 	Invalid:      syscall.EINVAL,
