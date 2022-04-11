@@ -67,7 +67,7 @@ func finalizeHandle(h *readerHandle) {
 // TODO: Consider exposing more public APIs like this fsnode.Leaf -> fsnode.Parent and/or
 // *zip.Reader -> fsnode.Parent.
 func parentFromLeaf(ctx context.Context, parentInfo fsnode.FileInfo, zipLeaf fsnode.Leaf) (fsnode.Parent, error) {
-	zipFile, err := zipLeaf.Open(ctx)
+	zipFile, err := fsnode.Open(ctx, zipLeaf)
 	if err != nil {
 		return nil, errors.E(err, "opening for unzip")
 	}
@@ -80,7 +80,7 @@ func parentFromLeaf(ctx context.Context, parentInfo fsnode.FileInfo, zipLeaf fsn
 	}
 	rAt, ok := zipFile.(ioctx.ReaderAt)
 	if !ok {
-		log.Info.Printf("zipfs: random access not supported: %s, returning empty dir", zipLeaf.Name())
+		log.Info.Printf("zipfs: random access not supported: %s, returning empty dir", zipLeaf.Info().Name())
 		// TODO: Some less efficient fallback path? Try seeking?
 		return nil, nil
 	}
@@ -93,7 +93,7 @@ func parentFromLeaf(ctx context.Context, parentInfo fsnode.FileInfo, zipLeaf fsn
 		if stderrors.Is(err, zip.ErrFormat) ||
 			stderrors.Is(err, zip.ErrAlgorithm) ||
 			stderrors.Is(err, zip.ErrChecksum) {
-			log.Info.Printf("zipfs: not a valid zip file: %s, returning empty dir", zipLeaf.Name())
+			log.Info.Printf("zipfs: not a valid zip file: %s, returning empty dir", zipLeaf.Info().Name())
 			return nil, nil
 		}
 		return nil, errors.E(err, "initializing zip reader")
@@ -163,7 +163,7 @@ type zipFileLeafFile struct {
 	fileCloser ioctx.Closer
 }
 
-func (z zipFileLeaf) Open(ctx context.Context) (fsctx.File, error) {
+func (z zipFileLeaf) OpenFile(ctx context.Context, flag int) (fsctx.File, error) {
 	var fileEntry *zip.File
 	for _, f := range z.r.File {
 		if f.Name == z.zipName {
@@ -190,7 +190,7 @@ func (z zipFileLeaf) Open(ctx context.Context) (fsctx.File, error) {
 		return nil, errors.E(errors.NotSupported,
 			fmt.Sprintf("unsupported method: %d for: %s", fileEntry.Method, fileEntry.Name))
 	}
-	zipFile, err := z.r.leaf.Open(ctx)
+	zipFile, err := fsnode.Open(ctx, z.r.leaf)
 	if err != nil {
 		return nil, err
 	}

@@ -130,7 +130,7 @@ func TestReadCancel(t *testing.T) {
 	require.Equal(t, 1, len(children))
 	fLeaf := children[0].(fsnode.Leaf)
 
-	f, err := fLeaf.Open(ctx)
+	f, err := fsnode.Open(ctx, fLeaf)
 	require.NoError(t, err)
 
 	// Set up read blocking.
@@ -180,8 +180,8 @@ type pausingLeaf struct {
 }
 
 func (*pausingLeaf) FSNodeT() {}
-func (p *pausingLeaf) Open(ctx context.Context) (fsctx.File, error) {
-	f, err := p.Leaf.Open(ctx)
+func (p *pausingLeaf) OpenFile(ctx context.Context, flag int) (fsctx.File, error) {
+	f, err := fsnode.Open(ctx, p.Leaf)
 	return pausingFile{p, f}, err
 }
 

@@ -64,7 +64,7 @@ func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 
 func (n *dirInode) Getattr(ctx context.Context, _ fs.FileHandle, a *fuse.AttrOut) (errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
-	setAttrFromFileInfo(&a.Attr, n.n)
+	setAttrFromFileInfo(&a.Attr, n.n.Info())
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
 }
@@ -94,7 +94,7 @@ func (n *dirInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttr
 		}
 	}()
 
-	setAttrFromFileInfo(&a.Attr, n.n)
+	setAttrFromFileInfo(&a.Attr, n.n.Info())
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
 }
@@ -121,7 +121,7 @@ func (n *dirInode) newInode(ctx context.Context, fsNode fsnode.T) *fs.Inode {
 
 func setEntryOut(out *fuse.EntryOut, ino uint64, n fsnode.T) {
 	out.Ino = ino
-	setAttrFromFileInfo(&out.Attr, n)
+	setAttrFromFileInfo(&out.Attr, n.Info())
 	cacheTimeout := getCacheTimeout(n)
 	out.SetEntryTimeout(cacheTimeout)
 	out.SetAttrTimeout(cacheTimeout)
@@ -189,7 +189,7 @@ func (c *readdirplusCache) Put(n fsnode.T) {
 	if c.m == nil {
 		c.m = make(map[string][]fsnode.T)
 	}
-	name := n.Name()
+	name := n.Info().Name()
 	c.m[name] = append(c.m[name], n)
 }
 
@@ -213,7 +213,7 @@ func (c *readdirplusCache) Get(name string) fsnode.T {
 func (c *readdirplusCache) Drop(n fsnode.T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	name := n.Name()
+	name := n.Info().Name()
 	ns, _ := c.m[name]
 	if len(ns) == 1 {
 		delete(c.m, name)
@@ -245,7 +245,7 @@ func stableAttr(parent fs.InodeEmbedder, n fsnode.T) fs.StableAttr {
 	}
 	return fs.StableAttr{
 		Mode: mode,
-		Ino:  hashIno(parent, n.Name()),
+		Ino:  hashIno(parent, n.Info().Name()),
 	}
 }
 

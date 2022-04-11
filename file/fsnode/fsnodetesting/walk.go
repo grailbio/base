@@ -68,21 +68,22 @@ func (w Walker) WalkContents(ctx context.Context, t testing.TB, node fsnode.T) T
 		children, err := fsnode.IterateAll(ctx, n.Children())
 		require.NoError(t, err)
 		for _, child := range children {
-			if _, ok := w.IgnoredNames[child.Name()]; ok {
+			name := child.Info().Name()
+			if _, ok := w.IgnoredNames[name]; ok {
 				continue
 			}
-			_, collision := dir[child.Name()]
-			require.Falsef(t, collision, "name %q is repeated", child.Name())
-			dir[child.Name()] = w.WalkContents(ctx, t, child)
+			_, collision := dir[name]
+			require.Falsef(t, collision, "name %q is repeated", name)
+			dir[name] = w.WalkContents(ctx, t, child)
 		}
 		if w.Info {
-			return InfoT{fsnode.CopyFileInfo(n), dir}
+			return InfoT{fsnode.CopyFileInfo(n.Info()), dir}
 		}
 		return dir
 	case fsnode.Leaf:
 		leaf := LeafReadAll(ctx, t, n)
 		if w.Info {
-			return InfoT{fsnode.CopyFileInfo(n), leaf}
+			return InfoT{fsnode.CopyFileInfo(n.Info()), leaf}
 		}
 		return leaf
 	}
@@ -91,7 +92,7 @@ func (w Walker) WalkContents(ctx context.Context, t testing.TB, node fsnode.T) T
 }
 
 func LeafReadAll(ctx context.Context, t testing.TB, n fsnode.Leaf) []byte {
-	file, err := n.Open(ctx)
+	file, err := fsnode.Open(ctx, n)
 	require.NoError(t, err)
 	defer func() { assert.NoError(t, file.Close(ctx)) }()
 	content, err := ioutil.ReadAll(ioctx.ToStdReader(ctx, file))

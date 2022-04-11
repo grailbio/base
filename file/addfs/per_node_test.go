@@ -42,7 +42,7 @@ func TestPerNodeFuncs(t *testing.T) {
 						assert.NoError(t, err)
 						var names []string
 						for _, child := range children {
-							names = append(names, child.Name())
+							names = append(names, child.Info().Name())
 						}
 						sort.Strings(names)
 						return []fsnode.T{
@@ -106,7 +106,7 @@ func TestPerNodeFuncs(t *testing.T) {
 		n := MakeT(t, "", root).(fsnode.Parent)
 		n = ApplyPerNodeFuncs(n, NewPerNodeFunc(
 			func(_ context.Context, node fsnode.T) ([]fsnode.T, error) {
-				return nil, fmt.Errorf("func was called: %q", node.Name())
+				return nil, fmt.Errorf("func was called: %q", node.Info().Name())
 			},
 		))
 		got := Walker{

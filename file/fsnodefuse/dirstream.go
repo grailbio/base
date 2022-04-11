@@ -66,7 +66,7 @@ func (d *dirStream) Next() (_ fuse.DirEntry, errno syscall.Errno) {
 	}
 	d.prev = next
 	d.dir.readdirplusCache.Put(next)
-	name := next.Name()
+	name := next.Info().Name()
 	return fuse.DirEntry{
 		Name: name,
 		Mode: mode(next),

@@ -5,22 +5,26 @@ import (
 	"context"
 	"os"
 
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/ioctx/fsctx"
 )
 
 type funcLeaf struct {
 	FileInfo
-	open func(ctx context.Context) (fsctx.File, error)
+	// open is called when OpenFile is called. See Leaf.OpenFile.
+	open func(context.Context, int) (fsctx.File, error)
 }
 
 // FuncLeaf constructs a Leaf from an open function.
 // It's invoked every time; implementations should do their own caching if desired.
-func FuncLeaf(info FileInfo, open func(ctx context.Context) (fsctx.File, error)) Leaf {
+func FuncLeaf(info FileInfo, open func(ctx context.Context, flag int) (fsctx.File, error)) Leaf {
 	return funcLeaf{info, open}
 }
-func (l funcLeaf) Open(ctx context.Context) (fsctx.File, error) { return l.open(ctx) }
-func (l funcLeaf) FSNodeT()                                     {}
+func (l funcLeaf) OpenFile(ctx context.Context, flag int) (fsctx.File, error) {
+	return l.open(ctx, flag)
+}
+func (l funcLeaf) FSNodeT() {}
 
 type (
 	readerAtLeaf struct {
@@ -37,8 +41,10 @@ type (
 // Cacheability of both metadata and content is governed by info.
 func ReaderAtLeaf(info FileInfo, r ioctx.ReaderAt) Leaf { return readerAtLeaf{info, r} }
 
-func (r readerAtLeaf) Open(context.Context) (fsctx.File, error) { return &readerAtFile{r, 0}, nil }
-func (l readerAtLeaf) FSNodeT()                                 {}
+func (r readerAtLeaf) OpenFile(context.Context, int) (fsctx.File, error) {
+	return &readerAtFile{r, 0}, nil
+}
+func (l readerAtLeaf) FSNodeT() {}
 
 func (f *readerAtFile) Stat(context.Context) (os.FileInfo, error) {
 	if f.ReaderAt == nil {
@@ -53,6 +59,9 @@ func (f *readerAtFile) Read(ctx context.Context, dst []byte) (int, error) {
 	n, err := f.ReadAt(ctx, dst, f.off)
 	f.off += int64(n)
 	return n, err
+}
+func (f *readerAtFile) Write(context.Context, []byte) (int, error) {
+	return 0, errors.E(errors.NotSupported, f.Name(), "is read-only")
 }
 func (f *readerAtFile) Close(context.Context) error {
 	if f.ReaderAt == nil {

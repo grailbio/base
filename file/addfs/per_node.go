@@ -86,8 +86,10 @@ var (
 func ApplyPerNodeFuncs(original fsnode.Parent, fns ...PerNodeFunc) fsnode.Parent {
 	fns = append([]PerNodeFunc{}, fns...)
 	adds := perNodeAdds{
-		fsnode.CopyFileInfo(original).WithName(addsDirName),
-		original, fns}
+		FileInfo: fsnode.CopyFileInfo(original.Info()).WithName(addsDirName),
+		original: original,
+		fns:      fns,
+	}
 	return &perNodeImpl{original, fns, &adds}
 }
 
@@ -116,6 +118,7 @@ func (n *perNodeImpl) Children() fsnode.Iterator {
 // perNodeAdds is the .../ Parent. It has a child (directory) for each original child (both
 // directories and files). The children contain the PerNodeFunc.Apply outputs.
 type perNodeAdds struct {
+	fsnode.ParentReadOnly
 	fsnode.FileInfo
 	original fsnode.Parent
 	fns      []PerNodeFunc
@@ -142,11 +145,12 @@ func (n *perNodeAdds) Children() fsnode.Iterator {
 func (n *perNodeAdds) FSNodeT() {}
 
 func (n *perNodeAdds) newAddsForChild(original fsnode.T) fsnode.Parent {
+	originalInfo := original.Info()
 	return fsnode.NewParent(
-		fsnode.NewDirInfo(original.Name()).
-			WithModTime(original.ModTime()).
+		fsnode.NewDirInfo(originalInfo.Name()).
+			WithModTime(originalInfo.ModTime()).
 			// Derived directory must be executable to be usable, even if original file wasn't.
-			WithModePerm(original.Mode().Perm()|0111).
+			WithModePerm(originalInfo.Mode().Perm()|0111).
 			WithCacheableFor(fsnode.CacheableFor(original)),
 		fsnode.FuncChildren(func(ctx context.Context) ([]fsnode.T, error) {
 			adds := make(map[string]fsnode.T)
@@ -156,11 +160,12 @@ func (n *perNodeAdds) newAddsForChild(original fsnode.T) fsnode.Parent {
 					return nil, fmt.Errorf("addfs: error running func %v: %w", fn, err)
 				}
 				for _, add := range fnAdds {
-					if _, exists := adds[add.Name()]; exists {
+					name := add.Info().Name()
+					if _, exists := adds[name]; exists {
 						// TODO: Consider returning an error here. Or merging the added trees?
-						log.Error.Printf("addfs %s: conflict for added name: %s", original.Name(), add.Name())
+						log.Error.Printf("addfs %s: conflict for added name: %s", originalInfo.Name(), name)
 					}
-					adds[add.Name()] = add
+					adds[name] = add
 				}
 			}
 			wrapped := make([]fsnode.T, 0, len(adds))

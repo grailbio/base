@@ -108,7 +108,7 @@ func withMounted(t *testing.T, root fsnode.T, f func(rootPath string)) {
 func checkDir(t *testing.T, children []fsnode.T, path string) (err error) {
 	var want []string
 	for _, c := range children {
-		want = append(want, c.Name())
+		want = append(want, c.Info().Name())
 	}
 	f, err := os.Open(path)
 	if err != nil {

@@ -14,7 +14,7 @@ func NewParent(info FileInfo, gen ChildrenGenerator) Parent {
 	if !info.IsDir() {
 		log.Panicf("FileInfo has file mode, require directory: %#v", info)
 	}
-	return parentImpl{info, gen}
+	return parentImpl{FileInfo: info, gen: gen}
 }
 
 type (
@@ -42,6 +42,7 @@ func ConstChildren(children ...T) ChildrenGenerator {
 func (c childrenGenConst) GenerateChildren(ctx context.Context) ([]T, error) { return c, nil }
 
 type parentImpl struct {
+	ParentReadOnly
 	FileInfo
 	gen ChildrenGenerator
 }
@@ -52,7 +53,7 @@ func (n parentImpl) Child(ctx context.Context, name string) (T, error) {
 		return nil, err
 	}
 	for _, child := range children {
-		if child.Name() == name {
+		if child.Info().Name() == name {
 			return child, nil
 		}
 	}
@@ -63,4 +64,4 @@ func (n parentImpl) Children() Iterator {
 	return NewLazyIterator(n.gen.GenerateChildren)
 }
 
-func (l parentImpl) FSNodeT() {}
+func (n parentImpl) FSNodeT() {}

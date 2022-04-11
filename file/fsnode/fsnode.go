@@ -33,7 +33,7 @@ import (
 type (
 	// T is a Parent or Leaf. A T that is not either of those is invalid.
 	T interface {
-		// FileInfo provides immediately-available information. A subset of fields must be accurate:
+		// Info provides immediately-available information. A subset of fields must be accurate:
 		//   Name
 		//   Mode&os.ModeType
 		//   IsDir
@@ -44,14 +44,14 @@ type (
 		// Leaf.Open().Stat() gets complete information. That returned FileInfo must have the same
 		// values for the fields listed above. The others can change if better information is
 		// available.
-		// TODO: Specify something about embedded FileInfo updating after a Stat call?
-		os.FileInfo
+		// TODO: Specify something about Info()'s return changing after a Stat call?
+		Info() os.FileInfo
 		// FSNodeT distinguishes T from os.FileInfo. It does nothing.
 		FSNodeT()
 	}
 	// Parent is a T that has zero or more child Ts.
 	Parent interface {
-		// T.FileInfo must be consistent with directory (mode and IsDir).
+		// T.Info must be consistent with directory (mode and IsDir).
 		T
 		// Child returns the named child. Returns nil, os.ErrNotExist if no such child exists.
 		// name is not a path and must not contain '/'. It must satisfy fs.ValidPath, too.
@@ -65,6 +65,20 @@ type (
 		// Children takes no Context; it's expected to simply construct a view and return errors to
 		// callers when they choose an Iterator operation.
 		Children() Iterator
+		// AddChildLeaf adds a child leaf to this parent, returning the new
+		// leaf and an open file for the leaf's contents. The behavior of name
+		// collisions may vary by implementation. It may be convenient to embed
+		// ParentReadOnly if your Parent implementation is read-only.
+		// TODO: Include mode?
+		AddChildLeaf(_ context.Context, name string, flags uint32) (Leaf, fsctx.File, error)
+		// AddChildParent adds a child parent to this parent, returning the new
+		// parent. The behavior of name collisions may vary by implementation.
+		// It may be convenient to embed ParentReadOnly if your Parent
+		// implementation is read-only.
+		AddChildParent(_ context.Context, name string) (Parent, error)
+		// RemoveChild removes a child. It may be convenient to embed
+		// ParentReadOnly if your Parent implementation is read-only.
+		RemoveChild(_ context.Context, name string) error
 	}
 	// Iterator yields child nodes iteratively.
 	//
@@ -79,13 +93,14 @@ type (
 	// Leaf is a T corresponding to a fsctx.File. It can be opened any number of times and must
 	// allow concurrent calls (it may lock internally if necessary).
 	Leaf interface {
-		// T.FileInfo must be consistent with regular file (mode and !IsDir).
+		// T is implementation of common node operations. The FileInfo returned
+		// by T.Info must be consistent with a regular file (mode and !IsDir).
 		T
-		// Open opens the file. File.Stat()'s result must be consistent with Leaf.FileInfo;
-		// see T.FileInfo.
-		Open(context.Context) (fsctx.File, error)
+		// OpenFile opens the file. File.Stat()'s result must be consistent
+		// with T.Info. flag holds the flag bits, specified the same as those
+		// passed to os.OpenFile.See os.O_*.
+		OpenFile(ctx context.Context, flag int) (fsctx.File, error)
 	}
-
 	// Cacheable optionally lets users make use of caching. The cacheable data depends on
 	// which type Cacheable is defined on:
 	//   * On any T, FileInfo.
@@ -115,6 +130,11 @@ func CacheableFor(obj interface{}) time.Duration {
 }
 func NewCacheable(d time.Duration) Cacheable       { return cacheableFor{d} }
 func (c cacheableFor) CacheableFor() time.Duration { return c.Duration }
+
+// Open opens the file of a leaf in (the commonly desired) read-only mode.
+func Open(ctx context.Context, n Leaf) (fsctx.File, error) {
+	return n.OpenFile(ctx, os.O_RDONLY)
+}
 
 // IterateFull reads the full len(dst) nodes from Iterator. If actual number read is less than
 // len(dst), error is non-nil. Error is io.EOF for EOF. Unlike io.ReadFull, this doesn't return
@@ -153,4 +173,27 @@ func IterateAll(ctx context.Context, iter Iterator) ([]T, error) {
 
 func iteratorEOFError(iter Iterator) error {
 	return errors.E(errors.Precondition, fmt.Sprintf("BUG: iterator.Next (%T) returned element+EOF", iter))
+}
+
+// ParentReadOnly is a partial implementation of Parent interface functions
+// that returns NotSupported errors for all write operations. It may be
+// convenient to embed if your Parent implementation is read-only.
+//
+//  type MyParent struct {
+//  	fsnode.ParentReadOnly
+//  }
+//
+//  func (MyParent) ChildChild(context.Context, string) (T, error) { ... }
+//  func (MyParent) Children() Iterator { ... }
+//  // No need to implement write functions.
+type ParentReadOnly struct{}
+
+func (ParentReadOnly) AddChildLeaf(context.Context, string, uint32) (Leaf, fsctx.File, error) {
+	return nil, nil, errors.E(errors.NotSupported)
+}
+func (ParentReadOnly) AddChildParent(context.Context, string) (Parent, error) {
+	return nil, errors.E(errors.NotSupported)
+}
+func (ParentReadOnly) RemoveChild(context.Context, string) error {
+	return errors.E(errors.NotSupported)
 }

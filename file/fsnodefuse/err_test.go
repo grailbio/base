@@ -28,11 +28,11 @@ func TestPanicOpen(t *testing.T) {
 		fsnode.ConstChildren(
 			fsnode.FuncLeaf(
 				info,
-				func(ctx context.Context) (fsctx.File, error) {
+				func(ctx context.Context, flag int) (fsctx.File, error) {
 					if atomic.AddInt32(&panicked, 1) == 1 {
 						panic("it's a panic!")
 					}
-					return fsnode.ConstLeaf(info, []byte(success)).Open(ctx)
+					return fsnode.Open(ctx, fsnode.ConstLeaf(info, []byte(success)))
 				},
 			),
 		),

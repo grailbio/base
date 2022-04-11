@@ -5,8 +5,10 @@ import (
 	"time"
 )
 
-// FileInfo implements os.FileInfo. Instances are immutable but convenient copy-and-set methods
-// are provided for some fields.
+// FileInfo implements os.FileInfo. Instances are immutable but convenient
+// copy-and-set methods are provided for some fields. FileInfo implements
+// (T).Info, so implementations of T can conveniently embed a FileInfo for
+// simple cases, e.g. if the information is immutable.
 type FileInfo struct {
 	name         string
 	size         int64
@@ -14,6 +16,11 @@ type FileInfo struct {
 	mod          time.Time
 	sys          interface{}
 	cacheableFor time.Duration
+}
+
+// Info implements (T).Info.
+func (fi FileInfo) Info() os.FileInfo {
+	return fi
 }
 
 // NewDirInfo constructs FileInfo for a directory.

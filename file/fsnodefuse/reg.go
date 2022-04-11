@@ -76,7 +76,7 @@ func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, o
 	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
 
-	file, err := n.n.Open(ctx)
+	file, err := n.n.OpenFile(ctx, int(inFlags))
 	if err != nil {
 		return nil, 0, errToErrno(err)
 	}
@@ -100,7 +100,7 @@ func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut
 		}
 	}
 
-	setAttrFromFileInfo(&a.Attr, n.n)
+	setAttrFromFileInfo(&a.Attr, n.n.Info())
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
 }
@@ -114,7 +114,7 @@ func (n *regInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttr
 	}
 	// TODO(josh): Is this the right invalidation, and does it work? Maybe page cache only matters
 	// if we set some other flags in open or read to enable it?
-	setAttrFromFileInfo(&a.Attr, n.n)
+	setAttrFromFileInfo(&a.Attr, n.n.Info())
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
 }
