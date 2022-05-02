@@ -30,10 +30,12 @@ type dirInode struct {
 var (
 	_ fs.InodeEmbedder = (*dirInode)(nil)
 
-	_ fs.NodeReaddirer = (*dirInode)(nil)
-	_ fs.NodeLookuper  = (*dirInode)(nil)
+	_ fs.NodeCreater   = (*dirInode)(nil)
 	_ fs.NodeGetattrer = (*dirInode)(nil)
+	_ fs.NodeLookuper  = (*dirInode)(nil)
+	_ fs.NodeReaddirer = (*dirInode)(nil)
 	_ fs.NodeSetattrer = (*dirInode)(nil)
+	_ fs.NodeUnlinker  = (*dirInode)(nil)
 )
 
 func (n *dirInode) Readdir(ctx context.Context) (_ fs.DirStream, errno syscall.Errno) {
@@ -97,6 +99,51 @@ func (n *dirInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttr
 	setAttrFromFileInfo(&a.Attr, n.n.Info())
 	a.SetTimeout(getCacheTimeout(n.n))
 	return fs.OK
+}
+
+func (n *dirInode) Create(
+	ctx context.Context,
+	name string,
+	flags uint32,
+	mode uint32,
+	out *fuse.EntryOut,
+) (_ *fs.Inode, _ fs.FileHandle, _ uint32, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
+	if (mode & syscall.S_IFREG) == 0 {
+		return nil, nil, 0, syscall.EINVAL
+	}
+	leaf, f, err := n.n.AddChildLeaf(ctx, name, flags)
+	if err != nil {
+		return nil, nil, 0, errToErrno(err)
+	}
+	ino := hashIno(n, leaf.Info().Name())
+	embed := &regInode{n: leaf}
+	inode := n.NewInode(ctx, embed, fs.StableAttr{Mode: mode, Ino: ino})
+	h, err := makeHandle(embed, flags, f)
+	return inode, h, 0, errToErrno(err)
+}
+
+func (n *dirInode) Unlink(ctx context.Context, name string) syscall.Errno {
+	return errToErrno(n.n.RemoveChild(ctx, name))
+}
+
+func (n *dirInode) Mkdir(
+	ctx context.Context,
+	name string,
+	mode uint32,
+	out *fuse.EntryOut,
+) (_ *fs.Inode, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
+	p, err := n.n.AddChildParent(ctx, name)
+	if err != nil {
+		return nil, errToErrno(err)
+	}
+	embed := &dirInode{n: p}
+	mode |= syscall.S_IFDIR
+	ino := hashIno(n, name)
+	inode := n.NewInode(ctx, embed, fs.StableAttr{Mode: mode, Ino: ino})
+	setEntryOut(out, ino, p)
+	return inode, fs.OK
 }
 
 // newInode returns an inode that wraps fsNode.  The type of inode (embedder)

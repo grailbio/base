@@ -2,15 +2,11 @@ package fsnodefuse
 
 import (
 	"context"
-	"io"
+	"os"
 	"sync"
 	"syscall"
 
 	"github.com/grailbio/base/file/fsnode"
-	"github.com/grailbio/base/file/fsnodefuse/trailingbuf"
-	"github.com/grailbio/base/ioctx"
-	"github.com/grailbio/base/ioctx/fsctx"
-	"github.com/grailbio/base/ioctx/spliceio"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/sync/loadingcache"
 	"github.com/grailbio/base/sync/loadingcache/ctxloadingcache"
@@ -75,19 +71,12 @@ const maxReadAhead = 512 * 1024
 func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, outFlags uint32, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
-
 	file, err := n.n.OpenFile(ctx, int(inFlags))
 	if err != nil {
 		return nil, 0, errToErrno(err)
 	}
-	if f, ok := file.(spliceio.ReaderAt); ok {
-		return &spliceHandle{file, f, &n.cache}, 0, fs.OK
-	}
-	if f, ok := file.(ioctx.ReaderAt); ok {
-		return &readerAtHandle{file, f, &n.cache}, 0, fs.OK
-	}
-	readerAt := trailingbuf.New(file, maxReadAhead)
-	return defaultHandle{n, &readerAtHandle{file, readerAt, &n.cache}, readerAt}, 0, fs.OK
+	h, err := makeHandle(n, inFlags, file)
+	return h, 0, errToErrno(err)
 }
 
 func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut) (errno syscall.Errno) {
@@ -105,8 +94,24 @@ func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut
 	return fs.OK
 }
 
-func (n *regInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttrIn, a *fuse.AttrOut) (errno syscall.Errno) {
+func (n *regInode) Setattr(ctx context.Context, h fs.FileHandle, in *fuse.SetAttrIn, a *fuse.AttrOut) (errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
+	if h, ok := h.(fs.FileSetattrer); ok {
+		return h.Setattr(ctx, in, a)
+	}
+	if usize, ok := in.GetSize(); ok {
+		if usize != 0 {
+			// We only support setting the size to 0.
+			return syscall.ENOTSUP
+		}
+		f, err := n.n.OpenFile(ctx, os.O_WRONLY|os.O_TRUNC)
+		if err != nil {
+			return errToErrno(err)
+		}
+		if err = f.Close(ctx); err != nil {
+			return errToErrno(err)
+		}
+	}
 	n.cache.DeleteAll()
 	if errno := n.NotifyContent(0 /* offset */, 0 /* len, zero means all */); errno != fs.OK {
 		log.Error.Printf("regInode.Setattr %s: error from NotifyContent: %v", n.Path(nil), errno)
@@ -116,147 +121,5 @@ func (n *regInode) Setattr(ctx context.Context, _ fs.FileHandle, _ *fuse.SetAttr
 	// if we set some other flags in open or read to enable it?
 	setAttrFromFileInfo(&a.Attr, n.n.Info())
 	a.SetTimeout(getCacheTimeout(n.n))
-	return fs.OK
-}
-
-type spliceHandle struct {
-	f     fsctx.File
-	r     spliceio.ReaderAt
-	cache *loadingcache.Map
-}
-
-func (h *spliceHandle) Read(ctx context.Context, dst []byte, off int64) (_ fuse.ReadResult, errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	fd, fdSize, fdOff, err := h.r.SpliceReadAt(ctx, len(dst), off)
-	if err != nil {
-		return nil, errToErrno(err)
-	}
-	return fuse.ReadResultFd(fd, fdOff, fdSize), fs.OK
-}
-
-func (h *spliceHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	ctx = ctxloadingcache.With(ctx, h.cache)
-
-	info, err := h.f.Stat(ctx)
-	if err != nil {
-		return errToErrno(err)
-	}
-	a.FromStat(fuse.ToStatT(info))
-	a.SetTimeout(getCacheTimeout(h.f))
-	return fs.OK
-}
-
-func (h *spliceHandle) Release(ctx context.Context) (errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	if h.f == nil {
-		return syscall.EBADF
-	}
-	ctx = ctxloadingcache.With(ctx, h.cache)
-
-	err := h.f.Close(ctx)
-	h.f = nil
-	h.r = nil
-	h.cache = nil
-	return errToErrno(err)
-}
-
-type readerAtHandle struct {
-	f     fsctx.File
-	r     ioctx.ReaderAt
-	cache *loadingcache.Map
-}
-
-func (h *readerAtHandle) Read(ctx context.Context, dst []byte, off int64) (_ fuse.ReadResult, errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	ctx = ctxloadingcache.With(ctx, h.cache)
-
-	n, err := h.r.ReadAt(ctx, dst, off)
-	if err == io.EOF {
-		err = nil
-	}
-	return fuse.ReadResultData(dst[:n]), errToErrno(err)
-}
-
-func (h *readerAtHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	ctx = ctxloadingcache.With(ctx, h.cache)
-
-	info, err := h.f.Stat(ctx)
-	if err != nil {
-		return errToErrno(err)
-	}
-	setAttrFromFileInfo(&a.Attr, info)
-	a.SetTimeout(getCacheTimeout(h.f))
-	return fs.OK
-}
-
-func (h *readerAtHandle) Release(ctx context.Context) (errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	if h.f == nil {
-		return syscall.EBADF
-	}
-	ctx = ctxloadingcache.With(ctx, h.cache)
-
-	err := h.f.Close(ctx)
-	h.f = nil
-	h.r = nil
-	h.cache = nil
-	return errToErrno(err)
-}
-
-// defaultHandle is similar to readerAtHandle but also infers the size of the underlying stream
-// based on EOF.
-type defaultHandle struct {
-	n *regInode
-	*readerAtHandle
-	r *trailingbuf.ReaderAt
-}
-
-func (h defaultHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno syscall.Errno) {
-	defer handlePanicErrno(&errno)
-	ctx = ctxloadingcache.With(ctx, h.cache)
-
-	// Note: Implementations that don't know the exact data size in advance may used some fixed
-	// overestimate for size.
-	statInfo, err := h.f.Stat(ctx)
-	if err != nil {
-		return errToErrno(err)
-	}
-	info := fsnode.CopyFileInfo(statInfo)
-
-	localSize, localKnown, err := h.r.Size(ctx)
-	if err != nil {
-		return errToErrno(err)
-	}
-
-	h.n.defaultSizeMu.RLock()
-	sharedKnown := h.n.defaultSizeKnown
-	sharedSize := h.n.defaultSize
-	h.n.defaultSizeMu.RUnlock()
-
-	if localKnown && !sharedKnown {
-		// This may be the first handle to reach EOF. Update the shared data.
-		h.n.defaultSizeMu.Lock()
-		if !h.n.defaultSizeKnown {
-			h.n.defaultSizeKnown = true
-			h.n.defaultSize = localSize
-			sharedSize = localSize
-		} else {
-			sharedSize = h.n.defaultSize
-		}
-		h.n.defaultSizeMu.Unlock()
-		sharedKnown = true
-	}
-	if sharedKnown {
-		if localKnown && localSize != sharedSize {
-			log.Error.Printf(
-				"fsnodefuse.defaultHandle.Getattr: size-at-EOF mismatch: this handle: %d, earlier: %d",
-				localSize, sharedSize)
-			return syscall.EIO
-		}
-		info = info.WithSize(sharedSize)
-	}
-	setAttrFromFileInfo(&a.Attr, info)
 	return fs.OK
 }
