@@ -232,7 +232,7 @@ func (f *s3File) runRequest(ctx context.Context, req request) response {
 	case res := <-resCh:
 		return res
 	case <-ctx.Done():
-		return response{err: fmt.Errorf("request cancelled")}
+		return response{err: errors.E(errors.Canceled)}
 	}
 }
 

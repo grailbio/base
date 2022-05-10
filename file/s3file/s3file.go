@@ -54,7 +54,7 @@ func runRequest(ctx context.Context, handler func() response) response {
 	case res := <-ch:
 		return res
 	case <-ctx.Done():
-		return response{err: fmt.Errorf("request cancelled")}
+		return response{err: errors.E(errors.Canceled)}
 	}
 }
 

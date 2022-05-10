@@ -38,6 +38,8 @@ func annotate(err error, ids s3RequestIDs, retry *retryPolicy, args ...interface
 	// Code NotFound is not documented, but it's what the API actually returns.
 	case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NoSuchVersion", "NotFound":
 		return e(err, errors.NotExist)
+	case awsrequest.CanceledErrorCode:
+		return e(err, errors.Canceled)
 	case "AccessDenied":
 		return e(err, errors.NotAllowed)
 	case "InvalidRequest", "InvalidArgument", "EntityTooSmall", "EntityTooLarge", "KeyTooLong", "MethodNotAllowed":

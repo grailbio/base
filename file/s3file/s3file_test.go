@@ -2,7 +2,8 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-//+build !unit
+//go:build !unit
+// +build !unit
 
 package s3file_test
 
@@ -230,7 +231,7 @@ func TestTransientErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := impl.Stat(ctx, "s3://b/junk0.txt")
-	assert.Regexp(t, err, "request cancelled")
+	assert.True(t, errors.Is(errors.Canceled, err), "expected cancellation")
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -367,8 +368,8 @@ func TestCancellation(t *testing.T) {
 		defer cancel()
 		r := f.Reader(ctx)
 		_, err = ioutil.ReadAll(r)
-		assert.Regexp(t, err, "request cancelled")
-		assert.Regexp(t, f.Close(ctx), "request cancelled")
+		assert.True(t, errors.Is(errors.Canceled, err), "expected cancellation")
+		assert.True(t, errors.Is(errors.Canceled, f.Close(ctx)), "expected cancellation")
 	}
 }
 
