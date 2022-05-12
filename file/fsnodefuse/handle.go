@@ -109,7 +109,7 @@ func (h sizingHandle) Getattr(ctx context.Context, a *fuse.AttrOut) (errno sysca
 	if sharedKnown {
 		if localKnown && localSize != sharedSize {
 			log.Error.Printf(
-				"fsnodefuse.defaultHandle.Getattr: size-at-EOF mismatch: this handle: %d, earlier: %d",
+				"fsnodefuse.sizingHandle.Getattr: size-at-EOF mismatch: this handle: %d, earlier: %d",
 				localSize, sharedSize)
 			return syscall.EIO
 		}

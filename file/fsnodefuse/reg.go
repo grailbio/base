@@ -23,12 +23,12 @@ type regInode struct {
 	mu sync.Mutex
 	n  fsnode.Leaf
 
-	// defaultSize is a shared record of file size for all file handles of type defaultHandle
-	// created for this inode. The first defaultHandle to reach EOF (for its io.Reader) sets
+	// defaultSize is a shared record of file size for all file handles of type sizingHandle
+	// created for this inode. The first sizingHandle to reach EOF (for its io.Reader) sets
 	// defaultSizeKnown and defaultSize and after that all other handles will return the same size
 	// from Getattr calls.
 	//
-	// defaultHandle returns incorrect size information until the underlying Reader reaches EOF. The
+	// sizingHandle returns incorrect size information until the underlying Reader reaches EOF. The
 	// kernel issues concurrent reads to prepopulate the page cache, for performance, and also
 	// interleaves Getattr calls to confirm where EOF really is. Complicating matters, multiple open
 	// handles share the page cache, allowing situations where one handle has populated the page
@@ -37,7 +37,7 @@ type regInode struct {
 	// users keep going until the end). This seems to cause bugs where user programs think they got
 	// real data past EOF (which is probably just padded/zeros).
 	//
-	// To avoid this problem, all open defaultHandles share a size value, after first EOF.
+	// To avoid this problem, all open sizingHandles share a size value, after first EOF.
 	// TODO: Document more loudly the requirement that fsnode.Leaf.Open's files must return
 	// identical data (same size, same bytes) to avoid corrupt page cache interactions.
 	//
@@ -59,10 +59,10 @@ var (
 // maxReadAhead configures the kernel's maximum readahead for file handles on this FUSE mount
 // (via ConfigureMount) and our corresponding "trailing" buffer.
 //
-// Our defaultHandle implements Read operations for fsctx.File objects that don't support random
-// access or seeking. Generally this requires that the user reading such a file does so in-order.
-// However, the kernel attempts to optimize i/o speed by reading ahead into the page cache and to
-// do so it can issue concurrent reads for a few blocks ahead of the user's current position.
+// Our sizingHandle implements Read operations for read-only fsctx.File objects that don't support
+// random access or seeking. Generally this requires that the user reading such a file does so
+// in-order. However, the kernel attempts to optimize i/o speed by reading ahead into the page cache
+// and to do so it can issue concurrent reads for a few blocks ahead of the user's current position.
 // We respond to such requests from our trailing buffer.
 // TODO: Choose a value more carefully. This value was chosen fairly roughly based on some
 // articles/discussion that suggested this was a kernel default.
