@@ -6,6 +6,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/sync/loadingcache"
@@ -104,11 +105,19 @@ func (n *regInode) Setattr(ctx context.Context, h fs.FileHandle, in *fuse.SetAtt
 			// We only support setting the size to 0.
 			return syscall.ENOTSUP
 		}
-		f, err := n.n.OpenFile(ctx, os.O_WRONLY|os.O_TRUNC)
+		err := func() (err error) {
+			f, err := n.n.OpenFile(ctx, os.O_WRONLY|os.O_TRUNC)
+			if err != nil {
+				return errToErrno(err)
+			}
+			defer file.CloseAndReport(ctx, f, &err)
+			w, ok := f.(Writable)
+			if !ok {
+				return syscall.ENOTSUP
+			}
+			return w.Flush(ctx)
+		}()
 		if err != nil {
-			return errToErrno(err)
-		}
-		if err = f.Close(ctx); err != nil {
 			return errToErrno(err)
 		}
 	}

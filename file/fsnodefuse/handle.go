@@ -178,6 +178,9 @@ type (
 	Writable interface {
 		WriteAt(ctx context.Context, p []byte, off int64) (n int, err error)
 		Truncate(ctx context.Context, n int64) error
+		// Flush is called on (FileFlusher).Flush, i.e. on the close(2) call on
+		// a file descriptor.  Implementors can assume that no writes happen
+		// between Flush and (fsctx.File).Close.
 		Flush(ctx context.Context) error
 		Fsync(ctx context.Context) error
 	}
