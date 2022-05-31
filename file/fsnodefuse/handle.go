@@ -199,6 +199,7 @@ var (
 	_ fs.FileFlusher   = (*handle)(nil)
 	_ fs.FileFsyncer   = (*handle)(nil)
 	_ fs.FileGetattrer = (*handle)(nil)
+	_ fs.FileLseeker   = (*handle)(nil)
 	_ fs.FileReader    = (*handle)(nil)
 	_ fs.FileReleaser  = (*handle)(nil)
 	_ fs.FileSetattrer = (*handle)(nil)
@@ -258,6 +259,35 @@ func (h handle) Read(
 	}
 	ctx = ctxloadingcache.With(ctx, h.cache)
 	return h.r.Read(ctx, dst, off)
+}
+
+func (h handle) Lseek(
+	ctx context.Context,
+	off uint64,
+	whence uint32,
+) (_ uint64, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
+	if h.f == nil {
+		return 0, syscall.EBADF
+	}
+	// We expect this to only be called with {SEEK_DATA,SEEK_HOLE}.
+	// https://github.com/torvalds/linux/blob/v5.13/fs/fuse/file.c#L2619-L2648
+	const (
+		// Copied from https://github.com/torvalds/linux/blob/v5.13/include/uapi/linux/fs.h#L46-L47
+		SEEK_DATA = 3
+		SEEK_HOLE = 4
+	)
+	switch whence {
+	case SEEK_DATA:
+		return off, fs.OK // We don't support holes so current offset is correct.
+	case SEEK_HOLE:
+		info, err := h.f.Stat(ctx)
+		if err != nil {
+			return 0, errToErrno(err)
+		}
+		return uint64(info.Size()), fs.OK
+	}
+	return 0, syscall.ENOTSUP
 }
 
 func (h handle) Write(
