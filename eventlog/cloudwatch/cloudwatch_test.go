@@ -110,7 +110,7 @@ func TestEvent(t *testing.T) {
 
 	// Log events.
 	cw := &logsAPIFake{}
-	e := NewCloudWatchEventer(cw, testGroup, testStream)
+	e := NewEventer(cw, testGroup, testStream)
 	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("k%d", i)
 		e.Event(typ, k, i)
@@ -142,7 +142,7 @@ func TestBufferFull(t *testing.T) {
 
 	// Log many events, overwhelming buffer.
 	cw := &logsAPIFake{}
-	e := NewCloudWatchEventer(cw, testGroup, testStream)
+	e := NewEventer(cw, testGroup, testStream)
 	for i := 0; i < N; i++ {
 		e.Event(typ, k, i)
 	}
@@ -160,7 +160,7 @@ func TestBufferFull(t *testing.T) {
 // to a given log stream, but we try to recover anyway.
 func TestInvalidSequenceToken(t *testing.T) {
 	cw := &logsAPIFake{}
-	e := NewCloudWatchEventer(cw, testGroup, testStream)
+	e := NewEventer(cw, testGroup, testStream)
 
 	e.Event(typ, k, 0)
 	e.sync()
@@ -182,7 +182,7 @@ func TestInvalidSequenceToken(t *testing.T) {
 }
 
 // assertOrdered asserts that the values of field k are increasing for events.
-// This is how we construct events sent to the CloudWatchEventer, so we use this
+// This is how we construct events sent to the Eventer, so we use this
 // verify that the events sent to the CloudWatch Logs API are ordered correctly.
 func assertOrdered(t *testing.T, events []*cloudwatchlogs.InputLogEvent) {
 	t.Helper()

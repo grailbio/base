@@ -61,13 +61,13 @@ func init() {
 				// name and time for some measure of uniqueness and usefulness.
 				stream = strings.Join([]string{readExec(), time.Now().Format(layout)}, "~")
 			}
-			return NewCloudWatchEventer(cw, group, stream), nil
+			return NewEventer(cw, group, stream), nil
 		}
 	})
 }
 
-// CloudWatchEventer logs events to CloudWatch Logs.
-type CloudWatchEventer struct {
+// Eventer logs events to CloudWatch Logs.
+type Eventer struct {
 	client cloudwatchlogsiface.CloudWatchLogsAPI
 	group  string
 	stream string
@@ -104,10 +104,10 @@ type event struct {
 	fieldPairs []interface{}
 }
 
-// NewCloudWatchEventer returns a *CloudWatchLogger. It does create the group or
+// NewEventer returns a *CloudWatchLogger. It does create the group or
 // stream until the first event is logged.
-func NewCloudWatchEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, stream string) *CloudWatchEventer {
-	eventer := &CloudWatchEventer{
+func NewEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, stream string) *Eventer {
+	eventer := &Eventer{
 		client:    client,
 		group:     group,
 		stream:    stream,
@@ -122,18 +122,18 @@ func NewCloudWatchEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, s
 	return eventer
 }
 
-func (c *CloudWatchEventer) String() string {
+func (c *Eventer) String() string {
 	return fmt.Sprintf("CloudWatch Logs: %s/%s", c.group, c.stream)
 }
 
 // Event implements Eventer.
-func (c *CloudWatchEventer) Event(typ string, fieldPairs ...interface{}) {
+func (c *Eventer) Event(typ string, fieldPairs ...interface{}) {
 	select {
 	case c.eventc <- event{timestamp: time.Now(), typ: typ, fieldPairs: fieldPairs}:
 		atomic.StoreInt32(&c.loggedFullBuffer, 0)
 	default:
 		if atomic.LoadInt32(&c.loggedFullBuffer) == 0 {
-			log.Error.Printf("CloudWatchEventer: dropping log events: buffer full")
+			log.Error.Printf("Eventer: dropping log events: buffer full")
 			atomic.StoreInt32(&c.loggedFullBuffer, 1)
 		}
 	}
@@ -141,11 +141,13 @@ func (c *CloudWatchEventer) Event(typ string, fieldPairs ...interface{}) {
 
 // Init initializes the group and stream used by c. It will only attempt
 // initialization once, subsequently returning the result of that attempt.
-func (c *CloudWatchEventer) Init(ctx context.Context) error {
+func (c *Eventer) Init(ctx context.Context) error {
+	// TODO: Initialize with loadingcache.Value so concurrent Init()s each respect their own
+	// context's cancellation.
 	c.initOnce.Do(func() {
 		defer func() {
 			if c.initErr != nil {
-				log.Error.Printf("CloudWatchEventer: failed to initialize event log: %v", c.initErr)
+				log.Error.Printf("Eventer: failed to initialize event log: %v", c.initErr)
 			}
 		}()
 		var err error
@@ -176,18 +178,18 @@ func (c *CloudWatchEventer) Init(ctx context.Context) error {
 
 // sync syncs all buffered events to CloudWatch. This is mostly useful for
 // testing.
-func (c *CloudWatchEventer) sync() {
+func (c *Eventer) sync() {
 	c.syncc <- struct{}{}
 	<-c.syncDonec
 }
 
-func (c *CloudWatchEventer) Close() error {
+func (c *Eventer) Close() error {
 	c.cancel()
 	<-c.donec
 	return nil
 }
 
-func (c *CloudWatchEventer) loop(ctx context.Context) {
+func (c *Eventer) loop(ctx context.Context) {
 	var (
 		syncTimer      = time.NewTimer(syncInterval)
 		inputLogEvents []*cloudwatchlogs.InputLogEvent
@@ -215,7 +217,7 @@ func (c *CloudWatchEventer) loop(ctx context.Context) {
 			SequenceToken: c.sequenceToken,
 		})
 		if err != nil {
-			log.Error.Printf("CloudWatchEventer: PutLogEvents error: %v", err)
+			log.Error.Printf("Eventer: PutLogEvents error: %v", err)
 			if aerr, ok := err.(*cloudwatchlogs.InvalidSequenceTokenException); ok {
 				c.sequenceToken = aerr.ExpectedSequenceToken
 			}
@@ -226,11 +228,11 @@ func (c *CloudWatchEventer) loop(ctx context.Context) {
 	process := func(e event) {
 		s, err := marshal.Marshal(e.typ, e.fieldPairs)
 		if err != nil {
-			log.Error.Printf("CloudWatchEventer: dropping log event: %v", err)
+			log.Error.Printf("Eventer: dropping log event: %v", err)
 			return
 		}
 		if len(s) > maxSingleMessageSize {
-			log.Error.Printf("CloudWatchEventer: dropping log event: message too large")
+			log.Error.Printf("Eventer: dropping log event: message too large")
 			return
 		}
 		newBatchSize := batchSize + len(s) + 26

@@ -10,7 +10,7 @@
 //
 //  sess := session.NewSession()
 //  cw := cloudwatchlogs.New(sess)
-//  e := NewCloudWatchEventer(cw, "myLogGroup", "myLogStream")
+//  e := cloudwatch.NewEventer(cw, "myLogGroup", "myLogStream")
 //  e.Event("rpcRetry", "org", "GRAIL", "retry", 0, "maxRetry", 10)
 //  e.Event("machineStopped", "addr", "192.168.1.1", "duration", 3600.0, "startTime": 1584140534)
 //
