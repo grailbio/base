@@ -19,7 +19,7 @@ func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (f
 		if err != nil {
 			return response{err: err}
 		}
-		policy := newRetryPolicy(clients, mergeFileOpts(opts))
+		policy := newBackoffPolicy(clients, mergeFileOpts(opts))
 		info, err := stat(ctx, clients, policy, path)
 		if err != nil {
 			return response{err: err}

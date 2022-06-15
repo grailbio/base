@@ -146,20 +146,22 @@ func errorClient(t *testing.T, err error) s3iface.S3API {
 }
 
 func TestS3(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{errorClient(t,
-		awserr.New("", // TODO(swami): Use an AWS error code that represents a permission error.
-			fmt.Sprintf("test permission error: %s", string(debug.Stack())), nil)), newClient(t)}}
+	provider := &testProvider{clients: []s3iface.S3API{
+		errorClient(t, awserr.New(
+			"", // TODO(swami): Use an AWS error code that represents a permission error.
+			fmt.Sprintf("test permission error: %s", string(debug.Stack())),
+			nil,
+		)),
+		newClient(t),
+	}}
 	ctx := context.Background()
 	impl := s3file.NewImplementation(provider, s3file.Options{})
 	testutil.TestAll(ctx, t, impl, "s3://b/dir")
 }
 
 func TestS3WithRetries(t *testing.T) {
-	oldPolicy := s3file.BackoffPolicy
-	s3file.BackoffPolicy = retry.Backoff(0, 0, 1.0)
-	defer func() {
-		s3file.BackoffPolicy = oldPolicy
-	}()
+	tearDown := setZeroBackoffPolicy()
+	defer tearDown()
 
 	ctx := context.Background()
 	for iter := 0; iter < 50; iter++ {
@@ -240,6 +242,9 @@ func TestTransientErrors(t *testing.T) {
 }
 
 func TestWriteRetryAfterError(t *testing.T) {
+	tearDown := setZeroBackoffPolicy()
+	defer tearDown()
+
 	client := newClient(t)
 	provider := &testProvider{clients: []s3iface.S3API{client}}
 	impl := s3file.NewImplementation(provider, s3file.Options{})
@@ -258,6 +263,9 @@ func TestWriteRetryAfterError(t *testing.T) {
 }
 
 func TestReadRetryAfterError(t *testing.T) {
+	tearDown := setZeroBackoffPolicy()
+	defer tearDown()
+
 	client := newClient(t)
 	setContent := func(path string, prob float64, data string) {
 		c := &failingContentAt{
@@ -277,6 +285,9 @@ func TestReadRetryAfterError(t *testing.T) {
 		}
 		contents = strings.Join(l, ",")
 	}
+	// Exercise parallel reading including partial last chunk.
+	s3file.ReadChunkBytes = 100
+	assert.GT(t, int64(len(contents))%s3file.ReadChunkBytes, 0)
 
 	provider := &testProvider{clients: []s3iface.S3API{client}}
 	impl := s3file.NewImplementation(provider, s3file.Options{})
@@ -590,4 +601,10 @@ func ExampleParseURL() {
 	// scheme: s3, bucket: grail-bucket, key: dir/file, err: <nil>
 	// scheme: s3, bucket: grail-bucket, key: dir/, err: <nil>
 	// scheme: s3, bucket: grail-bucket, key: , err: <nil>
+}
+
+func setZeroBackoffPolicy() (tearDown func()) {
+	oldPolicy := s3file.BackoffPolicy
+	s3file.BackoffPolicy = retry.Backoff(0, 0, 1.0)
+	return func() { s3file.BackoffPolicy = oldPolicy }
 }

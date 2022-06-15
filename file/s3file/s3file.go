@@ -126,7 +126,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		if err != nil {
 			return response{err: errors.E(err, "s3file.remove", path)}
 		}
-		policy := newRetryPolicy(clients, file.Opts{})
+		policy := newBackoffPolicy(clients, file.Opts{})
 		for {
 			var ids s3RequestIDs
 			_, err = policy.client().DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)},
@@ -178,7 +178,7 @@ func (impl *s3Impl) Presign(ctx context.Context, path, method string, expiry tim
 		if err != nil {
 			return response{err: err}
 		}
-		policy := newRetryPolicy(clients, file.Opts{})
+		policy := newBackoffPolicy(clients, file.Opts{})
 		for {
 			var ids s3RequestIDs
 			req := getRequestFn(policy.client())

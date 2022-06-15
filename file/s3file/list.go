@@ -38,7 +38,7 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 	}
 	return &s3Lister{
 		ctx:     ctx,
-		policy:  newRetryPolicy(clients, file.Opts{}),
+		policy:  newBackoffPolicy(clients, file.Opts{}),
 		dir:     dir,
 		scheme:  scheme,
 		bucket:  bucket,

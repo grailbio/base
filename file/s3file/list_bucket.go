@@ -72,7 +72,7 @@ func combineClientBuckets(ctx context.Context, clients []s3iface.S3API) ([]strin
 }
 
 func listClientBuckets(ctx context.Context, client s3iface.S3API) ([]string, error) {
-	policy := newRetryPolicy([]s3iface.S3API{client}, file.Opts{})
+	policy := newBackoffPolicy([]s3iface.S3API{client}, file.Opts{})
 	for {
 		var ids s3RequestIDs
 		res, err := policy.client().ListBucketsWithContext(ctx, &s3.ListBucketsInput{}, ids.captureOption())

@@ -77,7 +77,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
 		nextPartNum: 1,
 	}
-	policy := newRetryPolicy(clients, file.Opts{})
+	policy := newBackoffPolicy(clients, file.Opts{})
 	for {
 		var ids s3RequestIDs
 		resp, err := policy.client().CreateMultipartUploadWithContext(ctx,
@@ -107,7 +107,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 func (u *s3Uploader) uploadThread() {
 	defer u.sg.Done()
 	for chunk := range u.reqCh {
-		policy := newRetryPolicy([]s3iface.S3API{chunk.client}, file.Opts{})
+		policy := newBackoffPolicy([]s3iface.S3API{chunk.client}, file.Opts{})
 	retry:
 		params := &s3.UploadPartInput{
 			Bucket:     aws.String(u.bucket),
@@ -165,7 +165,7 @@ func (u *s3Uploader) write(buf []byte) {
 }
 
 func (u *s3Uploader) abort() error {
-	policy := newRetryPolicy([]s3iface.S3API{u.client}, file.Opts{})
+	policy := newBackoffPolicy([]s3iface.S3API{u.client}, file.Opts{})
 	for {
 		var ids s3RequestIDs
 		_, err := u.client.AbortMultipartUploadWithContext(u.ctx, &s3.AbortMultipartUploadInput{
@@ -190,7 +190,7 @@ func (u *s3Uploader) finish() error {
 	}
 	close(u.reqCh)
 	u.sg.Wait()
-	policy := newRetryPolicy([]s3iface.S3API{u.client}, file.Opts{})
+	policy := newBackoffPolicy([]s3iface.S3API{u.client}, file.Opts{})
 	if err := u.err.Err(); err != nil {
 		u.abort() // nolint: errcheck
 		return err

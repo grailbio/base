@@ -44,7 +44,7 @@ type retryPolicy struct {
 	waitErr       error // error happened during wait, typically deadline or cancellation.
 }
 
-func newRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
+func newBackoffPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
 	now := time.Now()
 	return retryPolicy{
 		clients:       clients,
@@ -53,6 +53,12 @@ func newRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
 		startTime:     now,
 		retryDeadline: now.Add(MaxRetryDuration),
 	}
+}
+
+func newBackoffAndRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
+	p := newBackoffPolicy(clients, opts)
+	p.policy = retry.MaxRetries(p.policy, maxRetries(clients))
+	return p
 }
 
 // client returns the s3 client to be use by the caller.
