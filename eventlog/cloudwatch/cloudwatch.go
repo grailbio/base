@@ -23,6 +23,7 @@ import (
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/eventlog/internal/marshal"
 	"github.com/grailbio/base/log"
+	"github.com/grailbio/base/must"
 )
 
 // maxBatchSize is the maximum batch size of the events that we send to CloudWatch Logs, "calculated
@@ -66,37 +67,46 @@ func init() {
 	})
 }
 
-// Eventer logs events to CloudWatch Logs.
-type Eventer struct {
-	client cloudwatchlogsiface.CloudWatchLogsAPI
-	group  string
-	stream string
+type (
+	// Eventer logs events to CloudWatch Logs.
+	Eventer struct {
+		client cloudwatchlogsiface.CloudWatchLogsAPI
+		group  string
+		stream string
 
-	cancel func()
+		cancel func()
 
-	// eventc is used to send events that are batched and sent to CloudWatch
-	// Logs.
-	eventc chan event
+		// eventc is used to send events that are batched and sent to CloudWatch
+		// Logs.
+		eventc chan event
 
-	// syncc is used to force syncing of events to CloudWatch Logs.
-	syncc chan struct{}
-	// syncDonec is used to block for syncing.
-	syncDonec chan struct{}
+		// syncc is used to force syncing of events to CloudWatch Logs.
+		syncc chan struct{}
+		// syncDonec is used to block for syncing.
+		syncDonec chan struct{}
 
-	// donec is used to signal that the event processing loop is done.
-	donec chan struct{}
+		// donec is used to signal that the event processing loop is done.
+		donec chan struct{}
 
-	initOnce sync.Once
-	initErr  error
+		initOnce sync.Once
+		initErr  error
 
-	sequenceToken *string
+		sequenceToken *string
 
-	// loggedFullBuffer prevents consecutive printing of "buffer full" log
-	// messages inside Event. We get a full buffer when we are overloaded with
-	// many messages. Logging each dropped message is very noisy, so we suppress
-	// consecutive logging.
-	loggedFullBuffer int32
-}
+		// loggedFullBuffer prevents consecutive printing of "buffer full" log
+		// messages inside Event. We get a full buffer when we are overloaded with
+		// many messages. Logging each dropped message is very noisy, so we suppress
+		// consecutive logging.
+		loggedFullBuffer int32
+
+		now func() time.Time
+	}
+
+	opts struct {
+		now func() time.Time
+	}
+	EventerOption func(*opts)
+)
 
 type event struct {
 	timestamp  time.Time
@@ -104,9 +114,24 @@ type event struct {
 	fieldPairs []interface{}
 }
 
+// OptNow configures NewEventer to obtain timestamps from now. now must be non-nil.
+//
+// Example use case: reducing precision to make it more difficult to correlate which events
+// likely came from the same user (who may have done a few things in one minute, etc.).
+func OptNow(now func() time.Time) EventerOption {
+	must.True(now != nil)
+	return func(o *opts) { o.now = now }
+}
+
 // NewEventer returns a *CloudWatchLogger. It does create the group or
 // stream until the first event is logged.
-func NewEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, stream string) *Eventer {
+func NewEventer(
+	client cloudwatchlogsiface.CloudWatchLogsAPI, group, stream string, options ...EventerOption,
+) *Eventer {
+	opts := opts{now: time.Now}
+	for _, option := range options {
+		option(&opts)
+	}
 	eventer := &Eventer{
 		client:    client,
 		group:     group,
@@ -115,6 +140,7 @@ func NewEventer(client cloudwatchlogsiface.CloudWatchLogsAPI, group, stream stri
 		syncc:     make(chan struct{}),
 		syncDonec: make(chan struct{}),
 		donec:     make(chan struct{}),
+		now:       opts.now,
 	}
 	var ctx context.Context
 	ctx, eventer.cancel = context.WithCancel(context.Background())
@@ -129,7 +155,7 @@ func (c *Eventer) String() string {
 // Event implements Eventer.
 func (c *Eventer) Event(typ string, fieldPairs ...interface{}) {
 	select {
-	case c.eventc <- event{timestamp: time.Now(), typ: typ, fieldPairs: fieldPairs}:
+	case c.eventc <- event{timestamp: c.now(), typ: typ, fieldPairs: fieldPairs}:
 		atomic.StoreInt32(&c.loggedFullBuffer, 0)
 	default:
 		if atomic.LoadInt32(&c.loggedFullBuffer) == 0 {

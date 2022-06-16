@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
@@ -108,16 +109,26 @@ func TestEvent(t *testing.T) {
 		panic("keep N <= eventBufferSize to make sure no events are dropped")
 	}
 
+	// Note: Access to nowUnixMillis is unsynchronized because now() is only called in Event(),
+	// not in any background or asynchronous goroutine.
+	var nowUnixMillis int64 = 1600000000000 // Arbitrary time in 2020.
+	now := func() time.Time {
+		return time.UnixMilli(nowUnixMillis)
+	}
+
 	// Log events.
 	cw := &logsAPIFake{}
-	e := NewEventer(cw, testGroup, testStream)
+	e := NewEventer(cw, testGroup, testStream, OptNow(now))
+	wantTimestamps := make([]time.Time, N)
 	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("k%d", i)
 		e.Event(typ, k, i)
+		wantTimestamps[i] = now()
+		nowUnixMillis += time.Hour.Milliseconds()
 	}
 	e.Close()
 
-	// Make sure events get to CloudWatch in order.
+	// Make sure events get to CloudWatch with the right contents and in order.
 	events := cw.logEvents()
 	if got, want := len(events), N; got != want {
 		t.Errorf("got %v, want %v", got, want)
@@ -129,6 +140,10 @@ func TestEvent(t *testing.T) {
 			t.Fatalf("error marshaling event: %v", err)
 		}
 		if got, want := *event.Message, m; got != want {
+			t.Errorf("got %v, want %v", got, want)
+			continue
+		}
+		if got, want := time.UnixMilli(*event.Timestamp), wantTimestamps[i]; !want.Equal(got) {
 			t.Errorf("got %v, want %v", got, want)
 			continue
 		}
