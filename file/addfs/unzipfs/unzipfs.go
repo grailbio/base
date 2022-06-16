@@ -16,6 +16,7 @@ import (
 	"github.com/grailbio/base/file/addfs"
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/fileio"
+	"github.com/grailbio/base/grail/biofs/biofseventlog"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/ioctx/fsctx"
 	"github.com/grailbio/base/log"
@@ -108,6 +109,7 @@ type handleChildGen struct {
 }
 
 func (g *handleChildGen) GenerateChildren(ctx context.Context) ([]fsnode.T, error) {
+	biofseventlog.UsedFeature("unzipfs.children")
 	var children []fsnode.T
 	err := g.children.GetOrLoad(ctx, &children, func(ctx context.Context, opts *loadingcache.LoadOpts) error {
 		entries, err := fs.ReadDir(g.r, g.pathPrefix)
@@ -164,6 +166,7 @@ type zipFileLeafFile struct {
 }
 
 func (z zipFileLeaf) OpenFile(ctx context.Context, flag int) (fsctx.File, error) {
+	biofseventlog.UsedFeature("unzipfs.open")
 	var fileEntry *zip.File
 	for _, f := range z.r.File {
 		if f.Name == z.zipName {

@@ -18,7 +18,10 @@
 package eventlog
 
 import (
+	"bytes"
+
 	"github.com/grailbio/base/config"
+	"github.com/grailbio/base/log"
 )
 
 func init() {
@@ -26,6 +29,12 @@ func init() {
 		constr.Doc = "eventer/nop configures a no-op event logger"
 		constr.New = func() (interface{}, error) {
 			return Nop{}, nil
+		}
+	})
+	config.Register("eventer/log-info", func(constr *config.Constructor) {
+		constr.Doc = "eventer/log-info configures an eventer that writes events at log level info"
+		constr.New = func() (interface{}, error) {
+			return Log(log.Info), nil
 		}
 	})
 	// We do the most conservative thing by default, making event logging a
@@ -52,9 +61,31 @@ type Eventer interface {
 // Nop is a no-op Eventer.
 type Nop struct{}
 
+var _ Eventer = Nop{}
+
 func (Nop) String() string {
 	return "disabled"
 }
 
 // Event implements Eventer.
 func (Nop) Event(_ string, _ ...interface{}) {}
+
+// Log is an Eventer that writes events to the logger. It's intended for debugging/development.
+type Log log.Level
+
+var _ Eventer = Log(log.Debug)
+
+// Event implements Eventer.
+func (l Log) Event(typ string, fieldPairs ...interface{}) {
+	f := bytes.NewBufferString("eventlog: %s {")
+	for i := range fieldPairs {
+		f.WriteString("%v")
+		if i%2 == 0 {
+			f.WriteString(": ")
+		} else if i < len(fieldPairs)-1 {
+			f.WriteString(", ")
+		}
+	}
+	f.WriteByte('}')
+	log.Level(l).Printf(f.String(), append([]interface{}{typ}, fieldPairs...)...)
+}
