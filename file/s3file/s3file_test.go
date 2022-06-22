@@ -48,9 +48,10 @@ var (
 )
 
 type failingContentAt struct {
-	prob    float64 // probability of failing requests
-	rand    *rand.Rand
-	content []byte
+	prob        float64 // probability of failing requests
+	rand        *rand.Rand
+	content     []byte
+	failWithErr error
 }
 
 func doReadAt(src []byte, off64 int64, dest []byte) (int, error) {
@@ -79,7 +80,7 @@ func doWriteAt(src []byte, off64 int64, dest *[]byte) (int, error) {
 
 func (c *failingContentAt) ReadAt(p []byte, off64 int64) (int, error) {
 	if p := c.rand.Float64(); p < c.prob {
-		return 0, fmt.Errorf("failingContentAt synthetic error")
+		return 0, c.failWithErr
 	}
 	n := len(p)
 	if n > 1 {
@@ -263,57 +264,65 @@ func TestWriteRetryAfterError(t *testing.T) {
 }
 
 func TestReadRetryAfterError(t *testing.T) {
-	tearDown := setZeroBackoffPolicy()
-	defer tearDown()
+	for errIdx, failWithErr := range []error{
+		fmt.Errorf("failingContentAt synthetic error"),
+		readConnResetError{},
+	} {
+		t.Run(fmt.Sprintf("error_%d", errIdx), func(t *testing.T) {
+			tearDown := setZeroBackoffPolicy()
+			defer tearDown()
 
-	client := newClient(t)
-	setContent := func(path string, prob float64, data string) {
-		c := &failingContentAt{
-			prob:    prob,
-			rand:    rand.New(rand.NewSource(0)),
-			content: []byte(data),
-		}
-		checksum := sha256.Sum256(c.content)
-		client.SetFileContentAt(path, c, fmt.Sprintf("%x", checksum[:]))
-	}
+			client := newClient(t)
+			setContent := func(path string, prob float64, data string) {
+				c := &failingContentAt{
+					prob:        prob,
+					rand:        rand.New(rand.NewSource(0)),
+					content:     []byte(data),
+					failWithErr: failWithErr,
+				}
+				checksum := sha256.Sum256(c.content)
+				client.SetFileContentAt(path, c, fmt.Sprintf("%x", checksum[:]))
+			}
 
-	var contents string
-	{
-		l := []string{}
-		for i := 0; i < 1000; i++ {
-			l = append(l, fmt.Sprintf("D%d", i))
-		}
-		contents = strings.Join(l, ",")
-	}
-	// Exercise parallel reading including partial last chunk.
-	s3file.ReadChunkBytes = 100
-	assert.GT(t, int64(len(contents))%s3file.ReadChunkBytes, 0)
+			var contents string
+			{
+				l := []string{}
+				for i := 0; i < 1000; i++ {
+					l = append(l, fmt.Sprintf("D%d", i))
+				}
+				contents = strings.Join(l, ",")
+			}
+			// Exercise parallel reading including partial last chunk.
+			s3file.ReadChunkBytes = 100
+			assert.GT(t, int64(len(contents))%s3file.ReadChunkBytes, 0)
 
-	provider := &testProvider{clients: []s3iface.S3API{client}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
-	ctx := context.Background()
+			provider := &testProvider{clients: []s3iface.S3API{client}}
+			impl := s3file.NewImplementation(provider, s3file.Options{})
+			ctx := context.Background()
 
-	setContent("junk0.txt", 0.3, contents)
-	for i := 0; i < 10; i++ {
-		client.NumMaxRetries = math.MaxInt32
-		f, err := impl.Open(ctx, "b/junk0.txt")
-		assert.NoError(t, err)
-		r := f.Reader(ctx)
-		data, err := ioutil.ReadAll(r)
-		assert.NoError(t, err)
-		assert.EQ(t, contents, string(data))
-		assert.NoError(t, f.Close(ctx))
-	}
+			setContent("junk0.txt", 0.3, contents)
+			for i := 0; i < 10; i++ {
+				client.NumMaxRetries = math.MaxInt32
+				f, err := impl.Open(ctx, "b/junk0.txt")
+				assert.NoError(t, err)
+				r := f.Reader(ctx)
+				data, err := ioutil.ReadAll(r)
+				assert.NoError(t, err)
+				assert.EQ(t, contents, string(data))
+				assert.NoError(t, f.Close(ctx))
+			}
 
-	setContent("junk1.txt", 1.0 /*fail everything*/, contents)
-	{
-		client.NumMaxRetries = 10
-		f, err := impl.Open(ctx, "b/junk1.txt")
-		assert.NoError(t, err)
-		r := f.Reader(ctx)
-		_, err = ioutil.ReadAll(r)
-		assert.Regexp(t, err, "failingContentAt synthetic error")
-		assert.NoError(t, f.Close(ctx))
+			setContent("junk1.txt", 1.0 /*fail everything*/, contents)
+			{
+				client.NumMaxRetries = 10
+				f, err := impl.Open(ctx, "b/junk1.txt")
+				assert.NoError(t, err)
+				r := f.Reader(ctx)
+				_, err = ioutil.ReadAll(r)
+				assert.Regexp(t, err, failWithErr.Error())
+				assert.NoError(t, f.Close(ctx))
+			}
+		})
 	}
 }
 

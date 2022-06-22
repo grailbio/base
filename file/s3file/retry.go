@@ -169,10 +169,16 @@ func otherRetriableError(err error) bool {
 			return true
 		}
 	}
-	if strings.Contains(err.Error(), "resource unavailable") {
-		return true
-	}
-	if strings.Contains(err.Error(), "Service Unavailable") {
+	msg := err.Error()
+	if strings.Contains(msg, "resource unavailable") ||
+		strings.Contains(msg, "Service Unavailable") ||
+		// As of v1.42.0, the AWS SDK marks these errors as non-retriable [1]. We think we see these
+		// errors when an S3 host is throttling us so we actually do want to retry.
+		// Note: Empirically, the s3transport package's workaround reduces the occurrence of these
+		// errors in our workloads, but we still see them occasionally.
+		//
+		// [1] https://github.com/aws/aws-sdk-go/blob/e04cf0432b79324cae8af9e8e333404c18268137/aws/request/connection_reset_error.go#L9
+		strings.Contains(msg, "read: connection reset") {
 		return true
 	}
 	return false
