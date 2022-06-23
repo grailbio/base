@@ -2,10 +2,10 @@ package fsnodefuse
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"syscall"
 
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/log"
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -46,7 +46,7 @@ func (d *dirStream) HasNext() bool {
 		d.eof = true
 		return false
 	} else if err != nil {
-		d.nextErr = fmt.Errorf("fsnodefuse.dirStream: %w", err)
+		d.nextErr = errors.E(err, "fsnodefuse.dirStream")
 		// Return true here so Next() has a chance to return d.nextErr.
 		return true
 	}
