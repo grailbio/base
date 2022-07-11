@@ -195,32 +195,33 @@ func ErrorfNoCtx(fs string, args ...interface{}) {
 // Error logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
-// Returns the message (without keysAndValues) as a string for convenience.
-func ErrorAndReturn(ctx context.Context, msg string, keysAndValues ...interface{}) string {
+// Returns an error with the given message for convenience
+func ErrorAndReturn(ctx context.Context, msg string, keysAndValues ...interface{}) error {
 	return ErrorvAndReturn(ctx, 1, msg, keysAndValues...)
 }
 
-// Errorf uses fmt.Sprintf to log a templated message and the key-value pairs defined in contextFields from ctx.
+// Errorf uses fmt.Errorf to construct an error and log its message
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
-// Returns the formatted message as a string for convenience.
-func ErrorfAndReturn(ctx context.Context, fs string, args ...interface{}) string {
-	return ErrorvAndReturn(ctx, 1, fmt.Sprintf(fs, args...))
+// Returns the error for convenicence
+func ErrorfAndReturn(ctx context.Context, fs string, args ...interface{}) error {
+	err := fmt.Errorf(fs, args...)
+	Errorv(ctx, 1, err.Error())
+	return err
 }
 
 // Errorv logs a message, the key-value pairs defined in contextFields from ctx, and variadic key-value pairs.
 // Caller is skipped by skip.
 // If ctx is nil, all fields from contextFields will be omitted.
 // If ctx does not contain a key in contextFields, that field will be omitted.
-// Returns the message (without keysAndValues) as a string for convenience.
-func ErrorvAndReturn(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) string {
-	logger.Errorv(ctx, skip+1, msg, keysAndValues...)
-	return msg
+// Returns an error with the given message for convenience
+func ErrorvAndReturn(ctx context.Context, skip int, msg string, keysAndValues ...interface{}) error {
+	return logger.ErrorvAndReturn(ctx, skip+1, msg, keysAndValues...)
 }
 
 // ErrorNoCtx logs a message and variadic key-value pairs.
-// Returns the message (without keysAndValues) as a string for convenience.
-func ErrorNoCtxAndReturn(msg string, keysAndValues ...interface{}) string {
+// Returns an error with the given message for convenience
+func ErrorNoCtxAndReturn(msg string, keysAndValues ...interface{}) error {
 	// context.Background() is a singleton and gets initialized once
 	return ErrorvAndReturn(context.Background(), 1, msg, keysAndValues...)
 }
