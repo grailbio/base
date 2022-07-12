@@ -293,8 +293,8 @@ func TestReadRetryAfterError(t *testing.T) {
 				contents = strings.Join(l, ",")
 			}
 			// Exercise parallel reading including partial last chunk.
-			tearDown := setReadChunkBytes()
-			defer tearDown()
+			tearDownRCB := setReadChunkBytes()
+			defer tearDownRCB()
 
 			assert.GT(t, int64(len(contents))%s3file.ReadChunkBytes, 0)
 
