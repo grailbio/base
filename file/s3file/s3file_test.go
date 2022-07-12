@@ -293,7 +293,9 @@ func TestReadRetryAfterError(t *testing.T) {
 				contents = strings.Join(l, ",")
 			}
 			// Exercise parallel reading including partial last chunk.
-			s3file.ReadChunkBytes = 100
+			tearDown := setReadChunkBytes()
+			defer tearDown()
+
 			assert.GT(t, int64(len(contents))%s3file.ReadChunkBytes, 0)
 
 			provider := &testProvider{clients: []s3iface.S3API{client}}
@@ -616,4 +618,10 @@ func setZeroBackoffPolicy() (tearDown func()) {
 	oldPolicy := s3file.BackoffPolicy
 	s3file.BackoffPolicy = retry.Backoff(0, 0, 1.0)
 	return func() { s3file.BackoffPolicy = oldPolicy }
+}
+
+func setReadChunkBytes() (tearDown func()) {
+	old := s3file.ReadChunkBytes
+	s3file.ReadChunkBytes = 100
+	return func() { s3file.ReadChunkBytes = old }
 }
