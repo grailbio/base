@@ -36,11 +36,26 @@ var (
 		ExpectContinueTimeout: stdDefaultTransport.ExpectContinueTimeout,
 	}
 
-	// Default is an http.RoundTripper with recommended settings.
-	Default = New(httpTransport.Clone)
-	// DefaultClient uses Default (suitable for general use, analogous to "net/http".DefaultClient).
-	DefaultClient = &http.Client{Transport: Default}
+	defaultOnce   sync.Once
+	defaultT      *T
+	defaultClient *http.Client
 )
+
+func defaults() (*T, *http.Client) {
+	defaultOnce.Do(func() {
+		defaultT = New(httpTransport.Clone)
+		defaultClient = &http.Client{Transport: defaultT}
+	})
+	return defaultT, defaultClient
+}
+
+// Default returns an http.RoundTripper with recommended settings.
+func Default() *T { t, _ := defaults(); return t }
+
+// DefaultClient returns an *http.Client that uses the http.RoundTripper
+// returned by Default (suitable for general use, analogous to
+// "net/http".DefaultClient).
+func DefaultClient() *http.Client { _, c := defaults(); return c }
 
 // New constructs *T using factory to create internal transports. Each call to factory()
 // must return a separate http.Transport and they must not share TLSClientConfig.
