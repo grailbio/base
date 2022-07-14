@@ -36,5 +36,5 @@ func TestExpiringMap(t *testing.T) {
 	assert.ElementsMatch(t, ips(4), m.AddAndGet("s3.example.com", nil))
 	assert.ElementsMatch(t, ips(100), m.AddAndGet("s3-2.example.com", nil))
 
-	m.logOnce(stubNow) // No assertions other than it shouldn't panic.
+	m.logOnce() // No assertions other than it shouldn't panic.
 }

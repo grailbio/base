@@ -1,11 +1,11 @@
 package s3transport
 
 import (
-	"flag"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/grailbio/base/file/s3file/internal/autolog"
 	"github.com/grailbio/base/log"
 )
 
@@ -21,9 +21,6 @@ const (
 	expireLoopEvery = time.Minute
 )
 
-var autologPeriod = flag.Duration("s3file.transport_log_period", 0,
-	"Interval for logging s3transport metrics. Zero disables logging.")
-
 type expiringMap struct {
 	now func() time.Time
 
@@ -35,9 +32,7 @@ type expiringMap struct {
 func newExpiringMap(runPeriodic runPeriodic, now func() time.Time) *expiringMap {
 	s := expiringMap{now: now, elems: map[string]map[string]time.Time{}}
 	go runPeriodic(expireLoopEvery, s.expireOnce)
-	if *autologPeriod > 0 {
-		go runPeriodic(*autologPeriod, s.logOnce)
-	}
+	autolog.Register(s.logOnce)
 	return &s
 }
 
@@ -79,7 +74,7 @@ func deleteBefore(times map[string]time.Time, threshold time.Time) {
 	}
 }
 
-func (s *expiringMap) logOnce(time.Time) {
+func (s *expiringMap) logOnce() {
 	s.mu.Lock()
 	var (
 		hosts          = len(s.elems)

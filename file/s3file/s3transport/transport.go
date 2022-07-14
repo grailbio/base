@@ -3,11 +3,16 @@ package s3transport
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
+
+	"github.com/grailbio/base/file/s3file/internal/autolog"
+	"github.com/grailbio/base/log"
 )
 
 // T is an http.RoundTripper specialized for S3. See https://github.com/aws/aws-sdk-go/issues/3739.
@@ -16,6 +21,9 @@ type T struct {
 
 	hostRTsMu sync.Mutex
 	hostRTs   map[string]http.RoundTripper
+
+	nOpenConnsPerIPMu sync.Mutex
+	nOpenConnsPerIP   map[string]int
 
 	hostIPs *expiringMap
 }
@@ -60,11 +68,23 @@ func DefaultClient() *http.Client { _, c := defaults(); return c }
 // New constructs *T using factory to create internal transports. Each call to factory()
 // must return a separate http.Transport and they must not share TLSClientConfig.
 func New(factory func() *http.Transport) *T {
-	return &T{
-		factory: factory,
-		hostRTs: map[string]http.RoundTripper{},
-		hostIPs: newExpiringMap(runPeriodicForever(), time.Now),
+	t := T{
+		factory:         factory,
+		hostRTs:         map[string]http.RoundTripper{},
+		hostIPs:         newExpiringMap(runPeriodicForever(), time.Now),
+		nOpenConnsPerIP: map[string]int{},
 	}
+	autolog.Register(func() {
+		var nOpen []int
+		t.nOpenConnsPerIPMu.Lock()
+		for _, n := range t.nOpenConnsPerIP {
+			nOpen = append(nOpen, n)
+		}
+		t.nOpenConnsPerIPMu.Unlock()
+		sort.Sort(sort.Reverse(sort.IntSlice(nOpen)))
+		log.Printf("s3file transport: open RTs per IP: %v", nOpen)
+	})
+	return &t
 }
 
 func (t *T) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -84,7 +104,14 @@ func (t *T) RoundTrip(req *http.Request) (*http.Response, error) {
 	// TODO: Consider other load balancing strategies.
 	hostReq.URL.Host = ips[rand.Intn(len(ips))].String()
 
-	return t.hostRoundTripper(host).RoundTrip(hostReq)
+	hostRT := t.hostRoundTripper(host)
+	ip := hostReq.URL.Host
+	t.addOpenConnsPerIP(ip, 1)
+	resp, err := hostRT.RoundTrip(hostReq)
+	if resp != nil {
+		resp.Body = &rcOnClose{resp.Body, func() { t.addOpenConnsPerIP(ip, -1) }}
+	}
+	return resp, err
 }
 
 func (t *T) hostRoundTripper(host string) http.RoundTripper {
@@ -102,4 +129,21 @@ func (t *T) hostRoundTripper(host string) http.RoundTripper {
 	transport.TLSClientConfig.ServerName = host
 	t.hostRTs[host] = transport
 	return transport
+}
+
+func (t *T) addOpenConnsPerIP(ip string, add int) {
+	t.nOpenConnsPerIPMu.Lock()
+	t.nOpenConnsPerIP[ip] += add
+	t.nOpenConnsPerIPMu.Unlock()
+}
+
+type rcOnClose struct {
+	io.ReadCloser
+	onClose func()
+}
+
+func (r *rcOnClose) Close() error {
+	defer r.onClose()
+	r.onClose = nil
+	return r.ReadCloser.Close()
 }

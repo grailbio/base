@@ -6,11 +6,13 @@ import (
 	"io"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/file/s3file/internal/autolog"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/traverse"
 )
@@ -185,12 +187,22 @@ func eTagChangedError(name, oldETag, newETag string) error {
 
 func (r *chunkReaderAt) Close() { r.previousR.Close() }
 
+var (
+	nOpenPos     int32
+	nOpenPosOnce sync.Once
+)
+
 func newPosReader(
 	ctx context.Context,
 	client s3iface.S3API,
 	name, bucket, key string,
 	offset int64,
 ) (*posReader, error) {
+	nOpenPosOnce.Do(func() {
+		autolog.Register(func() {
+			log.Printf("s3file open posReader: %d", atomic.LoadInt32(&nOpenPos))
+		})
+	})
 	r := posReader{offset: offset}
 	output, err := client.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
@@ -200,7 +212,7 @@ func newPosReader(
 	if err != nil {
 		if output.Body != nil {
 			if errClose := output.Body.Close(); errClose != nil {
-				log.Debug.Printf("s3file.newPosReader: ignoring body close error: %v", err)
+				log.Printf("s3file.newPosReader: ignoring body close error: %v", err)
 			}
 		}
 		if awsErr, ok := getAWSError(err); ok && awsErr.Code() == "InvalidRange" {
@@ -210,6 +222,7 @@ func newPosReader(
 		}
 		return nil, err
 	}
+	_ = atomic.AddInt32(&nOpenPos, 1)
 	r.rc, r.offset = output.Body, offset
 	if output.ETag != nil && *output.ETag != "" {
 		r.info = s3Info{
@@ -239,6 +252,7 @@ func (p *posReader) Close() {
 	if p == nil || p.rc == nil {
 		return
 	}
+	_ = atomic.AddInt32(&nOpenPos, -1)
 	if err := p.rc.Close(); err != nil {
 		// Note: Since the caller is already done reading from p.rc, we don't expect this error to
 		// indicate a problem with the correctness of past Reads, instead signaling some resource
@@ -256,7 +270,7 @@ func (p *posReader) Close() {
 		// such resource leaks in real programs.
 		//
 		// [1] https://github.com/aws/aws-sdk-go/blob/e842504a6323096540dc3defdc7cb357d8749893/private/protocol/rest/unmarshal.go#L89-L90
-		log.Debug.Printf("s3file.posReader.Close: ignoring body close error: %v", err)
+		log.Printf("s3file.posReader.Close: ignoring body close error: %v", err)
 	}
 }
 
