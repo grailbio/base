@@ -102,13 +102,13 @@ func (t *T) RoundTrip(req *http.Request) (*http.Response, error) {
 	hostReq := req.Clone(req.Context())
 	hostReq.Host = host
 	// TODO: Consider other load balancing strategies.
-	hostReq.URL.Host = ips[rand.Intn(len(ips))].String()
+	ip := ips[rand.Intn(len(ips))].String()
+	hostReq.URL.Host = ip
 
 	hostRT := t.hostRoundTripper(host)
-	ip := hostReq.URL.Host
-	t.addOpenConnsPerIP(ip, 1)
 	resp, err := hostRT.RoundTrip(hostReq)
 	if resp != nil {
+		t.addOpenConnsPerIP(ip, 1)
 		resp.Body = &rcOnClose{resp.Body, func() { t.addOpenConnsPerIP(ip, -1) }}
 	}
 	return resp, err
@@ -143,7 +143,11 @@ type rcOnClose struct {
 }
 
 func (r *rcOnClose) Close() error {
-	defer r.onClose()
+	// In rare cases, this Close() is called a second time, with a call stack from the AWS SDK's
+	// cleanup code.
+	if r.onClose != nil {
+		defer r.onClose()
+	}
 	r.onClose = nil
 	return r.ReadCloser.Close()
 }

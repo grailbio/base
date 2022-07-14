@@ -110,7 +110,7 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 		}()
 		// Leave the last chunk's reader open for future reuse.
 		if chunkIdx < len(r.chunks)-1 {
-			defer chunk.r.Close()
+			defer func() { chunk.r.Close(); chunk.r = nil }()
 		}
 
 		metric := metrics.Op("read").Start()
@@ -162,6 +162,11 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 			if err == nil {
 				break
 			}
+			// Discard our reader after an error. This error is often due to throttling
+			// (especially connection reset), so we want to retry with a new HTTP request which
+			// may go to a new host.
+			chunk.r.Close()
+			chunk.r = nil
 		}
 		metric.Bytes(chunk.dstN)
 		return err
