@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"net/http"
 	"runtime/debug"
@@ -304,7 +303,6 @@ func TestReadRetryAfterError(t *testing.T) {
 
 			setContent("junk0.txt", 0.3, contents)
 			for i := 0; i < 10; i++ {
-				client.NumMaxRetries = math.MaxInt32
 				f, err := impl.Open(ctx, "b/junk0.txt")
 				assert.NoError(t, err)
 				r := f.Reader(ctx)
@@ -314,9 +312,13 @@ func TestReadRetryAfterError(t *testing.T) {
 				assert.NoError(t, f.Close(ctx))
 			}
 
+			// Simulate exhausting all allowed retries. Since the number of retries is unrestricted,
+			// the request is capped by MaxRetryDuration. To avoid a flaky time dependency, instead
+			// of using an actual deadline we just cancel the context.
+			tearDown = setFakeWithDeadline()
+			defer tearDown()
 			setContent("junk1.txt", 1.0 /*fail everything*/, contents)
 			{
-				client.NumMaxRetries = 10
 				f, err := impl.Open(ctx, "b/junk1.txt")
 				assert.NoError(t, err)
 				r := f.Reader(ctx)
@@ -624,4 +626,14 @@ func setReadChunkBytes() (tearDown func()) {
 	old := s3file.ReadChunkBytes
 	s3file.ReadChunkBytes = 100
 	return func() { s3file.ReadChunkBytes = old }
+}
+
+func setFakeWithDeadline() (tearDown func()) {
+	old := s3file.WithDeadline
+	s3file.WithDeadline = func(ctx context.Context, deadline time.Time) (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithDeadline(ctx, deadline)
+		cancel()
+		return ctx, cancel
+	}
+	return func() { s3file.WithDeadline = old }
 }

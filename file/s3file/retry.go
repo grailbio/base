@@ -14,11 +14,13 @@ import (
 )
 
 var (
-	// BackoffPolicy defines backoff timing parameters. It is exposed publicly only
-	// for unittests.
+	// BackoffPolicy defines backoff timing parameters. It's exported for unit tests only.
 	// TODO(josh): Rename to `RetryPolicy`.
 	// TODO(josh): Create `retry.ThrottlePolicy` and `retry.AIMDPolicy` and use here.
 	BackoffPolicy = retry.Jitter(retry.Backoff(500*time.Millisecond, time.Minute, 1.2), 0.2)
+
+	// WithDeadline allows faking context.WithDeadline. It's exported for unit tests only.
+	WithDeadline = context.WithDeadline
 
 	// MaxRetryDuration defines the max amount of time a request can spend
 	// retrying on errors.
@@ -55,12 +57,6 @@ func newBackoffPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
 	}
 }
 
-func newBackoffAndRetryPolicy(clients []s3iface.S3API, opts file.Opts) retryPolicy {
-	p := newBackoffPolicy(clients, opts)
-	p.policy = retry.MaxRetries(p.policy, maxRetries(clients))
-	return p
-}
-
 // client returns the s3 client to be use by the caller.
 func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 
@@ -69,7 +65,7 @@ func (r *retryPolicy) client() s3iface.S3API { return r.clients[0] }
 // different client.
 func (r *retryPolicy) shouldRetry(ctx context.Context, err error, message string) bool {
 	wait := func() bool {
-		ctx2, cancel := context.WithDeadline(ctx, r.retryDeadline)
+		ctx2, cancel := WithDeadline(ctx, r.retryDeadline)
 		r.waitErr = retry.Wait(ctx2, r.policy, r.retries)
 		cancel()
 		if r.waitErr != nil {

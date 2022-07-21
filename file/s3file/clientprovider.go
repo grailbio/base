@@ -16,10 +16,7 @@ import (
 	"github.com/grailbio/base/log"
 )
 
-const (
-	defaultRegion     = "us-west-2"
-	defaultMaxRetries = 25
-)
+const defaultRegion = "us-west-2"
 
 // ClientProvider is responsible for creating an S3 client object.  Get() is
 // called whenever s3File needs to access a file. The provider should cache and

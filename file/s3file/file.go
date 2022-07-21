@@ -281,19 +281,6 @@ func (f *s3File) handleSeek(req request) {
 	req.ch <- response{off: f.position}
 }
 
-type maxRetrier interface {
-	MaxRetries() int
-}
-
-func maxRetries(clients []s3iface.S3API) int {
-	for _, client := range clients {
-		if s, ok := client.(maxRetrier); ok && s.MaxRetries() > 0 {
-			return s.MaxRetries()
-		}
-	}
-	return defaultMaxRetries
-}
-
 func (f *s3File) handleRead(req request) {
 	clients, err := f.provider.Get(req.ctx, "GetObject", f.name)
 	if err != nil {
@@ -306,7 +293,7 @@ func (f *s3File) handleRead(req request) {
 			bucket: f.bucket,
 			key:    f.key,
 			newRetryPolicy: func() retryPolicy {
-				return newBackoffAndRetryPolicy(append([]s3iface.S3API{}, clients...), f.opts)
+				return newBackoffPolicy(append([]s3iface.S3API{}, clients...), f.opts)
 			},
 		}
 	}
