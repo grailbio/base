@@ -282,13 +282,15 @@ func (c *readdirplusCache) Drop(n fsnode.T) {
 
 func stableAttr(parent fs.InodeEmbedder, n fsnode.T) fs.StableAttr {
 	var mode uint32
-	switch n.(type) {
-	case fsnode.Parent:
-		mode |= syscall.S_IFDIR
-	case fsnode.Leaf:
+	switch modeType := n.Info().Mode().Type(); modeType {
+	case 0:
 		mode |= syscall.S_IFREG
+	case os.ModeDir:
+		mode |= syscall.S_IFDIR
+	case os.ModeSymlink:
+		mode |= syscall.S_IFLNK
 	default:
-		log.Panicf("invalid node type: %T", n)
+		log.Panicf("invalid node mode type: %v", modeType)
 	}
 	return fs.StableAttr{
 		Mode: mode,

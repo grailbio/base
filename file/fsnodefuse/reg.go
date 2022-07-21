@@ -2,12 +2,14 @@ package fsnodefuse
 
 import (
 	"context"
+	"io"
 	"os"
 	"sync"
 	"syscall"
 
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/fsnode"
+	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/sync/loadingcache"
 	"github.com/grailbio/base/sync/loadingcache/ctxloadingcache"
@@ -52,9 +54,10 @@ type regInode struct {
 var (
 	_ fs.InodeEmbedder = (*regInode)(nil)
 
-	_ fs.NodeOpener    = (*regInode)(nil)
-	_ fs.NodeGetattrer = (*regInode)(nil)
-	_ fs.NodeSetattrer = (*regInode)(nil)
+	_ fs.NodeReadlinker = (*regInode)(nil)
+	_ fs.NodeOpener     = (*regInode)(nil)
+	_ fs.NodeGetattrer  = (*regInode)(nil)
+	_ fs.NodeSetattrer  = (*regInode)(nil)
 )
 
 // maxReadAhead configures the kernel's maximum readahead for file handles on this FUSE mount
@@ -78,6 +81,25 @@ func (n *regInode) Open(ctx context.Context, inFlags uint32) (_ fs.FileHandle, o
 	}
 	h, err := makeHandle(n, inFlags, file)
 	return h, 0, errToErrno(err)
+}
+
+func (n *regInode) Readlink(ctx context.Context) (_ []byte, errno syscall.Errno) {
+	defer handlePanicErrno(&errno)
+	ctx = ctxloadingcache.With(ctx, &n.cache)
+	file, err := n.n.OpenFile(ctx, 0)
+	if err != nil {
+		return nil, errToErrno(err)
+	}
+	defer func() {
+		if errClose := file.Close(ctx); errClose != nil && errno == fs.OK {
+			errno = errToErrno(errClose)
+		}
+	}()
+	content, err := io.ReadAll(ioctx.ToStdReader(ctx, file))
+	if err != nil {
+		return nil, errToErrno(err)
+	}
+	return content, fs.OK
 }
 
 func (n *regInode) Getattr(ctx context.Context, h fs.FileHandle, a *fuse.AttrOut) (errno syscall.Errno) {

@@ -31,6 +31,22 @@ func NewDirInfo(name string) FileInfo { return FileInfo{name: name, mode: os.Mod
 // Default ModePerm is 0444 (r--r--r--). Other defaults are zero.
 func NewRegInfo(name string) FileInfo { return FileInfo{name: name, mode: 0444} }
 
+// NewSymlinkInfo constructs FileInfo for a symlink.
+//
+// Create a symlink by using this FileInfo with a Leaf whose contents are the target path.
+// The path may be relative or absolute.
+func NewSymlinkInfo(name string) FileInfo {
+	return FileInfo{
+		name: name,
+		// Note: Symlinks don't need permissions. From `man 7 symlink`:
+		//   On Linux, the permissions of a symbolic link are not used in any operations; ...
+		// And on macOS:
+		//   Of these, only the flags are used by the system; the access permissions and
+		//   ownership are ignored.
+		mode: os.ModeSymlink,
+	}
+}
+
 // CopyFileInfo constructs FileInfo with the same public fields as info.
 // It copies cacheability if available.
 func CopyFileInfo(info os.FileInfo) FileInfo {
