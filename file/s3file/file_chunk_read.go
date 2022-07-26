@@ -24,7 +24,7 @@ type (
 	// TODO: Expose concurrency-safe ReaderAt API to clients.
 	chunkReaderAt struct {
 		// name is redundant with (bucket, key).
-		name, bucket, key string
+		name, bucket, key, versionID string
 		// newRetryPolicy creates retry policies. It must be concurrency- and goroutine-safe.
 		newRetryPolicy func() retryPolicy
 
@@ -137,7 +137,7 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 				chunk.r.Close()
 				fallthrough
 			default:
-				chunk.r, err = newPosReader(ctx, policy.client(), r.name, r.bucket, r.key, rangeStart)
+				chunk.r, err = newPosReader(ctx, policy.client(), r.name, r.bucket, r.key, r.versionID, rangeStart)
 				if err != nil {
 					continue
 				}
@@ -200,7 +200,7 @@ var (
 func newPosReader(
 	ctx context.Context,
 	client s3iface.S3API,
-	name, bucket, key string,
+	name, bucket, key, versionID string,
 	offset int64,
 ) (*posReader, error) {
 	nOpenPosOnce.Do(func() {
@@ -209,11 +209,15 @@ func newPosReader(
 		})
 	})
 	r := posReader{offset: offset}
-	output, err := client.GetObjectWithContext(ctx, &s3.GetObjectInput{
+	input := s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 		Range:  aws.String(fmt.Sprintf("bytes=%d-", r.offset)),
-	}, r.ids.captureOption())
+	}
+	if versionID != "" {
+		input.VersionId = aws.String(versionID)
+	}
+	output, err := client.GetObjectWithContext(ctx, &input, r.ids.captureOption())
 	if err != nil {
 		if output.Body != nil {
 			if errClose := output.Body.Close(); errClose != nil {

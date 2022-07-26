@@ -20,8 +20,11 @@ import (
 	"github.com/grailbio/base/file"
 )
 
-// Path separator used by s3file.
-const pathSeparator = "/"
+const (
+	Scheme        = "s3"
+	pathSeparator = "/"
+	pathPrefix    = "s3://"
+)
 
 // Options defines options that can be given when creating an s3Impl
 type Options struct {
