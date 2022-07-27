@@ -3,9 +3,11 @@ package addfs
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"time"
 
 	"github.com/grailbio/base/file/fsnode"
+	"github.com/grailbio/base/ioctx/fsctx"
 	"github.com/grailbio/base/log"
 )
 
@@ -70,9 +72,9 @@ const addsDirName = "..."
 
 // perNodeImpl extends the original Parent with the .../ child.
 type perNodeImpl struct {
-	fsnode.Parent
-	fns  []PerNodeFunc
-	adds fsnode.Parent
+	original fsnode.Parent
+	fns      []PerNodeFunc
+	adds     fsnode.Parent
 }
 
 var (
@@ -86,19 +88,24 @@ var (
 func ApplyPerNodeFuncs(original fsnode.Parent, fns ...PerNodeFunc) fsnode.Parent {
 	fns = append([]PerNodeFunc{}, fns...)
 	adds := perNodeAdds{
-		FileInfo: fsnode.CopyFileInfo(original.Info()).WithName(addsDirName),
+		FileInfo: fsnode.CopyFileInfo(original.Info()).
+			WithName(addsDirName).
+			// ... directory is not writable.
+			WithModePerm(original.Info().Mode().Perm() & 0555),
 		original: original,
 		fns:      fns,
 	}
 	return &perNodeImpl{original, fns, &adds}
 }
 
-func (n *perNodeImpl) CacheableFor() time.Duration { return fsnode.CacheableFor(n.Parent) }
+func (n *perNodeImpl) FSNodeT()                    {}
+func (n *perNodeImpl) Info() fs.FileInfo           { return n.original.Info() }
+func (n *perNodeImpl) CacheableFor() time.Duration { return fsnode.CacheableFor(n.original) }
 func (n *perNodeImpl) Child(ctx context.Context, name string) (fsnode.T, error) {
 	if name == addsDirName {
 		return n.adds, nil
 	}
-	child, err := n.Parent.Child(ctx, name)
+	child, err := n.original.Child(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -109,10 +116,23 @@ func (n *perNodeImpl) Children() fsnode.Iterator {
 		// TODO: Consider omitting .../ if the directory has no other children.
 		fsnode.NewIterator(n.adds),
 		// TODO: Filter out any conflicting ... to be consistent with Child.
-		fsnode.MapIterator(n.Parent.Children(), func(_ context.Context, child fsnode.T) (fsnode.T, error) {
+		fsnode.MapIterator(n.original.Children(), func(_ context.Context, child fsnode.T) (fsnode.T, error) {
 			return perNodeRecurse(child, n.fns), nil
 		}),
 	)
+}
+func (n *perNodeImpl) AddChildLeaf(ctx context.Context, name string, flags uint32) (fsnode.Leaf, fsctx.File, error) {
+	return n.original.AddChildLeaf(ctx, name, flags)
+}
+func (n *perNodeImpl) AddChildParent(ctx context.Context, name string) (fsnode.Parent, error) {
+	p, err := n.original.AddChildParent(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return ApplyPerNodeFuncs(p, n.fns...), nil
+}
+func (n *perNodeImpl) RemoveChild(ctx context.Context, name string) error {
+	return n.original.RemoveChild(ctx, name)
 }
 
 // perNodeAdds is the .../ Parent. It has a child (directory) for each original child (both
