@@ -18,7 +18,7 @@ func Put(ctx context.Context, out io.Writer, args []string) (err error) {
 	if err != nil {
 		return errors.E(err, "put", arg)
 	}
-	defer file.CloseAndReport(ctx, f, &err)
+	defer errors.CleanUpCtx(ctx, f.Close, &err)
 	if _, err = io.Copy(f.Writer(ctx), os.Stdin); err != nil {
 		return errors.E(err, "put", arg)
 	}

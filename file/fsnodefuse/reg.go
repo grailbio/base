@@ -7,7 +7,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/log"
@@ -132,7 +132,7 @@ func (n *regInode) Setattr(ctx context.Context, h fs.FileHandle, in *fuse.SetAtt
 			if err != nil {
 				return errToErrno(err)
 			}
-			defer file.CloseAndReport(ctx, f, &err)
+			defer errors.CleanUpCtx(ctx, f.Close, &err)
 			w, ok := f.(Writable)
 			if !ok {
 				return syscall.ENOTSUP

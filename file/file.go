@@ -76,16 +76,10 @@ type ETagged interface {
 //   }
 //
 // If your function returns with an error, any f.Close error will be chained appropriately.
+//
+// Deprecated: Use errors.CleanUpCtx directly.
 func CloseAndReport(ctx context.Context, f Closer, err *error) {
-	err2 := f.Close(ctx)
-	if err2 == nil {
-		return
-	}
-	if *err != nil {
-		*err = errors.E(*err, fmt.Sprintf("second error in Close: %v", err2))
-		return
-	}
-	*err = err2
+	errors.CleanUpCtx(ctx, f.Close, err)
 }
 
 // MustClose is a defer-able function that calls f.Close and panics on error.

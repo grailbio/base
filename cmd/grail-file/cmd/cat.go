@@ -14,7 +14,7 @@ func Cat(ctx context.Context, out io.Writer, args []string) (err error) {
 		if err != nil {
 			return errors.E(err, "cat", arg)
 		}
-		defer file.CloseAndReport(ctx, f, &err)
+		defer errors.CleanUpCtx(ctx, f.Close, &err)
 		if _, err = io.Copy(out, f.Reader(ctx)); err != nil {
 			return errors.E(err, "cat", arg)
 		}

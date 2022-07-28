@@ -20,7 +20,6 @@ import (
 	"github.com/grailbio/base/file/s3file"
 	"github.com/grailbio/testutil"
 	"github.com/grailbio/testutil/assert"
-	assert2 "github.com/stretchr/testify/assert"
 )
 
 type errFile struct {
@@ -116,44 +115,6 @@ func TestRemoveAllRecursive(t *testing.T) {
 	assert.NoError(t, file.RemoveAll(ctx, dir))
 	assert.Regexp(t, doReadFile(ctx, file.Join(dir, "file.txt")), "no such file")
 	assert.Regexp(t, doReadFile(ctx, file.Join(dir, "e/file.txt")), "no such file")
-}
-
-func TestCloseAndReport(t *testing.T) {
-	closeMsg := "close [seuozr]"
-	returnMsg := "return [mntbnb]"
-
-	// No return error, no close error.
-	gotErr := func() (err error) {
-		f := errFile{}
-		defer file.CloseAndReport(context.Background(), &f, &err)
-		return nil
-	}()
-	assert.NoError(t, gotErr)
-
-	// No return error, close error.
-	gotErr = func() (err error) {
-		f := errFile{errors.New(closeMsg)}
-		defer file.CloseAndReport(context.Background(), &f, &err)
-		return nil
-	}()
-	assert.EQ(t, gotErr.Error(), closeMsg)
-
-	// Return error, no close error.
-	gotErr = func() (err error) {
-		f := errFile{}
-		defer file.CloseAndReport(context.Background(), &f, &err)
-		return errors.New(returnMsg)
-	}()
-	assert.EQ(t, gotErr.Error(), returnMsg)
-
-	// Return error, close error.
-	gotErr = func() (err error) {
-		f := errFile{errors.New(closeMsg)}
-		defer file.CloseAndReport(context.Background(), &f, &err)
-		return errors.New(returnMsg)
-	}()
-	assert2.Contains(t, gotErr.Error(), returnMsg)
-	assert2.Contains(t, gotErr.Error(), closeMsg)
 }
 
 func ExampleParsePath() {

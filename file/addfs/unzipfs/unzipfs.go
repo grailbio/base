@@ -12,10 +12,8 @@ import (
 	"runtime"
 
 	"github.com/grailbio/base/errors"
-	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/addfs"
 	"github.com/grailbio/base/file/fsnode"
-	"github.com/grailbio/base/fileio"
 	"github.com/grailbio/base/grail/biofs/biofseventlog"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/ioctx/fsctx"
@@ -200,7 +198,7 @@ func (z zipFileLeaf) OpenFile(ctx context.Context, flag int) (fsctx.File, error)
 	rAt, ok := zipFile.(ioctx.ReaderAt)
 	if !ok {
 		err := errors.E(errors.NotSupported, fmt.Sprintf("not ReaderAt: %v", zipFile))
-		file.CloseAndReport(ctx, zipFile, &err)
+		errors.CleanUpCtx(ctx, zipFile.Close, &err)
 		return nil, err
 	}
 	f := zipFileLeafFile{
@@ -242,11 +240,11 @@ func (f *zipFileLeafFile) Close(ctx context.Context) error {
 	defer func() { f.stdRAt = ioctx.StdReaderAt{} }()
 	var err error
 	if f.stdRC != nil {
-		fileio.CloseAndReport(f.stdRC, &err)
+		errors.CleanUp(f.stdRC.Close, &err)
 		f.stdRC = nil
 	}
 	if f.fileCloser != nil {
-		file.CloseAndReport(ctx, f.fileCloser, &err)
+		errors.CleanUpCtx(ctx, f.fileCloser.Close, &err)
 		f.fileCloser = nil
 	}
 	return err

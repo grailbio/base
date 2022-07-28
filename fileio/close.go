@@ -23,22 +23,10 @@ type named interface {
 //   }
 //
 // If your function returns with an error, any f.Close error will be chained appropriately.
+//
+// Deprecated: Use errors.CleanUp directly.
 func CloseAndReport(f io.Closer, err *error) {
-	err2 := f.Close()
-	if err2 == nil {
-		return
-	}
-	if *err != nil {
-		var message string
-		if namer, ok := f.(named); ok {
-			message = fmt.Sprintf("second error on Close %s: %v", namer.Name(), err2)
-		} else {
-			message = fmt.Sprintf("second error on Close: %v", err2)
-		}
-		*err = errors.E(*err, message)
-		return
-	}
-	*err = err2
+	errors.CleanUp(f.Close, err)
 }
 
 // MustClose is a defer-able function that calls f.Close and panics on error.
