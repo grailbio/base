@@ -15,9 +15,17 @@ type (
 		Ctx context.Context
 		Reader
 	}
+	StdCloser struct {
+		Ctx context.Context
+		Closer
+	}
 	StdSeeker struct {
 		Ctx context.Context
 		Seeker
+	}
+	StdReadCloser struct {
+		Ctx context.Context
+		ReadCloser
 	}
 	StdReaderAt struct {
 		Ctx context.Context
@@ -74,11 +82,26 @@ func (r StdReader) Read(dst []byte) (n int, err error) {
 	return r.Reader.Read(r.Ctx, dst)
 }
 
+// ToStdCloser wraps Closer as io.Closer.
+func ToStdCloser(ctx context.Context, c Closer) io.Closer { return StdCloser{ctx, c} }
+
+func (c StdCloser) Close() error {
+	return c.Closer.Close(c.Ctx)
+}
+
 // ToStdSeeker wraps Seeker as io.Seeker.
 func ToStdSeeker(ctx context.Context, s Seeker) io.Seeker { return StdSeeker{ctx, s} }
 
 func (r StdSeeker) Seek(offset int64, whence int) (int64, error) {
 	return r.Seeker.Seek(r.Ctx, offset, whence)
+}
+
+// ToStdReadCloser wraps ReadCloser as io.ReadCloser.
+func ToStdReadCloser(ctx context.Context, rc ReadCloser) io.ReadCloser {
+	return struct {
+		io.Reader
+		io.Closer
+	}{ToStdReader(ctx, rc), ToStdCloser(ctx, rc)}
 }
 
 // ToStdReadSeeker wraps ReadSeeker as io.ReadSeeker.

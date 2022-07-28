@@ -5,13 +5,16 @@ package compress
 import (
 	"bytes"
 	"compress/bzip2"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 
 	"github.com/grailbio/base/compress/zstd"
+	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/fileio"
+	"github.com/grailbio/base/ioctx"
 	"github.com/klauspost/compress/gzip"
 	"github.com/yasushi-saito/zlibng"
 )
@@ -152,6 +155,20 @@ func NewReaderPath(r io.Reader, path string) (io.ReadCloser, bool) {
 	return ioutil.NopCloser(r), false
 }
 
+// Open opens path with file.Open and decompresses with NewReaderPath.
+func Open(ctx context.Context, path string) (io.ReadCloser, bool) {
+	f, err := file.Open(ctx, path)
+	if err != nil {
+		return file.NewError(err), false
+	}
+	r, isCompressed := NewReaderPath(f.Reader(ctx), path)
+
+	return struct {
+		io.Reader
+		io.Closer
+	}{r, doubleCloser{r, ioctx.ToStdCloser(ctx, f)}}, isCompressed
+}
+
 // NewWriterPath creates a WriteCloser that compresses data.  The compression
 // format is determined by the pathname extensions. If the pathname ends with
 // one of the following extensions, it creates an compressing WriteCloser and
@@ -176,4 +193,30 @@ func NewWriterPath(w io.Writer, path string) (io.WriteCloser, bool) {
 		return file.NewError(fmt.Errorf("%s: bzip2 writer not supported", path)), false
 	}
 	return &nopWriteCloser{w}, false
+}
+
+// Create creates path with file.Create and compresses with NewWriterPath.
+func Create(ctx context.Context, path string, opts ...file.Opts) (io.WriteCloser, bool) {
+	f, err := file.Create(ctx, path, opts...)
+	if err != nil {
+		return file.NewError(err), false
+	}
+	w, isCompressed := NewWriterPath(f.Writer(ctx), path)
+	return struct {
+		io.Writer
+		io.Closer
+	}{w, doubleCloser{w, ioctx.ToStdCloser(ctx, f)}}, isCompressed
+}
+
+// doubleCloser implements io.Closer and serves to clean up the boilerplate
+// around closing both the files and reader/writer objects created in
+// Open and Create.
+type doubleCloser struct {
+	c, d io.Closer
+}
+
+func (c doubleCloser) Close() (err error) {
+	errors.CleanUp(c.c.Close, &err)
+	errors.CleanUp(c.d.Close, &err)
+	return
 }
