@@ -90,8 +90,8 @@ func runtime_procPin() int
 //go:nosplit
 func runtime_procUnpin()
 
-//go:linkname fastrand sync.fastrand
-func fastrand() uint32
+//go:linkname fastrandn sync.fastrandn
+func fastrandn(n uint32) uint32
 """
         )
 
