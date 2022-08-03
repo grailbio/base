@@ -48,9 +48,11 @@ var (
 
 type failingContentAt struct {
 	prob        float64 // probability of failing requests
-	rand        *rand.Rand
 	content     []byte
 	failWithErr error
+
+	randMu sync.Mutex
+	rand   *rand.Rand
 }
 
 func doReadAt(src []byte, off64 int64, dest []byte) (int, error) {
@@ -78,12 +80,17 @@ func doWriteAt(src []byte, off64 int64, dest *[]byte) (int, error) {
 }
 
 func (c *failingContentAt) ReadAt(p []byte, off64 int64) (int, error) {
-	if p := c.rand.Float64(); p < c.prob {
+	c.randMu.Lock()
+	pr := c.rand.Float64()
+	c.randMu.Unlock()
+	if pr < c.prob {
 		return 0, c.failWithErr
 	}
 	n := len(p)
 	if n > 1 {
+		c.randMu.Lock()
 		n = 1 + c.rand.Intn(n-1)
+		c.randMu.Unlock()
 	}
 	return doReadAt(c.content, off64, p[:n])
 }
