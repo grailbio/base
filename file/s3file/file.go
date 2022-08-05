@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 )
@@ -43,7 +45,9 @@ type s3File struct {
 
 	// Active GetObject body reader. Created by a Read() request. Closed on Seek
 	// or Close call.
-	bodyReader *chunkReaderAt
+	bodyReader io.ReadCloser
+	// AWS request ID for the bodyReader. Non-empty iff bodyReader!=nil.
+	bodyReaderRequestIDs s3RequestIDs
 
 	// Seek offset.
 	// INVARIANT: position >= 0 && (position > 0 ⇒ info != nil)
@@ -275,46 +279,104 @@ func (f *s3File) handleSeek(req request) {
 	}
 	f.position = newPosition
 	if f.bodyReader != nil {
-		f.bodyReader.Close()
+		f.bodyReader.Close() // nolint: errcheck
 		f.bodyReader = nil
+		f.bodyReaderRequestIDs = s3RequestIDs{}
 	}
 	req.ch <- response{off: f.position}
 }
 
+func (f *s3File) startGetObjectRequest(ctx context.Context, policy *retryPolicy, metric *metricOpProgress) error {
+	for {
+		if f.bodyReader != nil {
+			panic("get request still active")
+		}
+		input := &s3.GetObjectInput{
+			Bucket: aws.String(f.bucket),
+			Key:    aws.String(f.key),
+		}
+		if f.position > 0 {
+			// We either seeked or read before. So f.info must have been set.
+			if f.info == nil {
+				panic(fmt.Sprintf("read %v: nil info: %+v", f.name, f))
+			}
+			if f.position >= f.info.size {
+				return io.EOF
+			}
+			input.Range = aws.String(fmt.Sprintf("bytes=%d-", f.position))
+		}
+		var ids s3RequestIDs
+		output, err := policy.client().GetObjectWithContext(ctx, input, ids.captureOption())
+		if policy.shouldRetry(ctx, err, f.name) {
+			metric.Retry()
+			continue
+		}
+		if err != nil {
+			return annotate(err, ids, policy)
+		}
+		if *output.ETag == "" {
+			output.Body.Close() // nolint: errcheck
+			return fmt.Errorf("read %v: File does not exist, awsrequestID: %v", f.name, ids)
+		}
+		if f.info != nil && f.info.etag != *output.ETag {
+			output.Body.Close() // nolint: errcheck
+			return errors.E(
+				errors.Precondition,
+				fmt.Sprintf("read %v: ETag changed from %v to %v, awsrequestID: %v", f.name, f.info.etag, *output.ETag, ids))
+		}
+		f.bodyReader = output.Body // take ownership
+		f.bodyReaderRequestIDs = ids
+		if f.info == nil {
+			f.info = &s3Info{
+				name:    filepath.Base(f.name),
+				size:    *output.ContentLength,
+				modTime: *output.LastModified,
+				etag:    *output.ETag,
+			}
+		}
+		return nil
+	}
+}
+
 func (f *s3File) handleRead(req request) {
+	buf := req.buf
 	clients, err := f.provider.Get(req.ctx, "GetObject", f.name)
 	if err != nil {
 		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.read %v", f.name))}
 		return
 	}
-	if f.bodyReader == nil {
-		f.bodyReader = &chunkReaderAt{
-			name:   f.name,
-			bucket: f.bucket,
-			key:    f.key,
-			newRetryPolicy: func() retryPolicy {
-				return newBackoffPolicy(append([]s3iface.S3API{}, clients...), f.opts)
-			},
+	metric := metrics.Op("read").Start()
+	defer metric.Done()
+	policy := newBackoffPolicy(clients, f.opts)
+	for len(buf) > 0 {
+		if f.bodyReader == nil {
+			if err = f.startGetObjectRequest(req.ctx, &policy, metric); err != nil {
+				break
+			}
+		}
+		var n int
+		n, err = f.bodyReader.Read(buf)
+		if n > 0 {
+			buf = buf[n:]
+			f.position += int64(n)
+		}
+		if err != nil {
+			f.bodyReader.Close() // nolint: errcheck
+			f.bodyReader = nil
+			f.bodyReaderRequestIDs = s3RequestIDs{}
+			if err != io.EOF && policy.shouldRetry(req.ctx, err, f.name) {
+				metric.Retry()
+				continue
+			}
+			break
 		}
 	}
-	n, info, err := f.bodyReader.ReadAt(req.ctx, req.buf, f.position)
-	f.position += int64(n)
-	if f.info == nil && info.etag != "" {
-		f.info = &info
-	}
+	totalBytesRead := len(req.buf) - len(buf)
 	if err != nil && err != io.EOF {
 		err = errors.E(err, fmt.Sprintf("s3file.read %v", f.name))
-	} else if info == (s3Info{}) {
-		// Maybe EOF or len(req.buf) == 0.
-	} else if f.info.etag != info.etag {
-		// Note: If err was io.EOF, we intentionally drop that in favor of flagging ETag mismatch.
-		err = eTagChangedError(f.name, f.info.etag, info.etag)
 	}
-	if err != nil {
-		f.bodyReader.Close()
-		f.bodyReader = nil
-	}
-	req.ch <- response{n: n, err: err}
+	metric.Bytes(totalBytesRead)
+	req.ch <- response{n: totalBytesRead, err: err}
 }
 
 func (f *s3File) handleWrite(req request) {
@@ -326,10 +388,10 @@ func (f *s3File) handleClose(req request) {
 	var err error
 	if f.uploader != nil {
 		err = f.uploader.finish()
-	}
-	if f.bodyReader != nil {
-		f.bodyReader.Close()
-		f.bodyReader = nil
+	} else if f.bodyReader != nil {
+		if e := f.bodyReader.Close(); e != nil && err == nil {
+			err = e
+		}
 	}
 	if err != nil {
 		err = errors.E(err, "s3file.close", f.name)
