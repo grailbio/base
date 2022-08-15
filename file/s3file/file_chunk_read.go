@@ -116,15 +116,25 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 		metric := metrics.Op("read").Start()
 		defer metric.Done()
 
+	attemptLoop:
 		for attempt := 0; ; attempt++ {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				err = nil
-				break
-			}
-			if err != nil && !policy.shouldRetry(ctx, err, r.name) {
-				break
+			switch err {
+			case nil: // Initial attempt.
+			case io.EOF, io.ErrUnexpectedEOF:
+				// In rare cases the S3 SDK returns EOF for chunks that are not actually at EOF.
+				// To work around this, we ignore EOF errors, and keep reading as long as the
+				// object metadata size field says we're not done. See BXDS-2220 for details.
+			default:
+				if !policy.shouldRetry(ctx, err, r.name) {
+					break attemptLoop
+				}
 			}
 			err = nil
+			remainingBuf := chunk.dst[chunk.dstN:]
+			if len(remainingBuf) == 0 {
+				break attemptLoop
+			}
+
 			if attempt > 0 {
 				metric.Retry()
 			}
@@ -157,7 +167,7 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 			}
 
 			var n int
-			n, err = io.ReadFull(chunk.r, chunk.dst[chunk.dstN:])
+			n, err = io.ReadFull(chunk.r, remainingBuf)
 			chunk.dstN += n
 			if err == nil {
 				break
