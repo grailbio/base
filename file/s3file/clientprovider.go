@@ -38,14 +38,6 @@ type ClientProvider interface {
 	//
 	// REQUIRES: Get returns either >=1 clients, or a non-nil error.
 	Get(ctx context.Context, op, path string) ([]s3iface.S3API, error)
-
-	// NotifyResult is called to inform that using "client" to perform "op" on
-	// "path" resulted in the given error (err is nil if the op succeeded). The
-	// provider should use it to optimize the list of clients to return in Get in
-	// a future.
-	//
-	// Parameter "client" is one of the clients returned by the Get call.
-	NotifyResult(ctx context.Context, op, path string, client s3iface.S3API, err error)
 }
 
 type regionCache struct {
@@ -131,7 +123,4 @@ func (p *defaultProvider) Get(ctx context.Context, op, path string) ([]s3iface.S
 		err = errors.E(err, fmt.Sprintf("defaultProvider.Get(%v,%s)", op, path))
 	}
 	return c.clients, err
-}
-
-func (p *defaultProvider) NotifyResult(ctx context.Context, op, path string, client s3iface.S3API, err error) {
 }

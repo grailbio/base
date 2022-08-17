@@ -138,9 +138,6 @@ func (p *testProvider) Get(ctx context.Context, op, path string) ([]s3iface.S3AP
 	return p.clients, nil
 }
 
-func (p *testProvider) NotifyResult(ctx context.Context, op, path string, client s3iface.S3API, err error) {
-}
-
 func newClient(t *testing.T) *s3test.Client { return s3test.NewClient(t, "b") }
 func errorClient(t *testing.T, err error) s3iface.S3API {
 	c := s3test.NewClient(t, "b")
