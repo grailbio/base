@@ -6,72 +6,81 @@ package s3file
 
 import (
 	"context"
-	"sync"
+	"fmt"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	awsrequest "github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-) // bucketCache is a singleton cache manager.
-type bucketCache struct {
-	mu    sync.Mutex
-	cache map[string]string // maps S3 bucket to region (e.g., "us-east-2").
+	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/sync/loadingcache"
+)
+
+// bucketRegionCacheDuration is chosen fairly arbitrarily. We expect region changes to be
+// extremely rare (deleting a bucket, then recreating elsewhere) so a long time seems fine.
+const bucketRegionCacheDuration = time.Hour
+
+// FindBucketRegion locates the AWS region in which bucket is located.
+// The lookup is cached internally.
+//
+// It assumes the region is in the "aws" partition, not other partitions like "aws-us-gov".
+// See: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html
+func FindBucketRegion(ctx context.Context, bucket string) (string, error) {
+	return globalBucketRegionCache.locate(ctx, bucket)
 }
 
-var bCache = bucketCache{
-	cache: make(map[string]string),
+type bucketRegionCache struct {
+	cache loadingcache.Map
+	// getBucketRegionWithClient indirectly references s3manager.GetBucketRegionWithClient to
+	// allow unit testing.
+	getBucketRegionWithClient func(ctx aws.Context, svc s3iface.S3API, bucket string, opts ...awsrequest.Option) (string, error)
 }
 
-// Find finds the region of the bucket using the given s3client. The client need
-// not be in the same region as bucket.
-func (c *bucketCache) find(ctx context.Context, client s3iface.S3API, bucket string) (string, error) {
-	c.mu.Lock()
-	val, ok := c.cache[bucket]
-	c.mu.Unlock()
-	if ok { // Common case
-		return val, nil
+var (
+	globalBucketRegionCache = bucketRegionCache{
+		getBucketRegionWithClient: s3manager.GetBucketRegionWithClient,
 	}
-	region, err := s3manager.GetBucketRegionWithClient(ctx, client, bucket)
+	bucketRegionClient = s3.New(
+		session.Must(session.NewSessionWithOptions(session.Options{
+			Config: aws.Config{
+				// This client is only used for looking up bucket locations, which doesn't
+				// require any credentials.
+				Credentials: credentials.AnonymousCredentials,
+				// Note: This region is just used to infer the relevant AWS partition (group of
+				// regions). This would fail for, say, "aws-us-gov", but we only use "aws".
+				// See: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html
+				Region: aws.String("us-west-2"),
+			},
+			SharedConfigState: session.SharedConfigDisable,
+		})),
+	)
+)
+
+func (c *bucketRegionCache) locate(ctx context.Context, bucket string) (string, error) {
+	var region string
+	err := c.cache.
+		GetOrCreate(bucket).
+		GetOrLoad(ctx, &region, func(ctx context.Context, opts *loadingcache.LoadOpts) (err error) {
+			opts.CacheFor(bucketRegionCacheDuration)
+			policy := newBackoffPolicy([]s3iface.S3API{bucketRegionClient}, file.Opts{})
+			for {
+				var ids s3RequestIDs
+				region, err = c.getBucketRegionWithClient(ctx,
+					bucketRegionClient, bucket, ids.captureOption())
+				if err == nil {
+					return nil
+				}
+				if !policy.shouldRetry(ctx, err, fmt.Sprintf("locate region: %s", bucket)) {
+					return annotate(err, ids, &policy)
+				}
+			}
+		})
 	if err != nil {
 		return "", err
 	}
-	// nil location means us-east-1.
-	// https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketGETlocation.html
-	if region == "" {
-		region = "us-east-1"
-	}
-	c.mu.Lock()
-	c.cache[bucket] = region
-	c.mu.Unlock()
 	return region, nil
-}
-
-// Set overrides the region for the provided bucket.
-func (c *bucketCache) set(bucket, region string) {
-	c.mu.Lock()
-	c.cache[bucket] = region
-	c.mu.Unlock()
-}
-
-// Invalidate removes the cached bucket-to-region mapping.
-func (c *bucketCache) invalidate(bucket string) {
-	c.mu.Lock()
-	delete(c.cache, bucket)
-	c.mu.Unlock()
-}
-
-// GetBucketRegion finds the AWS region for the S3 bucket and inserts it in the
-// cache. "client" is used to issue the GetBucketRegion S3 call. It doesn't need
-// to be in the region for the "bucket".
-func GetBucketRegion(ctx context.Context, client s3iface.S3API, bucket string) (string, error) {
-	return bCache.find(ctx, client, bucket)
-}
-
-// InvalidateBucketRegion  removes the cache entry for bucket, if it exists.
-func InvalidateBucketRegion(bucket string) {
-	bCache.invalidate(bucket)
-}
-
-// SetBucketRegion sets a bucket's region, overriding region discovery and
-// defaults.
-func SetBucketRegion(bucket, region string) {
-	bCache.set(bucket, region)
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
-	"github.com/grailbio/base/log"
 )
 
 const defaultRegion = "us-west-2"
@@ -90,32 +89,20 @@ func (p *defaultProvider) getRegion(region string) (*regionCache, error) {
 	return c, nil
 }
 
-func (p *defaultProvider) getBucketRegion(ctx context.Context, bucket string) string {
-	p.mu.Lock()
-	rc := p.mruRegion
-	if rc == nil {
-		var err error
-		if rc, err = p.getRegion(defaultRegion); err != nil {
-			log.Error.Printf("getcketregion: Failed to create client in default region %s: %v", defaultRegion, err)
-			p.mu.Unlock()
-			return defaultRegion
-		}
-	}
-	p.mu.Unlock()
-	region, err := GetBucketRegion(ctx, rc.clients[0], bucket)
-	if err != nil {
-		log.Printf("getbucketregion %s: %v. using %v", bucket, err, defaultRegion)
-		return defaultRegion
-	}
-	return region
-}
-
 func (p *defaultProvider) Get(ctx context.Context, op, path string) ([]s3iface.S3API, error) {
 	_, bucket, _, err := ParseURL(path)
 	if err != nil {
 		return nil, err
 	}
-	region := p.getBucketRegion(ctx, bucket)
+	// TODO: Consider using some better default, like current region if we're in EC2.
+	region := defaultRegion
+	if bucket != "" { // bucket is empty when listing buckets, for example.
+		var err error
+		region, err = FindBucketRegion(ctx, bucket)
+		if err != nil {
+			return nil, errors.E(err, fmt.Sprintf("locating region for bucket %s", bucket))
+		}
+	}
 	p.mu.Lock()
 	c, err := p.getRegion(region)
 	p.mu.Unlock()
