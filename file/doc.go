@@ -44,7 +44,7 @@
 //
 //   func init() {
 //     file.RegisterImplementation("s3", s3file.NewImplementation(
-//       s3file.NewDefaultProvider(session.Options{})))
+//       s3file.NewDefaultProvider()))
 //   }
 //
 //   // Caution: this code ignores all errors.

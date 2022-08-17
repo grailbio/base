@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -56,23 +57,18 @@ type regionCache struct {
 // session.NewSession()
 // (https://docs.aws.amazon.com/sdk-for-go/api/aws/session/).
 //
-// opts is passed to NewSession. The exception is opts.Config.Region, which will
-// be be overwritten to point to the actual bucket location.
-func NewDefaultProvider(opts session.Options) ClientProvider {
-	region := defaultRegion
-	if opts.Config.Region != nil {
-		region = *opts.Config.Region
+// configs are passed to NewSession. However, Config.Region is overwritten to point to
+// the actual bucket location.
+func NewDefaultProvider(configs ...*aws.Config) ClientProvider {
+	p := defaultProvider{
+		regions: make(map[string]*regionCache),
 	}
-	return &defaultProvider{
-		opts:          opts,
-		defaultRegion: region,
-		regions:       make(map[string]*regionCache),
-	}
+	p.awsConfig.MergeIn(configs...)
+	return &p
 }
 
 type defaultProvider struct {
-	opts          session.Options
-	defaultRegion string
+	awsConfig aws.Config
 
 	mu        sync.Mutex
 	regions   map[string]*regionCache
@@ -85,9 +81,9 @@ type defaultProvider struct {
 func (p *defaultProvider) getRegion(region string) (*regionCache, error) {
 	c, ok := p.regions[region]
 	if !ok {
-		opts := p.opts
-		opts.Config.Region = &region
-		s, err := session.NewSessionWithOptions(opts)
+		s, err := session.NewSessionWithOptions(session.Options{
+			Config: *p.awsConfig.Copy().WithRegion(region),
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -107,17 +103,17 @@ func (p *defaultProvider) getBucketRegion(ctx context.Context, bucket string) st
 	rc := p.mruRegion
 	if rc == nil {
 		var err error
-		if rc, err = p.getRegion(p.defaultRegion); err != nil {
-			log.Error.Printf("getcketregion: Failed to create client in default region %s: %v", p.defaultRegion, err)
+		if rc, err = p.getRegion(defaultRegion); err != nil {
+			log.Error.Printf("getcketregion: Failed to create client in default region %s: %v", defaultRegion, err)
 			p.mu.Unlock()
-			return p.defaultRegion
+			return defaultRegion
 		}
 	}
 	p.mu.Unlock()
 	region, err := GetBucketRegion(ctx, rc.clients[0], bucket)
 	if err != nil {
-		log.Printf("getbucketregion %s: %v. using %v", bucket, err, p.defaultRegion)
-		return p.defaultRegion
+		log.Printf("getbucketregion %s: %v. using %v", bucket, err, defaultRegion)
+		return defaultRegion
 	}
 	return region
 }

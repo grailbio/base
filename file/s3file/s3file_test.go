@@ -27,7 +27,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
@@ -43,7 +42,6 @@ import (
 var (
 	s3BucketFlag = flag.String("s3-bucket", "", "If set, run a unittest against a real S3 bucket named in this flag")
 	s3DirFlag    = flag.String("s3-dir", "", "S3 directory under -s3-bucket used by some unittests")
-	profileFlag  = flag.String("profile", "default", "If set, use the named profile in ~/.aws")
 )
 
 type failingContentAt struct {
@@ -493,10 +491,9 @@ func realBucketProviderOrSkip(t *testing.T) s3file.ClientProvider {
 	if *s3BucketFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket to run the test.")
 	}
-	return s3file.NewDefaultProvider(session.Options{
-		Config:  *aws.NewConfig().WithHTTPClient(s3transport.DefaultClient()),
-		Profile: *profileFlag,
-	})
+	return s3file.NewDefaultProvider(
+		aws.NewConfig().WithHTTPClient(s3transport.DefaultClient()),
+	)
 }
 
 func TestOverwriteWhileReadingAWS(t *testing.T) {

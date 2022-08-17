@@ -8,7 +8,6 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/grailbio/base/cmd/grail-fuse/gfs"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/s3file"
@@ -44,7 +43,7 @@ If empty, log messages are sent to stderr`)
 		}()
 	}
 	file.RegisterImplementation("s3", func() file.Implementation {
-		return s3file.NewImplementation(s3file.NewDefaultProvider(session.Options{}), s3file.Options{})
+		return s3file.NewImplementation(s3file.NewDefaultProvider(), s3file.Options{})
 	})
 	gfs.Main(context.Background(), *remoteRootDirFlag, args[0], *daemonFlag, *tmpDirFlag, *logDirFlag)
 }
