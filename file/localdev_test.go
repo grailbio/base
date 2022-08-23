@@ -48,7 +48,8 @@ func TestDevice(t *testing.T) {
 	go func() {
 		w, err := file.Create(ctx, fifoPath)
 		require.NoError(t, err)
-		w.Writer(ctx).Write([]byte("Hello\n"))
+		_, err = w.Writer(ctx).Write([]byte("Hello\n"))
+		require.NoError(t, err)
 		require.NoError(t, w.Close(ctx))
 		wg.Done()
 	}()

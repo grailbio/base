@@ -23,7 +23,7 @@ type RunnerFunc func(*cmdline.Env, []string) error
 // at the end.
 func (f RunnerFunc) Run(env *cmdline.Env, args []string) error {
 	runnerOnce.Do(func() {
-		vlog.ConfigureLibraryLoggerFromFlags()
+		_ = vlog.ConfigureLibraryLoggerFromFlags()
 		pprof.Start()
 	})
 	err := f(env, args)

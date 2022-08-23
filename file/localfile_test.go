@@ -47,7 +47,8 @@ func TestCreateSymlink(t *testing.T) {
 	ctx := context.Background()
 	w, err := file.Create(context.Background(), newPath)
 	require.NoError(t, err)
-	w.Writer(ctx).Write([]byte("hello"))
+	_, err = w.Writer(ctx).Write([]byte("hello"))
+	require.NoError(t, err)
 	require.NoError(t, w.Close(ctx))
 
 	data, err := ioutil.ReadFile(newPath)

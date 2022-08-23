@@ -21,7 +21,10 @@ func TestWriter(t *testing.T) {
 	tw.WriteBytes([]byte{'f', 'i', 'e', 'l', 'd', '4'})
 	tw.WriteFloat64(1.2345, 'G', 6)
 	tw.WriteInt64(123456)
-	tw.EndLine()
+	err := tw.EndLine()
+	if err != nil {
+		t.Errorf("Error while adding end of line")
+	}
 	tw.Flush()
 	got := buf.String()
 	want := "field1\t2\tfield3\tfield4\t1.2345\t123456\n"

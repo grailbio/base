@@ -22,9 +22,9 @@ func WriteBlessings(ctx *context.T, out io.Writer) {
 	principal := v23.GetPrincipal(ctx)
 	fmt.Fprintf(out, "Public key: %s\n", principal.PublicKey())
 	fmt.Fprintf(out, "---------------- BlessingStore ----------------")
-	fmt.Fprintf(out, principal.BlessingStore().DebugString())
+	fmt.Fprint(out, principal.BlessingStore().DebugString())
 	fmt.Fprintf(out, "---------------- BlessingRoots ----------------")
-	fmt.Fprintf(out, principal.Roots().DebugString())
+	fmt.Fprint(out, principal.Roots().DebugString())
 }
 
 // CheckAccess checkes that the current process has credentials that

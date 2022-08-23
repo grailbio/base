@@ -108,7 +108,7 @@ func (l Level) String() string {
 // at level l to the current outputter.
 func (l Level) Print(v ...interface{}) {
 	if At(l) {
-		out.Output(2, l, fmt.Sprint(v...))
+		_ = out.Output(2, l, fmt.Sprint(v...))
 	}
 }
 
@@ -116,7 +116,7 @@ func (l Level) Print(v ...interface{}) {
 // it at level l to the current outputter.
 func (l Level) Println(v ...interface{}) {
 	if At(l) {
-		out.Output(2, l, fmt.Sprintln(v...))
+		_ = out.Output(2, l, fmt.Sprintln(v...))
 	}
 }
 
@@ -124,7 +124,7 @@ func (l Level) Println(v ...interface{}) {
 // it at level l to the current outputter.
 func (l Level) Printf(format string, v ...interface{}) {
 	if At(l) {
-		out.Output(2, l, fmt.Sprintf(format, v...))
+		_ = out.Output(2, l, fmt.Sprintf(format, v...))
 	}
 }
 
@@ -132,7 +132,7 @@ func (l Level) Printf(format string, v ...interface{}) {
 // and outputs it at the Info level to the current outputter.
 func Print(v ...interface{}) {
 	if At(Info) {
-		out.Output(2, Info, fmt.Sprint(v...))
+		_ = out.Output(2, Info, fmt.Sprint(v...))
 	}
 }
 
@@ -140,21 +140,21 @@ func Print(v ...interface{}) {
 // and outputs it at the Info level to the current outputter.
 func Printf(format string, v ...interface{}) {
 	if At(Info) {
-		out.Output(2, Info, fmt.Sprintf(format, v...))
+		_ = out.Output(2, Info, fmt.Sprintf(format, v...))
 	}
 }
 
 // Errorf formats a message in the manner of fmt.Sprintf
 // and outputs it at the Error level to the current outputter.
 func Errorf(format string, v ...interface{}) {
-	out.Output(2, Error, fmt.Sprintf(format, v...))
+	_ = out.Output(2, Error, fmt.Sprintf(format, v...))
 }
 
 // Fatal formats a message in the manner of fmt.Sprint, outputs it at
 // the error level to the current outputter and then calls
 // os.Exit(1).
 func Fatal(v ...interface{}) {
-	out.Output(2, Error, fmt.Sprint(v...))
+	_ = out.Output(2, Error, fmt.Sprint(v...))
 	os.Exit(1)
 }
 
@@ -162,7 +162,7 @@ func Fatal(v ...interface{}) {
 // the error level to the current outputter and then calls
 // os.Exit(1).
 func Fatalf(format string, v ...interface{}) {
-	out.Output(2, Error, fmt.Sprintf(format, v...))
+	_ = out.Output(2, Error, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }
 
@@ -170,7 +170,7 @@ func Fatalf(format string, v ...interface{}) {
 // at the error level to the current outputter and then panics.
 func Panic(v ...interface{}) {
 	s := fmt.Sprint(v...)
-	out.Output(2, Error, s)
+	_ = out.Output(2, Error, s)
 	panic(s)
 }
 
@@ -178,12 +178,12 @@ func Panic(v ...interface{}) {
 // at the error level to the current outputter and then panics.
 func Panicf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
-	out.Output(2, Error, s)
+	_ = out.Output(2, Error, s)
 	panic(s)
 }
 
 // Outputf is formats a message using fmt.Sprintf and outputs it
 // to the provided logger at the provided level.
 func Outputf(out Outputter, level Level, format string, v ...interface{}) {
-	out.Output(2, level, fmt.Sprintf(format, v...))
+	_ = out.Output(2, level, fmt.Sprintf(format, v...))
 }

@@ -2,7 +2,8 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-//+build !unit
+//go:build !unit
+// +build !unit
 
 package cmdutil_test
 
@@ -20,7 +21,7 @@ import (
 )
 
 func TestCheckAccess(t *testing.T) {
-	flag.Set("v23.credentials", "")
+	_ = flag.Set("v23.credentials", "")
 	dir, cleanup := testutil.TempDir(t, "", "check-access")
 	defer cleanup()
 	cdir := filepath.Join(dir, "creds")

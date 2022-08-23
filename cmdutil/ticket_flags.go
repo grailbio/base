@@ -115,7 +115,7 @@ func (tf *TicketFlags) ReadEnvOrFile() error {
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		if l := strings.TrimSpace(sc.Text()); len(l) > 0 {
-			tf.Set(l)
+			_ = tf.Set(l)
 		}
 	}
 	return sc.Err()

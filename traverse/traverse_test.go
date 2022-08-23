@@ -175,7 +175,7 @@ func TestRange(t *testing.T) {
 func TestPanic(t *testing.T) {
 	expectedPanic := "panic in the disco!!"
 	f := func() {
-		traverse.Each(5, func(i int) error {
+		_ = traverse.Each(5, func(i int) error {
 			if i == 3 {
 				panic(expectedPanic)
 			}
@@ -230,7 +230,7 @@ func TestReportingSingleJob(t *testing.T) {
 	reporter := new(testReporter)
 
 	tr := traverse.T{Reporter: reporter, Limit: 1}
-	tr.Each(5, func(i int) error { return nil })
+	_ = tr.Each(5, func(i int) error { return nil })
 
 	expectedStatuses := []testStatus{
 		testStatus{queued: 5, running: 0, done: 0},
@@ -261,7 +261,7 @@ func TestReportingManyJobs(t *testing.T) {
 	numConcurrent := 5
 
 	tr := traverse.T{Limit: numConcurrent, Reporter: reporter}
-	tr.Each(numJobs, func(i int) error { return nil })
+	_ = tr.Each(numJobs, func(i int) error { return nil })
 
 	// first status should be all jobs queued
 	if (reporter.statusHistory[0] != testStatus{queued: int32(numJobs), running: 0, done: 0}) {

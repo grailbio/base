@@ -13,7 +13,7 @@ func Example() {
 	// Compute N random numbers in parallel.
 	const N = 1e5
 	out := make([]float64, N)
-	traverse.Parallel.Range(len(out), func(start, end int) error {
+	_ = traverse.Parallel.Range(len(out), func(start, end int) error {
 		r := rand.New(rand.NewSource(rand.Int63()))
 		for i := start; i < end; i++ {
 			out[i] = r.Float64()

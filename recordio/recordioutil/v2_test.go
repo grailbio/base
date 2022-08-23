@@ -10,8 +10,8 @@ import (
 
 	"github.com/grailbio/base/fileio"
 	"github.com/grailbio/base/recordio"
-	"github.com/grailbio/base/recordio/recordioutil"
 	"github.com/grailbio/base/recordio/deprecated"
+	"github.com/grailbio/base/recordio/recordioutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,8 +33,10 @@ func readV1(t *testing.T, format fileio.FileType, buf *bytes.Buffer) (s []string
 func TestPacked(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := deprecated.NewLegacyPackedWriter(buf, deprecated.LegacyPackedWriterOpts{})
-	w.Write([]byte("Foo"))
-	w.Write([]byte("Baz"))
+	_, err := w.Write([]byte("Foo"))
+	require.NoError(t, err)
+	_, err = w.Write([]byte("Baz"))
+	require.NoError(t, err)
 	w.Flush()
 	require.Equal(t, []string{"Foo", "Baz"}, readV1(t, fileio.GrailRIOPacked, buf))
 }
@@ -42,8 +44,10 @@ func TestPacked(t *testing.T) {
 func TestUnpacked(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := deprecated.NewLegacyWriter(buf, deprecated.LegacyWriterOpts{})
-	w.Write([]byte("Foo"))
-	w.Write([]byte("Baz"))
+	_, err := w.Write([]byte("Foo"))
+	require.NoError(t, err)
+	_, err = w.Write([]byte("Baz"))
+	require.NoError(t, err)
 	require.Equal(t, []string{"Foo", "Baz"}, readV1(t, fileio.GrailRIO, buf))
 }
 
@@ -51,8 +55,10 @@ func TestCompressed(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := deprecated.NewLegacyPackedWriter(buf, deprecated.LegacyPackedWriterOpts{
 		Transform: recordioutil.NewFlateTransform(-1).CompressTransform})
-	w.Write([]byte("Foo"))
-	w.Write([]byte("Baz"))
+	_, err := w.Write([]byte("Foo"))
+	require.NoError(t, err)
+	_, err = w.Write([]byte("Baz"))
+	require.NoError(t, err)
 	w.Flush()
 	require.Equal(t, []string{"Foo", "Baz"}, readV1(t, fileio.GrailRIOPackedCompressed, buf))
 }

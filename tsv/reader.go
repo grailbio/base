@@ -405,18 +405,18 @@ func (r *Reader) Read(v interface{}) error {
 	r.nRow++
 	typ := reflect.TypeOf(v)
 	if typ != r.cachedRowType {
-		rowFormat, err := parseRowFormat(typ)
+		format, err := parseRowFormat(typ)
 		if err != nil {
 			return err
 		}
 		if r.UseHeaderNames {
-			rowFormat, err = r.validateRowFormat(rowFormat)
+			format, err = r.validateRowFormat(format)
 			if err != nil {
 				return err
 			}
 		}
 		r.cachedRowType = typ
-		r.cachedRowFormat = rowFormat
+		r.cachedRowFormat = format
 	}
 	return r.fillRow(v, row)
 }
