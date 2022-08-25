@@ -3,14 +3,12 @@ package loadingcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/grailbio/base/must"
-	"github.com/grailbio/base/sync/ctxsync"
 )
 
 type (
@@ -36,17 +34,19 @@ type (
 	//
 	// Time-based expiration is optional. See LoadFunc and LoadOpts.
 	Value struct {
-		mu   sync.Mutex
-		cond *ctxsync.Cond
+		// init supports at-most-once initialization of subsequent fields.
+		init sync.Once
+		// c is both a semaphore (limit 1) and storage for cache state.
+		c chan state
 		// now is used for faking time in tests.
 		now func() time.Time
-		// expiresAt is the time of expiration (according to now) when in state-loaded.
+	}
+	state struct {
+		// dataPtr is non-zero if there's a previously-computed value (which may be expired).
+		dataPtr reflect.Value
+		// expiresAt is the time of expiration (according to now) when dataPtr is non-zero.
 		// expiresAt.IsZero() means no expiration (infinite caching).
-		// In other states, expiresAt is meaningless.
 		expiresAt time.Time
-		// 3-state machine. See lockedEnterState*().
-		inProgress bool
-		dataPtr    reflect.Value
 	}
 	// LoadFunc computes a value. It should respect cancellation (return with cancellation error).
 	LoadFunc func(context.Context, *LoadOpts) error
@@ -59,24 +59,6 @@ type (
 		validFor time.Duration
 	}
 )
-
-func (v *Value) lockedEnterStateEmpty() {
-	v.expiresAt = time.Time{}
-	v.inProgress = false
-	v.dataPtr = reflect.Value{}
-}
-
-func (v *Value) lockedEnterStateLoading() {
-	v.expiresAt = time.Time{}
-	v.inProgress = true
-	v.dataPtr = reflect.Value{}
-}
-
-func (v *Value) lockedEnterStateLoaded(dataPtr reflect.Value, expiresAt time.Time) {
-	v.expiresAt = expiresAt
-	v.inProgress = false
-	v.dataPtr = dataPtr
-}
 
 // GetOrLoad either copies a cached value to dataPtr or runs load and then copies dataPtr's value
 // into the cache. A properly-written load writes dataPtr's value. Example:
@@ -105,58 +87,46 @@ func (v *Value) GetOrLoad(ctx context.Context, dataPtr interface{}, load LoadFun
 		})
 	}
 
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.init.Do(func() {
+		if v.c == nil {
+			v.c = make(chan state, 1)
+			v.c <- state{}
+		}
+		if v.now == nil {
+			v.now = time.Now
+		}
+	})
 
-	// Initialize on first use.
-	if v.now == nil {
-		v.now = time.Now
+	var state state
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case state = <-v.c:
 	}
-	if v.cond == nil {
-		v.cond = ctxsync.NewCond(&v.mu)
+	defer func() { v.c <- state }()
+
+	if state.dataPtr.IsValid() {
+		if state.expiresAt.IsZero() || v.now().Before(state.expiresAt) {
+			ptrVal.Elem().Set(state.dataPtr.Elem())
+			return nil
+		}
+		state.dataPtr = reflect.Value{}
 	}
 
-	for {
-		switch {
-		// State empty.
-		case !v.inProgress && !v.dataPtr.IsValid():
-			v.lockedEnterStateLoading()
-			v.mu.Unlock()
-			var opts LoadOpts
-			err := runNoPanic(func() (err error) { return load(ctx, &opts) })
-			v.mu.Lock()
-			if err == nil && opts.validFor != 0 {
-				var expiresAt time.Time
-				if opts.validFor > 0 {
-					expiresAt = v.now().Add(opts.validFor)
-				}
-				v.lockedEnterStateLoaded(ptrVal, expiresAt)
-			} else {
-				v.lockedEnterStateEmpty()
-			}
-			v.cond.Broadcast()
-			return err
-
-		// State loading.
-		case v.inProgress && !v.dataPtr.IsValid():
-			// Wait for a new state.
-			if err := v.cond.Wait(ctx); err != nil {
-				return err
-			}
-
-		// State loaded.
-		case !v.inProgress && v.dataPtr.IsValid():
-			if v.expiresAt.IsZero() || v.now().Before(v.expiresAt) {
-				ptrVal.Elem().Set(v.dataPtr.Elem())
-				return nil
-			}
-			// Cache is stale.
-			v.lockedEnterStateEmpty()
-
-		default:
-			log.Panicf("invalid cache state: %v, %v, %v", v.expiresAt, v.inProgress, v.dataPtr)
+	var opts LoadOpts
+	// TODO: Consider calling load() directly rather than via runNoPanic().
+	// A previous implementation needed to intercept panics to handle internal state correctly.
+	// That's no longer true, so we can avoid tampering with callers' panic traces.
+	err := runNoPanic(func() error { return load(ctx, &opts) })
+	if err == nil && opts.validFor != 0 {
+		state.dataPtr = ptrVal
+		if opts.validFor > 0 {
+			state.expiresAt = v.now().Add(opts.validFor)
+		} else {
+			state.expiresAt = time.Time{}
 		}
 	}
+	return err
 }
 
 func runNoPanic(f func() error) (err error) {
@@ -168,7 +138,7 @@ func runNoPanic(f func() error) (err error) {
 	return f()
 }
 
-// setClock is for testing.
+// setClock is for testing. It must be called before any GetOrLoad and is not concurrency-safe.
 func (v *Value) setClock(now func() time.Time) {
 	if v == nil {
 		return
