@@ -15,52 +15,54 @@ import (
 type dirStream struct {
 	ctx     context.Context
 	dir     *dirInode
-	iter    fsnode.Iterator
-	eof     bool
-	next    fsnode.T
-	nextErr error
+	entries []fsnode.T
 	// prev is the node of the previous entry, i.e. the node of the most recent
 	// entry returned by Next.  We cache this node to service LOOKUP operations
 	// that go-fuse issues when servicing READDIRPLUS.  See lookupCache.
 	prev fsnode.T
 }
 
-func newDirStream(ctx context.Context, dir *dirInode) *dirStream {
-	return &dirStream{
-		ctx:  ctx,
-		dir:  dir,
-		iter: dir.n.Children(),
+var _ fs.DirStream = (*dirStream)(nil)
+
+// newDirStream returns a dirStream whose entries are the children of dir.
+// Children are loaded eagerly so that any errors are reported before any
+// entries are returned by the stream.  If Next returns a non-OK Errno after
+// a call that returned an OK Errno, the READDIR operation returns an EIO,
+// regardless of the returned Errno.  See
+// https://github.com/hanwen/go-fuse/issues/436 .
+func newDirStream(
+	ctx context.Context,
+	dir *dirInode,
+) (_ *dirStream, err error) {
+	var (
+		entries []fsnode.T
+		iter    = dir.n.Children()
+	)
+	defer errors.CleanUpCtx(ctx, iter.Close, &err)
+	for {
+		n, err := iter.Next(ctx)
+		if err == io.EOF {
+			return &dirStream{
+				ctx:     ctx,
+				dir:     dir,
+				entries: entries,
+			}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, n)
 	}
 }
 
 func (d *dirStream) HasNext() bool {
-	if d.next != nil || d.nextErr != nil {
-		return true
-	}
-	defer handlePanicErr(&d.nextErr)
-	if d.eof {
-		return false
-	}
-	next, err := d.iter.Next(d.ctx)
-	if err == io.EOF {
-		d.eof = true
-		return false
-	} else if err != nil {
-		d.nextErr = errors.E(err, "fsnodefuse.dirStream")
-		// Return true here so Next() has a chance to return d.nextErr.
-		return true
-	}
-	d.next = next
-	return true
+	return len(d.entries) != 0
 }
 
 func (d *dirStream) Next() (_ fuse.DirEntry, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
-	if err := d.nextErr; err != nil {
-		return fuse.DirEntry{}, errToErrno(err)
-	}
-	next := d.next
-	d.next = nil
+	var next fsnode.T
+	next, d.entries = d.entries[0], d.entries[1:]
 	if d.prev != nil {
 		d.dir.readdirplusCache.Drop(d.prev)
 	}
@@ -82,9 +84,6 @@ func (d *dirStream) Close() {
 			log.Error.Printf("fsnodefuse.dirStream: error on close: %v", err)
 		}
 	}()
-	err = d.iter.Close(d.ctx)
-	d.iter = nil
-	d.next = nil
 	if d.prev != nil {
 		d.dir.readdirplusCache.Drop(d.prev)
 		d.prev = nil

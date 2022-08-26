@@ -41,7 +41,11 @@ var (
 func (n *dirInode) Readdir(ctx context.Context) (_ fs.DirStream, errno syscall.Errno) {
 	defer handlePanicErrno(&errno)
 	ctx = ctxloadingcache.With(ctx, &n.cache)
-	return newDirStream(ctx, n), fs.OK
+	s, err := newDirStream(ctx, n)
+	if err != nil {
+		return nil, errToErrno(err)
+	}
+	return s, fs.OK
 }
 
 func (n *dirInode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (_ *fs.Inode, errno syscall.Errno) {
