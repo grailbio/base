@@ -52,8 +52,8 @@ const uploadParallelism = 16
 // exposed only for unittests.
 var UploadPartSize = 16 << 20
 
-func newUploader(ctx context.Context, provider ClientProvider, opts Options, path, bucket, key string, fileOpts file.Opts) (*s3Uploader, error) {
-	clients, err := provider.Get(ctx, "PutObject", path)
+func newUploader(ctx context.Context, clientsForAction clientsForActionFunc, opts Options, path, bucket, key string, fileOpts file.Opts) (*s3Uploader, error) {
+	clients, err := clientsForAction(ctx, "PutObject", bucket, key)
 	if err != nil {
 		return nil, errors.E(err, "s3file.write", path)
 	}

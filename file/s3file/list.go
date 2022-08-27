@@ -22,7 +22,7 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 			return &s3Lister{ctx: ctx, dir: dir,
 				err: fmt.Errorf("list %s: ListBuckets cannot be combined with recurse option", dir)}
 		}
-		clients, clientsErr := impl.provider.Get(ctx, "ListAllMyBuckets", dir)
+		clients, clientsErr := impl.clientsForAction(ctx, "ListAllMyBuckets", bucket, key)
 		if clientsErr != nil {
 			return &s3Lister{ctx: ctx, dir: dir, err: clientsErr}
 		}
@@ -32,7 +32,7 @@ func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lis
 			clients: clients,
 		}
 	}
-	clients, err := impl.provider.Get(ctx, "ListBucket", dir)
+	clients, err := impl.clientsForAction(ctx, "ListBucket", bucket, key)
 	if err != nil {
 		return &s3Lister{ctx: ctx, dir: dir, err: err}
 	}

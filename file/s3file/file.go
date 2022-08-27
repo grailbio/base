@@ -28,10 +28,10 @@ import (
 // - Wait for a message from either the response channel or context.Done(),
 // whichever comes first.
 type s3File struct {
-	name     string         // "s3://bucket/key/.."
-	provider ClientProvider // Used to create s3 clients.
-	mode     accessMode
-	opts     file.Opts
+	name             string // "s3://bucket/key/.."
+	clientsForAction clientsForActionFunc
+	mode             accessMode
+	opts             file.Opts
 
 	bucket string // bucket part of "name".
 	key    string // key part "name".
@@ -144,7 +144,7 @@ func (f *s3File) Writer(ctx context.Context) io.Writer {
 func (f *s3File) Close(ctx context.Context) error {
 	err := f.runRequest(ctx, request{reqType: closeRequest}).err
 	close(f.reqCh)
-	f.provider = nil
+	f.clientsForAction = nil
 	return err
 }
 
@@ -154,7 +154,7 @@ func (f *s3File) Discard(ctx context.Context) {
 	}
 	_ = f.runRequest(ctx, request{reqType: abortRequest})
 	close(f.reqCh)
-	f.provider = nil
+	f.clientsForAction = nil
 }
 
 type requestType int
@@ -233,13 +233,13 @@ func (f *s3File) runRequest(ctx context.Context, req request) response {
 
 func (f *s3File) handleStat(req request) {
 	ctx := req.ctx
-	clients, err := f.provider.Get(ctx, "GetObject", f.name)
+	clients, err := f.clientsForAction(ctx, "GetObject", f.bucket, f.key)
 	if err != nil {
 		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.stat %v", f.name))}
 		return
 	}
 	policy := newBackoffPolicy(clients, f.opts)
-	info, err := stat(ctx, clients, policy, f.name)
+	info, err := stat(ctx, clients, policy, f.name, f.bucket, f.key)
 	if err != nil {
 		req.ch <- response{err: err}
 		return
@@ -282,7 +282,7 @@ func (f *s3File) handleSeek(req request) {
 }
 
 func (f *s3File) handleRead(req request) {
-	clients, err := f.provider.Get(req.ctx, "GetObject", f.name)
+	clients, err := f.clientsForAction(req.ctx, "GetObject", f.bucket, f.key)
 	if err != nil {
 		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.read %v", f.name))}
 		return

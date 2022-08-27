@@ -72,7 +72,7 @@ func (g versionsDirViewGen) GenerateChildren(ctx context.Context) ([]fsnode.T, e
 	if dirPrefix != "" {
 		dirPrefix = g.key + pathSeparator
 	}
-	iterator, err := newVersionsIterator(ctx, g.impl, g.path(), s3.ListObjectVersionsInput{
+	iterator, err := newVersionsIterator(ctx, g.impl, g.s3Query, s3.ListObjectVersionsInput{
 		Bucket:    aws.String(g.bucket),
 		Delimiter: aws.String(pathSeparator),
 		Prefix:    aws.String(dirPrefix),
@@ -143,7 +143,7 @@ func (g versionsDirViewGen) GenerateChildren(ctx context.Context) ([]fsnode.T, e
 
 func (g versionsObjViewGen) GenerateChildren(ctx context.Context) ([]fsnode.T, error) {
 	biofseventlog.UsedFeature("s3.versions.objview")
-	iterator, err := newVersionsIterator(ctx, g.impl, g.path(), s3.ListObjectVersionsInput{
+	iterator, err := newVersionsIterator(ctx, g.impl, g.s3Query, s3.ListObjectVersionsInput{
 		Bucket:    aws.String(g.bucket),
 		Delimiter: aws.String(pathSeparator),
 		Prefix:    aws.String(g.key),
@@ -256,15 +256,15 @@ type versionsIterator struct {
 func newVersionsIterator(
 	ctx context.Context,
 	impl *s3Impl,
-	path string,
+	q s3Query,
 	in s3.ListObjectVersionsInput,
 ) (*versionsIterator, error) {
-	clients, err := impl.provider.Get(ctx, "ListVersions", path)
+	clients, err := impl.clientsForAction(ctx, "ListVersions", q.bucket, q.key)
 	if err != nil {
 		return nil, errors.E(err, "getting clients")
 	}
 	policy := newBackoffPolicy(clients, file.Opts{})
-	return &versionsIterator{in: in, policy: policy, path: path}, nil
+	return &versionsIterator{in: in, policy: policy, path: q.path()}, nil
 }
 
 func (it *versionsIterator) HasNextPage() bool { return !it.eof }

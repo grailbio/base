@@ -5,7 +5,7 @@
 //go:build !unit
 // +build !unit
 
-package s3file_test
+package s3file
 
 import (
 	"context"
@@ -26,12 +26,11 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
+	awsrequest "github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/internal/testutil"
-	"github.com/grailbio/base/file/s3file"
 	"github.com/grailbio/base/file/s3file/s3transport"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/retry"
@@ -130,12 +129,12 @@ func (c *pausingContentAt) Checksum() string {
 	return fmt.Sprintf("%x", md5.Sum(c.content))
 }
 
-type testProvider struct {
-	clients []s3iface.S3API
-}
-
-func (p *testProvider) Get(ctx context.Context, op, path string) ([]s3iface.S3API, error) {
-	return p.clients, nil
+func newImpl(clients ...s3iface.S3API) *s3Impl {
+	return &s3Impl{
+		clientsForAction: func(_ context.Context, _, _, _ string) ([]s3iface.S3API, error) {
+			return clients, nil
+		},
+	}
 }
 
 func newClient(t *testing.T) *s3test.Client { return s3test.NewClient(t, "b") }
@@ -148,16 +147,15 @@ func errorClient(t *testing.T, err error) s3iface.S3API {
 }
 
 func TestS3(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{
+	ctx := context.Background()
+	impl := newImpl(
 		errorClient(t, awserr.New(
 			"", // TODO(swami): Use an AWS error code that represents a permission error.
 			fmt.Sprintf("test permission error: %s", string(debug.Stack())),
 			nil,
 		)),
 		newClient(t),
-	}}
-	ctx := context.Background()
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	)
 	testutil.TestAll(ctx, t, impl, "s3://b/dir")
 }
 
@@ -172,14 +170,13 @@ func TestS3WithRetries(t *testing.T) {
 		client.Err = func(api string, input interface{}) error {
 			switch r.Intn(6) {
 			case 0:
-				return awserr.New(request.ErrCodeSerialization, fmt.Sprintf("test failure %s (%s)", api, string(debug.Stack())), nil)
+				return awserr.New(awsrequest.ErrCodeSerialization, fmt.Sprintf("test failure %s (%s)", api, string(debug.Stack())), nil)
 			case 1:
 				return awserr.New("RequestError", "send request failed", readConnResetError{})
 			}
 			return nil
 		}
-		provider := &testProvider{clients: []s3iface.S3API{client}}
-		impl := s3file.NewImplementation(provider, s3file.Options{})
+		impl := newImpl(client)
 		testutil.TestAll(ctx, t, impl, "s3://b/dir")
 	}
 }
@@ -194,9 +191,8 @@ func writeFile(ctx context.Context, t *testing.T, impl file.Implementation, path
 	assert.NoError(t, f.Close(ctx))
 }
 func TestListBucketRoot(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{newClient(t)}}
 	ctx := context.Background()
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(newClient(t))
 	writeFile(ctx, t, impl, "s3://b/0.txt", "data")
 
 	l := impl.List(ctx, "s3://b", true)
@@ -212,11 +208,15 @@ func (c readConnResetError) Temporary() bool { return false }
 func (c readConnResetError) Error() string   { return "read: connection reset" }
 
 func TestErrors(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{errorClient(t,
-		awserr.New("", // TODO(swami): Use an AWS error code that represents a permission error.
-			fmt.Sprintf("test permission error: %s", string(debug.Stack())), nil))}}
 	ctx := context.Background()
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(
+		errorClient(t,
+			awserr.New("", // TODO(swami): Use an AWS error code that represents a permission error.
+				fmt.Sprintf("test permission error: %s", string(debug.Stack())),
+				nil,
+			),
+		),
+	)
 
 	_, err := impl.Create(ctx, "s3://b/junk0.txt")
 	assert.Regexp(t, err, "test permission error")
@@ -230,8 +230,7 @@ func TestErrors(t *testing.T) {
 }
 
 func TestTransientErrors(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{errorClient(t, awserr.New("RequestError", "send request failed", readConnResetError{}))}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(errorClient(t, awserr.New("RequestError", "send request failed", readConnResetError{})))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := impl.Stat(ctx, "s3://b/junk0.txt")
@@ -248,15 +247,14 @@ func TestWriteRetryAfterError(t *testing.T) {
 	defer tearDown()
 
 	client := newClient(t)
-	provider := &testProvider{clients: []s3iface.S3API{client}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(client)
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
 		r := rand.New(rand.NewSource(0))
 		client.Err = func(api string, input interface{}) error {
 			if r.Intn(3) == 0 {
 				fmt.Printf("write: api %s\n", api)
-				return awserr.New(request.ErrCodeSerialization, "test failure", nil)
+				return awserr.New(awsrequest.ErrCodeSerialization, "test failure", nil)
 			}
 			return nil
 		}
@@ -297,10 +295,9 @@ func TestReadRetryAfterError(t *testing.T) {
 			tearDownRCB := setReadChunkBytes()
 			defer tearDownRCB()
 
-			assert.GT(t, int64(len(contents))%s3file.ReadChunkBytes, 0)
+			assert.GT(t, int64(len(contents))%ReadChunkBytes, 0)
 
-			provider := &testProvider{clients: []s3iface.S3API{client}}
-			impl := s3file.NewImplementation(provider, s3file.Options{})
+			impl := newImpl(client)
 			ctx := context.Background()
 
 			setContent("junk0.txt", 0.3, contents)
@@ -335,8 +332,7 @@ func TestReadRetryAfterError(t *testing.T) {
 func TestRetryWhenNotFound(t *testing.T) {
 	client := s3test.NewClient(t, "b")
 
-	provider := &testProvider{clients: []s3iface.S3API{client}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(client)
 
 	ctx := context.Background()
 	// By default, there is no retry.
@@ -372,8 +368,7 @@ func TestCancellation(t *testing.T) {
 	c0 := setContent("test0.txt", "hello")
 	_ = setContent("test1.txt", "goodbye")
 
-	provider := &testProvider{clients: []s3iface.S3API{client}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(client)
 	{
 		c0.ready <- true
 		// Reading c0 completes immediately.
@@ -429,15 +424,14 @@ func testOverwriteWhileReading(t *testing.T, impl file.Implementation, pathPrefi
 
 func TestWriteLargeFile(t *testing.T) {
 	// Reduce the upload chunk size to issue concurrent upload requests to S3.
-	oldUploadPartSize := s3file.UploadPartSize
-	s3file.UploadPartSize = 128
+	oldUploadPartSize := UploadPartSize
+	UploadPartSize = 128
 	defer func() {
-		s3file.UploadPartSize = oldUploadPartSize
+		UploadPartSize = oldUploadPartSize
 	}()
 
 	ctx := context.Background()
-	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(s3test.NewClient(t, "b"))
 	path := "s3://b/test.txt"
 	f, err := impl.Create(ctx, path)
 	assert.NoError(t, err)
@@ -468,14 +462,12 @@ func TestWriteLargeFile(t *testing.T) {
 }
 
 func TestOverwriteWhileReading(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(s3test.NewClient(t, "b"))
 	testOverwriteWhileReading(t, impl, "s3://b/test")
 }
 
 func TestNotExist(t *testing.T) {
-	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := newImpl(s3test.NewClient(t, "b"))
 	ctx := context.Background()
 	// The s3test client fails tests for requests that attempt to
 	// access buckets other than the one specified, so we can
@@ -484,24 +476,24 @@ func TestNotExist(t *testing.T) {
 	assert.True(t, errors.Is(errors.NotExist, err))
 }
 
-func realBucketProviderOrSkip(t *testing.T) s3file.ClientProvider {
+func realBucketProviderOrSkip(t *testing.T) ClientProvider {
 	if *s3BucketFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket to run the test.")
 	}
-	return s3file.NewDefaultProvider(
+	return NewDefaultProvider(
 		aws.NewConfig().WithHTTPClient(s3transport.DefaultClient()),
 	)
 }
 
 func TestOverwriteWhileReadingAWS(t *testing.T) {
 	provider := realBucketProviderOrSkip(t)
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := NewImplementation(provider, Options{})
 	testOverwriteWhileReading(t, impl, fmt.Sprintf("s3://%s/tmp/testoverwrite", *s3BucketFlag))
 }
 
 func TestPresignRequestsAWS(t *testing.T) {
 	provider := realBucketProviderOrSkip(t)
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := NewImplementation(provider, Options{})
 	ctx := context.Background()
 	const content = "file for testing presigned URLs\n"
 	path := fmt.Sprintf("s3://%s/tmp/testpresigned", *s3BucketFlag)
@@ -561,13 +553,13 @@ func TestPresignRequestsAWS(t *testing.T) {
 func TestAWS(t *testing.T) {
 	provider := realBucketProviderOrSkip(t)
 	ctx := context.Background()
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := NewImplementation(provider, Options{})
 	testutil.TestAll(ctx, t, impl, "s3://"+*s3BucketFlag+"/tmp")
 }
 
 func TestConcurrentUploadsAWS(t *testing.T) {
 	provider := realBucketProviderOrSkip(t)
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := NewImplementation(provider, Options{})
 
 	if *s3DirFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket and -s3-dir to run the test.")
@@ -605,11 +597,11 @@ func TestConcurrentUploadsAWS(t *testing.T) {
 }
 
 func ExampleParseURL() {
-	scheme, bucket, key, err := s3file.ParseURL("s3://grail-bucket/dir/file")
+	scheme, bucket, key, err := ParseURL("s3://grail-bucket/dir/file")
 	fmt.Printf("scheme: %s, bucket: %s, key: %s, err: %v\n", scheme, bucket, key, err)
-	scheme, bucket, key, err = s3file.ParseURL("s3://grail-bucket/dir/")
+	scheme, bucket, key, err = ParseURL("s3://grail-bucket/dir/")
 	fmt.Printf("scheme: %s, bucket: %s, key: %s, err: %v\n", scheme, bucket, key, err)
-	scheme, bucket, key, err = s3file.ParseURL("s3://grail-bucket")
+	scheme, bucket, key, err = ParseURL("s3://grail-bucket")
 	fmt.Printf("scheme: %s, bucket: %s, key: %s, err: %v\n", scheme, bucket, key, err)
 	// Output:
 	// scheme: s3, bucket: grail-bucket, key: dir/file, err: <nil>
@@ -618,23 +610,23 @@ func ExampleParseURL() {
 }
 
 func setZeroBackoffPolicy() (tearDown func()) {
-	oldPolicy := s3file.BackoffPolicy
-	s3file.BackoffPolicy = retry.Backoff(0, 0, 1.0)
-	return func() { s3file.BackoffPolicy = oldPolicy }
+	oldPolicy := BackoffPolicy
+	BackoffPolicy = retry.Backoff(0, 0, 1.0)
+	return func() { BackoffPolicy = oldPolicy }
 }
 
 func setReadChunkBytes() (tearDown func()) {
-	old := s3file.ReadChunkBytes
-	s3file.ReadChunkBytes = 100
-	return func() { s3file.ReadChunkBytes = old }
+	old := ReadChunkBytes
+	ReadChunkBytes = 100
+	return func() { ReadChunkBytes = old }
 }
 
 func setFakeWithDeadline() (tearDown func()) {
-	old := s3file.WithDeadline
-	s3file.WithDeadline = func(ctx context.Context, deadline time.Time) (context.Context, context.CancelFunc) {
+	old := WithDeadline
+	WithDeadline = func(ctx context.Context, deadline time.Time) (context.Context, context.CancelFunc) {
 		ctx, cancel := context.WithDeadline(ctx, deadline)
 		cancel()
 		return ctx, cancel
 	}
-	return func() { s3file.WithDeadline = old }
+	return func() { WithDeadline = old }
 }

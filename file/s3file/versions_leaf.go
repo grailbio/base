@@ -83,7 +83,7 @@ func (f *versionsFile) getChunkReader(ctx context.Context) (reader *chunkReaderA
 		return reader, trySaveReader, nil
 	}
 
-	clients, err := f.impl.provider.Get(ctx, "GetObjectVersion", f.path())
+	clients, err := f.impl.clientsForAction(ctx, "GetObjectVersion", f.bucket, f.key)
 	if err != nil {
 		return nil, nil, errors.E(err, "getting clients")
 	}

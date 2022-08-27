@@ -36,13 +36,15 @@ type ClientProvider interface {
 	// until the operation succeeds.
 	//
 	// REQUIRES: Get returns either >=1 clients, or a non-nil error.
-	Get(ctx context.Context, op, path string) ([]s3iface.S3API, error)
+	Get(ctx context.Context, op, bucket, key string) ([]s3iface.S3API, error)
 }
 
 type regionCache struct {
 	session *session.Session
 	clients []s3iface.S3API
 }
+
+type clientsForActionFunc func(ctx context.Context, s3IAMAction, bucket, key string) ([]s3iface.S3API, error)
 
 // NewDefaultProvider creates a trivial ClientProvider that uses AWS
 // session.NewSession()
@@ -89,11 +91,7 @@ func (p *defaultProvider) getRegion(region string) (*regionCache, error) {
 	return c, nil
 }
 
-func (p *defaultProvider) Get(ctx context.Context, op, path string) ([]s3iface.S3API, error) {
-	_, bucket, _, err := ParseURL(path)
-	if err != nil {
-		return nil, err
-	}
+func (p *defaultProvider) Get(ctx context.Context, op, bucket, key string) ([]s3iface.S3API, error) {
 	// TODO: Consider using some better default, like current region if we're in EC2.
 	region := defaultRegion
 	if bucket != "" { // bucket is empty when listing buckets, for example.
@@ -107,7 +105,7 @@ func (p *defaultProvider) Get(ctx context.Context, op, path string) ([]s3iface.S
 	c, err := p.getRegion(region)
 	p.mu.Unlock()
 	if err != nil {
-		err = errors.E(err, fmt.Sprintf("defaultProvider.Get(%v,%s)", op, path))
+		err = errors.E(err, fmt.Sprintf("defaultProvider.Get(%v,s3://%s/%s)", op, bucket, key))
 	}
 	return c.clients, err
 }

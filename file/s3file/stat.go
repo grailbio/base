@@ -14,13 +14,17 @@ import (
 
 // Stat implements file.Implementation interface.
 func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (file.Info, error) {
+	_, bucket, key, err := ParseURL(path)
+	if err != nil {
+		return nil, errors.E(errors.Invalid, "could not parse", path, err)
+	}
 	resp := runRequest(ctx, func() response {
-		clients, err := impl.provider.Get(ctx, "GetObject", path)
+		clients, err := impl.clientsForAction(ctx, "GetObject", bucket, key)
 		if err != nil {
 			return response{err: err}
 		}
 		policy := newBackoffPolicy(clients, mergeFileOpts(opts))
-		info, err := stat(ctx, clients, policy, path)
+		info, err := stat(ctx, clients, policy, path, bucket, key)
 		if err != nil {
 			return response{err: err}
 		}
@@ -29,11 +33,7 @@ func (impl *s3Impl) Stat(ctx context.Context, path string, opts ...file.Opts) (f
 	return resp.info, resp.err
 }
 
-func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path string) (*s3Info, error) {
-	_, bucket, key, err := ParseURL(path)
-	if err != nil {
-		return nil, errors.E(errors.Invalid, "could not parse", path, err)
-	}
+func stat(ctx context.Context, clients []s3iface.S3API, policy retryPolicy, path, bucket, key string) (*s3Info, error) {
 	if key == "" {
 		return nil, errors.E(errors.Invalid, "cannot stat with empty S3 key", path)
 	}

@@ -34,15 +34,15 @@ type Options struct {
 }
 
 type s3Impl struct {
-	provider ClientProvider
-	options  Options
+	clientsForAction clientsForActionFunc
+	options          Options
 }
 
 // NewImplementation creates a new file.Implementation for S3. The provider is
 // called to create s3 client objects.
 func NewImplementation(provider ClientProvider, opts Options) file.Implementation {
 	metricAutolog()
-	return &s3Impl{provider, opts}
+	return &s3Impl{provider.Get, opts}
 }
 
 // Run handler in a separate goroutine, then wait for either the handler to
@@ -96,7 +96,7 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 	var uploader *s3Uploader
 	if mode == writeonly {
 		resp := runRequest(ctx, func() response {
-			u, err := newUploader(ctx, impl.provider, impl.options, path, bucket, key, opts)
+			u, err := newUploader(ctx, impl.clientsForAction, impl.options, path, bucket, key, opts)
 			return response{uploader: u, err: err}
 		})
 		if resp.err != nil {
@@ -105,14 +105,14 @@ func (impl *s3Impl) internalOpen(ctx context.Context, path string, mode accessMo
 		uploader = resp.uploader
 	}
 	f := &s3File{
-		name:     path,
-		mode:     mode,
-		opts:     opts,
-		provider: impl.provider,
-		bucket:   bucket,
-		key:      key,
-		uploader: uploader,
-		reqCh:    make(chan request, 16),
+		name:             path,
+		mode:             mode,
+		opts:             opts,
+		clientsForAction: impl.clientsForAction,
+		bucket:           bucket,
+		key:              key,
+		uploader:         uploader,
+		reqCh:            make(chan request, 16),
 	}
 	go f.handleRequests()
 	return f, err
@@ -125,7 +125,7 @@ func (impl *s3Impl) Remove(ctx context.Context, path string) error {
 		if err != nil {
 			return response{err: err}
 		}
-		clients, err := impl.provider.Get(ctx, "DeleteObject", path)
+		clients, err := impl.clientsForAction(ctx, "DeleteObject", bucket, key)
 		if err != nil {
 			return response{err: errors.E(err, "s3file.remove", path)}
 		}
@@ -153,23 +153,23 @@ func (impl *s3Impl) Presign(ctx context.Context, path, method string, expiry tim
 		if err != nil {
 			return response{err: err}
 		}
-		var op string
+		var action string
 		var getRequestFn func(client s3iface.S3API) *awsrequest.Request
 		switch method {
 		case http.MethodGet:
-			op = "GetObject"
+			action = "GetObject"
 			getRequestFn = func(client s3iface.S3API) *awsrequest.Request {
 				req, _ := client.GetObjectRequest(&s3.GetObjectInput{Bucket: &bucket, Key: &key})
 				return req
 			}
 		case http.MethodPut:
-			op = "PutObject"
+			action = "PutObject"
 			getRequestFn = func(client s3iface.S3API) *awsrequest.Request {
 				req, _ := client.PutObjectRequest(&s3.PutObjectInput{Bucket: &bucket, Key: &key})
 				return req
 			}
 		case http.MethodDelete:
-			op = "DeleteObject"
+			action = "DeleteObject"
 			getRequestFn = func(client s3iface.S3API) *awsrequest.Request {
 				req, _ := client.DeleteObjectRequest(&s3.DeleteObjectInput{Bucket: &bucket, Key: &key})
 				return req
@@ -177,7 +177,7 @@ func (impl *s3Impl) Presign(ctx context.Context, path, method string, expiry tim
 		default:
 			return response{err: errors.E(errors.NotSupported, "s3file.presign: unsupported http method", method)}
 		}
-		clients, err := impl.provider.Get(ctx, op, path)
+		clients, err := impl.clientsForAction(ctx, action, bucket, key)
 		if err != nil {
 			return response{err: err}
 		}
