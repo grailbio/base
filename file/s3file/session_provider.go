@@ -7,7 +7,10 @@ package s3file
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -16,7 +19,10 @@ import (
 	"github.com/grailbio/base/errors"
 )
 
-const defaultRegion = "us-west-2"
+const (
+	defaultRegion                        = "us-west-2"
+	clientCacheGarbageCollectionInterval = 10 * time.Minute
+)
 
 type (
 	// SessionProvider provides Sessions for making AWS API calls. Get() is called whenever s3file
@@ -26,10 +32,9 @@ type (
 		// Get returns AWS sessions that can be used to perform in.S3IAMAction on
 		// s3://{in.bucket}/{in.key}.
 		//
-		// s3file will maintain internal references to every *session.Session that are never
-		// released, so implementations must not return too many unique ones.
-		// Get() is called for every S3 operation so it should be very fast. Caching is strongly
-		// encouraged for both performance and avoiding leaking objects.
+		// s3file maintains an internal cache keyed by *session.Session that is only pruned
+		// occasionally. Get() is called for every S3 operation so it should be very fast. Caching
+		// (that is, reusing *session.Session whenever possible) is strongly encouraged.
 		//
 		// Get() must return >= 1 session, or error. If > 1, the S3 operation will be tried
 		// on each session in unspecified order until it succeeds.
@@ -78,10 +83,10 @@ type (
 	// clientCache caches clients for all regions, based on the user's SessionProvider.
 	clientCache struct {
 		provider SessionProvider
-		// clients maps clientCacheKey -> *s3.S3.
+		// clients maps clientCacheKey -> *clientCacheValue.
 		// TODO: Implement some kind of garbage collection and relax the documented constraint
 		// that sessions are never released.
-		clients sync.Map
+		clients *sync.Map
 	}
 	clientCacheKey struct {
 		region string
@@ -89,10 +94,50 @@ type (
 		// It may be configured for a different region, so we don't use it directly.
 		userSession *session.Session
 	}
+	clientCacheValue struct {
+		client *s3.S3
+		// usedSinceLastGC is 0 or 1. It's set when this client is used, and acted on by the
+		// GC goroutine.
+		// TODO: Use atomic.Bool in go1.19.
+		usedSinceLastGC int32
+	}
 )
 
 func newClientCache(provider SessionProvider) *clientCache {
-	return &clientCache{provider: provider}
+	// According to time.Tick documentation, ticker.Stop must be called to avoid leaking ticker
+	// memory. However, *clientCache is never explicitly "shut down", so we don't have a good way
+	// to stop the GC loop. Instead, we use a finalizer on *clientCache, and ensure the GC loop
+	// itself doesn't keep *clientCache alive.
+	var (
+		clients         sync.Map
+		gcCtx, gcCancel = context.WithCancel(context.Background())
+	)
+	go func() {
+		ticker := time.NewTicker(clientCacheGarbageCollectionInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gcCtx.Done():
+				return
+			case <-ticker.C:
+			}
+			clients.Range(func(keyAny, valueAny any) bool {
+				key := keyAny.(clientCacheKey)
+				value := valueAny.(*clientCacheValue)
+				if atomic.SwapInt32(&value.usedSinceLastGC, 0) == 0 {
+					// Note: Concurrent goroutines could mark this client as used between our query
+					// and delete. That's fine; we'll just construct a new client next time.
+					clients.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+	// Note: Declare *clientCache after the GC loop to help ensure the latter doesn't keep a
+	// reference to the former.
+	cc := clientCache{provider, &clients}
+	runtime.SetFinalizer(&cc, func(any) { gcCancel() })
+	return &cc
 }
 
 func (c *clientCache) forAction(ctx context.Context, s3IAMAction, bucket, key string) ([]s3iface.S3API, error) {
@@ -114,9 +159,14 @@ func (c *clientCache) forAction(ctx context.Context, s3IAMAction, bucket, key st
 		key := clientCacheKey{region, session}
 		obj, ok := c.clients.Load(key)
 		if !ok {
-			obj, _ = c.clients.LoadOrStore(key, s3.New(session, &aws.Config{Region: &region}))
+			obj, _ = c.clients.LoadOrStore(key, &clientCacheValue{
+				client:          s3.New(session, &aws.Config{Region: &region}),
+				usedSinceLastGC: 1,
+			})
 		}
-		clients[i] = obj.(*s3.S3)
+		value := obj.(*clientCacheValue)
+		clients[i] = value.client
+		atomic.StoreInt32(&value.usedSinceLastGC, 1)
 	}
 	return clients, nil
 }
