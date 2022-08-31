@@ -476,7 +476,7 @@ func TestNotExist(t *testing.T) {
 	assert.True(t, errors.Is(errors.NotExist, err))
 }
 
-func realBucketProviderOrSkip(t *testing.T) ClientProvider {
+func realBucketProviderOrSkip(t *testing.T) SessionProvider {
 	if *s3BucketFlag == "" {
 		t.Skip("Skipping. Set -s3-bucket to run the test.")
 	}

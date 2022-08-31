@@ -40,9 +40,9 @@ type s3Impl struct {
 
 // NewImplementation creates a new file.Implementation for S3. The provider is
 // called to create s3 client objects.
-func NewImplementation(provider ClientProvider, opts Options) file.Implementation {
+func NewImplementation(provider SessionProvider, opts Options) file.Implementation {
 	metricAutolog()
-	return &s3Impl{provider.Get, opts}
+	return &s3Impl{newClientCache(provider).forAction, opts}
 }
 
 // Run handler in a separate goroutine, then wait for either the handler to
