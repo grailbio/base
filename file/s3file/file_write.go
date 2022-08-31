@@ -31,7 +31,7 @@ type s3Uploader struct {
 	curBuf      *[]byte
 	nextPartNum int64
 
-	bufPool sync.Pool
+	bufPool *sync.Pool
 	reqCh   chan uploadChunk
 	err     errors.Once
 	sg      sync.WaitGroup
@@ -48,9 +48,9 @@ type uploadChunk struct {
 
 const uploadParallelism = 16
 
-// UploadPartSize is the size of a chunk during multi-part uploads.  It is
+// DefaultUploadPartSize is the size of a chunk during multi-part uploads.  It is
 // exposed only for unittests.
-var UploadPartSize = 16 << 20
+const DefaultUploadPartSize = 16 << 20
 
 func newUploader(ctx context.Context, provider ClientProvider, opts Options, path, bucket, key string, fileOpts file.Opts) (*s3Uploader, error) {
 	clients, err := provider.Get(ctx, "PutObject", path)
@@ -65,6 +65,10 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 	if opts.ServerSideEncryption != "" {
 		params.SetServerSideEncryption(opts.ServerSideEncryption)
 	}
+	uploadPartSize := opts.UploadPartSize
+	if uploadPartSize == 0 {
+		uploadPartSize = DefaultUploadPartSize
+	}
 
 	u := &s3Uploader{
 		ctx:         ctx,
@@ -74,7 +78,7 @@ func newUploader(ctx context.Context, provider ClientProvider, opts Options, pat
 		opts:        fileOpts,
 		s3opts:      opts,
 		createTime:  time.Now(),
-		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, UploadPartSize); return &slice }},
+		bufPool:     sync.Pool{New: func() interface{} { slice := make([]byte, uploadPartSize); return &slice }}
 		nextPartNum: 1,
 	}
 	policy := newRetryPolicy(clients, file.Opts{})
@@ -144,7 +148,7 @@ func (u *s3Uploader) write(buf []byte) {
 			u.curBuf = u.bufPool.Get().(*[]byte)
 			*u.curBuf = (*u.curBuf)[:0]
 		}
-		if cap(*u.curBuf) != UploadPartSize {
+		if cap(*u.curBuf) == 0 {
 			panic("empty buf")
 		}
 		uploadBuf := *u.curBuf

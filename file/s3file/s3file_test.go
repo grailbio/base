@@ -403,15 +403,9 @@ func testOverwriteWhileReading(t *testing.T, impl file.Implementation, pathPrefi
 
 func TestWriteLargeFile(t *testing.T) {
 	// Reduce the upload chunk size to issue concurrent upload requests to S3.
-	oldUploadPartSize := s3file.UploadPartSize
-	s3file.UploadPartSize = 128
-	defer func() {
-		s3file.UploadPartSize = oldUploadPartSize
-	}()
-
 	ctx := context.Background()
 	provider := &testProvider{clients: []s3iface.S3API{s3test.NewClient(t, "b")}}
-	impl := s3file.NewImplementation(provider, s3file.Options{})
+	impl := s3file.NewImplementation(provider, s3file.Options{UploadPartSize: 128})
 	path := "s3://b/test.txt"
 	f, err := impl.Create(ctx, path)
 	assert.NoError(t, err)
