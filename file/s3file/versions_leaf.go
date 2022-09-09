@@ -27,11 +27,7 @@ type (
 		// readOffset is the cursor for Read().
 		readOffset int64
 
-		// reader is idle (available for some goroutine to use). Goroutines set reader = nil before
-		// using it to "acquire" it, then return it after their operation (if reader == nil then).
-		// If the caller only uses one thread, we'll end up creating and reusing just one
-		// *chunkReaderAt for all operations.
-		reader unsafe.Pointer // *chunkReaderAt
+		reader chunkReaderCache
 	}
 )
 
@@ -59,7 +55,18 @@ func (f *versionsFile) Read(ctx context.Context, dst []byte) (int, error) {
 }
 
 func (f *versionsFile) ReadAt(ctx context.Context, dst []byte, offset int64) (int, error) {
-	reader, cleanUp, err := f.getChunkReader(ctx)
+	reader, cleanUp, err := f.reader.getOrCreate(ctx, func() (*chunkReaderAt, error) {
+		clients, err := f.impl.clientsForAction(ctx, "GetObjectVersion", f.bucket, f.key)
+		if err != nil {
+			return nil, errors.E(err, "getting clients")
+		}
+		return &chunkReaderAt{
+			name: f.path(), bucket: f.bucket, key: f.key, versionID: f.versionID,
+			newRetryPolicy: func() retryPolicy {
+				return newBackoffPolicy(append([]s3iface.S3API{}, clients...), file.Opts{})
+			},
+		}, nil
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -69,37 +76,51 @@ func (f *versionsFile) ReadAt(ctx context.Context, dst []byte, offset int64) (in
 	return n, err
 }
 
-// getChunkReader constructs a reader. cleanUp must be called iff error is nil.
-func (f *versionsFile) getChunkReader(ctx context.Context) (reader *chunkReaderAt, cleanUp func(), _ error) {
+func (f *versionsFile) Close(ctx context.Context) error {
+	f.reader.close()
+	return nil
+}
+
+type chunkReaderCache struct {
+	// available is idle (for some goroutine to use). Goroutines set available = nil before
+	// using it to "acquire" it, then return it after their operation (if available == nil then).
+	// If the caller only uses one thread, we'll end up creating and reusing just one
+	// *chunkReaderAt for all operations.
+	available unsafe.Pointer // *chunkReaderAt
+}
+
+// get constructs a reader. cleanUp must be called iff error is nil.
+func (c *chunkReaderCache) getOrCreate(
+	ctx context.Context, create func() (*chunkReaderAt, error),
+) (
+	reader *chunkReaderAt, cleanUp func(), err error,
+) {
 	trySaveReader := func() {
-		if atomic.CompareAndSwapPointer(&f.reader, nil, unsafe.Pointer(reader)) {
+		if atomic.CompareAndSwapPointer(&c.available, nil, unsafe.Pointer(reader)) {
 			return
 		}
 		reader.Close()
 	}
 
-	reader = (*chunkReaderAt)(atomic.SwapPointer(&f.reader, nil))
+	reader = (*chunkReaderAt)(atomic.SwapPointer(&c.available, nil))
 	if reader != nil {
 		return reader, trySaveReader, nil
 	}
 
-	clients, err := f.impl.clientsForAction(ctx, "GetObjectVersion", f.bucket, f.key)
+	reader, err = create()
 	if err != nil {
-		return nil, nil, errors.E(err, "getting clients")
+		if reader != nil {
+			reader.Close()
+		}
+		return nil, nil, err
 	}
-	reader = &chunkReaderAt{
-		name: f.path(), bucket: f.bucket, key: f.key, versionID: f.versionID,
-		newRetryPolicy: func() retryPolicy {
-			return newBackoffPolicy(append([]s3iface.S3API{}, clients...), file.Opts{})
-		},
-	}
+
 	return reader, trySaveReader, nil
 }
 
-func (f *versionsFile) Close(ctx context.Context) error {
-	reader := (*chunkReaderAt)(atomic.SwapPointer(&f.reader, nil))
+func (c *chunkReaderCache) close() {
+	reader := (*chunkReaderAt)(atomic.SwapPointer(&c.available, nil))
 	if reader != nil {
 		reader.Close()
 	}
-	return nil
 }
