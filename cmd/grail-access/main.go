@@ -47,6 +47,7 @@ var (
 
 	dumpFlag                 bool
 	doNotRefreshDurationFlag time.Duration
+	expiryCaveatFlag         string
 )
 
 func main() {
@@ -99,6 +100,7 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	cmd.Flags.StringVar(&tokenFlag, "token", "/var/run/secrets/kubernetes.io/serviceaccount/token", "Path to token file.")
 	cmd.Flags.BoolVar(&dumpFlag, "dump", false, "If credentials are present, dump them on the console instead of refreshing them.")
 	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")
+	cmd.Flags.StringVar(&expiryCaveatFlag, "expiry-caveat", "", "Duration of expiry caveat added to blessings (for testing); empty means no caveat added")
 
 	cmdline.HideGlobalFlagsExcept()
 	cmdline.Main(cmd)
@@ -152,7 +154,21 @@ func run(*cmdline.Env, []string) error {
 	if err != nil {
 		return errors.E("failed to fetch blessings", err)
 	}
-
+	if expiryCaveatFlag != "" {
+		d, err := time.ParseDuration(expiryCaveatFlag)
+		if err != nil {
+			return errors.E("failed to parse expiry-caveat")
+		}
+		expiryCaveat, err := security.NewExpiryCaveat(time.Now().Add(d))
+		if err != nil {
+			return errors.E("failed to make expiry caveat", err)
+		}
+		extension := fmt.Sprintf("expires-%v", d)
+		blessings, err = principal.Bless(principal.PublicKey(), blessings, extension, expiryCaveat)
+		if err != nil {
+			return errors.E("failed to make expired blessings", err)
+		}
+	}
 	if err = principal.BlessingStore().SetDefault(blessings); err != nil {
 		return errors.E(err, "failed to set default blessings")
 	}
