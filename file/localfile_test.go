@@ -24,7 +24,7 @@ func TestAll(t *testing.T) {
 	defer cleanup()
 	impl := file.NewLocalImplementation()
 	ctx := context.Background()
-	filetestutil.TestAll(ctx, t, impl, tempDir)
+	filetestutil.TestStandard(ctx, t, impl, tempDir)
 }
 
 func TestEmptyPath(t *testing.T) {

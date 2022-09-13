@@ -9,22 +9,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/ioctx"
 )
 
 // s3File implements file.File interface.
 //
-// Operations on a file are internally implemented by a goroutine running
-// handleRequests. Requests to handleRequests are sent through s3File.reqCh. The
-// response to a request is sent through request.ch.
+// Operations on a file are internally implemented by a goroutine running handleRequests,
+// which reads requests from s3file.reqCh and sends responses to request.ch.
 //
-// The user-facing s3File methods, such as Read and Seek are implemented in the following way:
-//
+// s3File's API methods (Read, Seek, etc.) are implemented by:
 // - Create a chan response.
-//
-// - Send a request object through s3File.ch. The response channel is included
-// in the request.  handleRequests() receives the request, handles the request,
-// and sends the response.
-//
+// - Construct a request{} object describing the operation and send it to reqCh.
 // - Wait for a message from either the response channel or context.Done(),
 // whichever comes first.
 type s3File struct {
@@ -36,14 +31,16 @@ type s3File struct {
 	bucket string // bucket part of "name".
 	key    string // key part "name".
 
+	// info is file metadata. Set at construction if mode == readonly, otherwise nil.
+	info *s3Info
+
+	bodyReader chunkReaderCache
+
+	// reqCh transports user operations (like Read) to the worker goroutine (handleRequests).
+	// This allows respecting context cancellation (regardless of what underlying AWS SDK operations
+	// do). It also guards subsequent fields; they are only accessed by the handleRequests
+	// goroutine.
 	reqCh chan request
-
-	// The following fields are accessed only by the handleRequests thread.
-	info *s3Info // File metadata. Filled on demand.
-
-	// Active GetObject body reader. Created by a Read() request. Closed on Seek
-	// or Close call.
-	bodyReader *chunkReaderAt
 
 	// Seek offset.
 	// INVARIANT: position >= 0 && (position > 0 ⇒ info != nil)
@@ -272,44 +269,49 @@ func (f *s3File) handleSeek(req request) {
 		return
 	}
 	f.position = newPosition
-	if f.bodyReader != nil {
-		f.bodyReader.Close()
-		f.bodyReader = nil
-	}
 	req.ch <- response{off: f.position}
 }
 
-func (f *s3File) handleRead(req request) {
-	clients, err := f.clientsForAction(req.ctx, "GetObject", f.bucket, f.key)
-	if err != nil {
-		req.ch <- response{err: errors.E(err, fmt.Sprintf("s3file.read %v", f.name))}
-		return
+var _ ioctx.ReaderAt = (*s3File)(nil)
+
+func (f *s3File) ReadAt(ctx context.Context, buf []byte, off int64) (int, error) {
+	if f.mode != readonly {
+		return 0, errors.E(errors.NotAllowed, "not opened for read")
 	}
-	if f.bodyReader == nil {
-		f.bodyReader = &chunkReaderAt{
+	if f.info == nil {
+		panic("stat not filled")
+	}
+
+	reader, cleanUp, err := f.bodyReader.getOrCreate(ctx, func() (*chunkReaderAt, error) {
+		clients, err := f.clientsForAction(ctx, "GetObject", f.bucket, f.key)
+		if err != nil {
+			return nil, errors.E(err, "getting clients")
+		}
+		return &chunkReaderAt{
 			name:   f.name,
 			bucket: f.bucket,
 			key:    f.key,
 			newRetryPolicy: func() retryPolicy {
 				return newBackoffPolicy(append([]s3iface.S3API{}, clients...), f.opts)
 			},
-		}
+		}, nil
+	})
+	if err != nil {
+		return 0, err
 	}
+	defer cleanUp()
+
 	var n int
 	// Note: We allow seeking past EOF, consistent with io.Seeker.Seek's documentation. We simply
 	// return EOF in this situation.
-	if bytesUntilEOF := f.info.size - f.position; bytesUntilEOF <= 0 {
+	if bytesUntilEOF := f.info.size - off; bytesUntilEOF <= 0 {
 		err = io.EOF
 	} else {
-		if len(req.buf) > int(bytesUntilEOF) {
-			req.buf = req.buf[:bytesUntilEOF]
+		if len(buf) > int(bytesUntilEOF) {
+			buf = buf[:bytesUntilEOF]
 		}
 		var info s3Info
-		n, info, err = f.bodyReader.ReadAt(req.ctx, req.buf, f.position)
-		f.position += int64(n)
-		if f.info == nil && info.etag != "" {
-			f.info = &info
-		}
+		n, info, err = reader.ReadAt(ctx, buf, off)
 		if err != nil && err != io.EOF {
 			err = errors.E(err, fmt.Sprintf("s3file.read %v", f.name))
 		} else if info == (s3Info{}) {
@@ -319,10 +321,12 @@ func (f *s3File) handleRead(req request) {
 			err = eTagChangedError(f.name, f.info.etag, info.etag)
 		}
 	}
-	if err != nil {
-		f.bodyReader.Close()
-		f.bodyReader = nil
-	}
+	return n, err
+}
+
+func (f *s3File) handleRead(req request) {
+	n, err := f.ReadAt(req.ctx, req.buf, f.position)
+	f.position += int64(n)
 	req.ch <- response{n: n, err: err}
 }
 
@@ -336,10 +340,7 @@ func (f *s3File) handleClose(req request) {
 	if f.uploader != nil {
 		err = f.uploader.finish()
 	}
-	if f.bodyReader != nil {
-		f.bodyReader.Close()
-		f.bodyReader = nil
-	}
+	f.bodyReader.close()
 	if err != nil {
 		err = errors.E(err, "s3file.close", f.name)
 	}

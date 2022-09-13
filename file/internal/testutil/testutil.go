@@ -8,12 +8,15 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/ioctx"
+	"github.com/grailbio/base/traverse"
 	"github.com/grailbio/testutil/assert"
 )
 
@@ -360,8 +363,8 @@ func TestListDir(ctx context.Context, t *testing.T, impl file.Implementation, di
 	}, doList(dir+"/d0/"))
 }
 
-// TestAll runs all the tests in this package.
-func TestAll(ctx context.Context, t *testing.T, impl file.Implementation, dir string) {
+// TestStandard runs tests for all of the standard file API functionality.
+func TestStandard(ctx context.Context, t *testing.T, impl file.Implementation, dir string) {
 	iName := impl.String()
 
 	t.Run(iName+"_Empty", func(t *testing.T) { TestEmpty(ctx, t, impl, dir+"/empty.txt") })
@@ -374,4 +377,46 @@ func TestAll(ctx context.Context, t *testing.T, impl file.Implementation, dir st
 	t.Run(iName+"_Stat", func(t *testing.T) { TestStat(ctx, t, impl, dir+"/stat.txt") })
 	t.Run(iName+"_List", func(t *testing.T) { TestList(ctx, t, impl, dir+"/match") })
 	t.Run(iName+"_ListDir", func(t *testing.T) { TestListDir(ctx, t, impl, dir+"/dirmatch") })
+}
+
+// TestReadAts tests arbitrarily-ordered, concurrent reads.
+func TestReadAts(
+	ctx context.Context,
+	t *testing.T,
+	impl file.Implementation,
+	path string,
+) {
+	expected := "A purple fox jumped over a blue cat"
+	doWriteFile(ctx, t, impl, path, expected)
+
+	const (
+		parallelism   = 2
+		readsPerShard = 1
+	)
+
+	f, err := impl.Open(ctx, path)
+	assert.NoError(t, err)
+	r, ok := f.(ioctx.ReaderAt)
+	assert.True(t, ok, "not ReaderAt: %T", f)
+
+	rnds := make([]*rand.Rand, parallelism)
+	rnds[0] = rand.New(rand.NewSource(1))
+	for i := 1; i < len(rnds); i++ {
+		rnds[i] = rand.New(rand.NewSource(rnds[0].Int63()))
+	}
+
+	_ = traverse.Limit(parallelism).Each(parallelism, func(shard int) (err error) {
+		rnd := rnds[shard]
+		for i := 0; i < readsPerShard; i++ {
+			start := rnd.Intn(len(expected))
+			limit := start + rnd.Intn(len(expected)-start)
+			got := make([]byte, limit-start)
+			_, err := r.ReadAt(ctx, got, int64(start))
+			assert.NoError(t, err)
+			assert.EQ(t, expected[start:limit], string(got))
+		}
+		return nil
+	})
+
+	assert.NoError(t, f.Close(ctx))
 }

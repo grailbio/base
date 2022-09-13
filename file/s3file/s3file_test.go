@@ -156,7 +156,10 @@ func TestS3(t *testing.T) {
 		)),
 		newClient(t),
 	)
-	testutil.TestAll(ctx, t, impl, "s3://b/dir")
+	testutil.TestStandard(ctx, t, impl, "s3://b/dir")
+	t.Run("readat", func(t *testing.T) {
+		testutil.TestReadAts(ctx, t, impl, "s3://b/dir/readats.txt")
+	})
 }
 
 func TestS3WithRetries(t *testing.T) {
@@ -183,7 +186,10 @@ func TestS3WithRetries(t *testing.T) {
 			return nil
 		}
 		impl := newImpl(client)
-		testutil.TestAll(ctx, t, impl, "s3://b/dir")
+		testutil.TestStandard(ctx, t, impl, "s3://b/dir")
+		t.Run("readat", func(t *testing.T) {
+			testutil.TestReadAts(ctx, t, impl, "s3://b/dir/readats.txt")
+		})
 	}
 }
 
@@ -560,7 +566,10 @@ func TestAWS(t *testing.T) {
 	provider := realBucketProviderOrSkip(t)
 	ctx := context.Background()
 	impl := NewImplementation(provider, Options{})
-	testutil.TestAll(ctx, t, impl, "s3://"+*s3BucketFlag+"/tmp")
+	testutil.TestStandard(ctx, t, impl, "s3://"+*s3BucketFlag+"/tmp")
+	t.Run("readat", func(t *testing.T) {
+		testutil.TestReadAts(ctx, t, impl, "s3://"+*s3BucketFlag+"/tmp")
+	})
 }
 
 func TestConcurrentUploadsAWS(t *testing.T) {
