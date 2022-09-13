@@ -144,7 +144,6 @@ func (f *s3File) Writer(ctx context.Context) io.Writer {
 func (f *s3File) Close(ctx context.Context) error {
 	err := f.runRequest(ctx, request{reqType: closeRequest}).err
 	close(f.reqCh)
-	f.clientsForAction = nil
 	return err
 }
 
@@ -154,7 +153,6 @@ func (f *s3File) Discard(ctx context.Context) {
 	}
 	_ = f.runRequest(ctx, request{reqType: abortRequest})
 	close(f.reqCh)
-	f.clientsForAction = nil
 }
 
 type requestType int
@@ -345,6 +343,7 @@ func (f *s3File) handleClose(req request) {
 	if err != nil {
 		err = errors.E(err, "s3file.close", f.name)
 	}
+	f.clientsForAction = nil
 	req.ch <- response{err: err}
 }
 
@@ -353,5 +352,6 @@ func (f *s3File) handleAbort(req request) {
 	if err != nil {
 		err = errors.E(err, "s3file.abort", f.name)
 	}
+	f.clientsForAction = nil
 	req.ch <- response{err: err}
 }

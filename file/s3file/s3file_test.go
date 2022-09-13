@@ -165,10 +165,16 @@ func TestS3WithRetries(t *testing.T) {
 
 	ctx := context.Background()
 	for iter := 0; iter < 50; iter++ {
-		r := rand.New(rand.NewSource(int64(iter)))
+		randIntsC := make(chan int)
+		go func() {
+			r := rand.New(rand.NewSource(int64(iter)))
+			for {
+				randIntsC <- r.Intn(6)
+			}
+		}()
 		client := newClient(t)
 		client.Err = func(api string, input interface{}) error {
-			switch r.Intn(6) {
+			switch <-randIntsC {
 			case 0:
 				return awserr.New(awsrequest.ErrCodeSerialization, fmt.Sprintf("test failure %s (%s)", api, string(debug.Stack())), nil)
 			case 1:
