@@ -10,7 +10,7 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	insts, err := parse(strings.NewReader(`
+	got, err := parse(strings.NewReader(`
 param x y = "okay"
 param y z = 123
 param y a = "a"; param y b = b
@@ -34,10 +34,10 @@ instance bigslice/system blah (
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, inst := range insts {
+	for _, inst := range got {
 		t.Log(inst.SyntaxString(nil))
 	}
-	if got, want := insts, (instances{
+	want := instances{
 		"x": &instance{
 			name: "x",
 			params: map[string]interface{}{
@@ -69,10 +69,19 @@ instance bigslice/system blah (
 				"region": "us-west-2",
 			},
 		},
-	}); !got.Equal(want) {
+	}
+	if !got.Equal(want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-
+	for _, wantInst := range want {
+		insts, err := parse(strings.NewReader(wantInst.SyntaxString(nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotInst := insts[wantInst.name]; !wantInst.Equal(gotInst) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
 }
 
 func TestParseError(t *testing.T) {

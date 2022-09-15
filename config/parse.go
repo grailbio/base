@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"text/scanner"
@@ -166,7 +167,7 @@ func (inst *instance) SyntaxString(docs map[string]string) string {
 			b.WriteString("(\n")
 			prefix = "\t"
 		}
-		for k, v := range inst.params {
+		forEachParam(inst.params, func(k string, v any) {
 			b.WriteString(prefix)
 			b.WriteString(k)
 			b.WriteString(" = ")
@@ -176,7 +177,7 @@ func (inst *instance) SyntaxString(docs map[string]string) string {
 				b.WriteString(docs[k])
 			}
 			b.WriteString("\n")
-		}
+		})
 		if len(inst.params) > 1 {
 			b.WriteString(")\n")
 		}
@@ -192,7 +193,7 @@ func (inst *instance) SyntaxString(docs map[string]string) string {
 		return b.String()
 	}
 	b.WriteString(" (\n")
-	for k, v := range inst.params {
+	forEachParam(inst.params, func(k string, v any) {
 		b.WriteString("\t")
 		b.WriteString(k)
 		b.WriteString(" = ")
@@ -202,9 +203,20 @@ func (inst *instance) SyntaxString(docs map[string]string) string {
 			b.WriteString(docs[k])
 		}
 		b.WriteString("\n")
-	}
+	})
 	b.WriteString(")\n")
 	return b.String()
+}
+
+func forEachParam(params map[string]any, fn func(k string, v any)) {
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fn(k, params[k])
+	}
 }
 
 // A parser stores parser state defines the productions
