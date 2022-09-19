@@ -14,6 +14,11 @@ type Reader interface {
 	Read(context.Context, []byte) (n int, err error)
 }
 
+// Writer is io.Writer with context added.
+type Writer interface {
+	Write(context.Context, []byte) (n int, err error)
+}
+
 // Closer is io.Closer with context added.
 type Closer interface {
 	Close(context.Context) error
@@ -38,7 +43,11 @@ type ReadSeeker interface {
 }
 
 // ReaderAt is io.ReaderAt with context added.
-
 type ReaderAt interface {
 	ReadAt(_ context.Context, dst []byte, off int64) (n int, err error)
+}
+
+// WriterAt is io.WriterAt with context added.
+type WriterAt interface {
+	WriteAt(_ context.Context, p []byte, off int64) (n int, err error)
 }

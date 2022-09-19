@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/log"
 )
 
@@ -62,7 +63,8 @@ func (impl *localImpl) Open(ctx context.Context, path string, _ ...Opts) (File, 
 		}
 		return nil, err
 	}
-	return &localFile{f: f, mode: readonly, path: path}, nil
+	lf := localFile{f: f, mode: readonly, path: path}
+	return &lf, nil
 }
 
 // Create implements file.Implementation.  To make writes appear linearizable,
@@ -221,6 +223,19 @@ func (f *localFile) Stat(context.Context) (Info, error) {
 		return nil, fmt.Errorf("stat %v: is a directory", f.path)
 	}
 	return &localInfo{size: info.Size(), modTime: info.ModTime()}, nil
+}
+
+var (
+	_ ioctx.ReaderAt = (*localFile)(nil)
+	_ ioctx.WriterAt = (*localFile)(nil)
+)
+
+func (f *localFile) ReadAt(_ context.Context, dst []byte, off int64) (n int, err error) {
+	return f.f.ReadAt(dst, off)
+}
+
+func (f *localFile) WriteAt(_ context.Context, p []byte, off int64) (n int, err error) {
+	return f.f.WriteAt(p, off)
 }
 
 func (i *localInfo) Size() int64        { return i.size }

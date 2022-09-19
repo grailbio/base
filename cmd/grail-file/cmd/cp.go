@@ -11,6 +11,8 @@ import (
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/file/s3file"
+	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/traverse"
 )
 
@@ -44,7 +46,7 @@ func Cp(ctx context.Context, out io.Writer, args []string) error {
 		if err != nil {
 			return true, errors.E(err, fmt.Sprintf("cp %v->%v", src, dst))
 		}
-		if _, err := io.Copy(out.Writer(ctx), in.Reader(ctx)); err != nil {
+		if err = copyFile(ctx, out, in); err != nil {
 			_ = out.Close(ctx)
 			return true, errors.E(err, fmt.Sprintf("cp %v->%v", src, dst))
 		}
@@ -90,7 +92,67 @@ func Cp(ctx context.Context, out io.Writer, args []string) error {
 		}
 		return copyFileInDir(srcs[0], dst)
 	}
-	return traverse.Limit(parallelism).Each(len(srcs), func(i int) error {
+	return traverse.Each(len(srcs), func(i int) error {
 		return copyFileInDir(srcs[i], dst)
 	})
+}
+
+// TODO: Move copyFile to a common location so it doesn't need to depend on s3file's test-only data.
+var copyFileChunkSize = s3file.ReadChunkBytes
+
+func copyFile(ctx context.Context, dst file.File, src file.File) error {
+	dstAt, dstOK := dst.(ioctx.WriterAt)
+	srcAt, srcOK := src.(ioctx.ReaderAt)
+	if !dstOK || !srcOK {
+		return copyStream(ctx, dst.Writer(ctx), src.Reader(ctx))
+	}
+	info, err := src.Stat(ctx)
+	if err != nil {
+		return err
+	}
+	size := info.Size()
+	nChunks := int((size + copyFileChunkSize - 1) / copyFileChunkSize)
+	return traverse.Each(nChunks, func(chunkIdx int) (err error) {
+		offset := int64(chunkIdx) * copyFileChunkSize
+		wantN := size - offset
+		if wantN > copyFileChunkSize {
+			wantN = copyFileChunkSize
+		}
+		return copyStream(ctx,
+			ioctx.ToStdWriter(ctx, &offsetWriter{at: dstAt, offset: offset}),
+			io.LimitReader(ioctx.ToStdReader(ctx, &offsetReader{at: srcAt, offset: offset}), wantN),
+		)
+	})
+}
+
+func copyStream(ctx context.Context, dst io.Writer, src io.Reader) error {
+	item, err := parLimiter.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer item.Release()
+	_, err = io.CopyBuffer(dst, src, item.Buf())
+	return err
+}
+
+type offsetReader struct {
+	at     ioctx.ReaderAt
+	offset int64
+}
+
+func (r *offsetReader) Read(ctx context.Context, dst []byte) (int, error) {
+	n, err := r.at.ReadAt(ctx, dst, r.offset)
+	r.offset += int64(n)
+	return n, err
+}
+
+type offsetWriter struct {
+	at     ioctx.WriterAt
+	offset int64
+}
+
+func (w *offsetWriter) Write(ctx context.Context, p []byte) (int, error) {
+	n, err := w.at.WriteAt(ctx, p, w.offset)
+	w.offset += int64(n)
+	return n, err
 }

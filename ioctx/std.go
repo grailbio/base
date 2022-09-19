@@ -7,13 +7,19 @@ import (
 
 type (
 	fromStdReader   struct{ io.Reader }
+	fromStdWriter   struct{ io.Writer }
 	fromStdCloser   struct{ io.Closer }
 	fromStdSeeker   struct{ io.Seeker }
 	fromStdReaderAt struct{ io.ReaderAt }
+	fromStdWriterAt struct{ io.WriterAt }
 
 	StdReader struct {
 		Ctx context.Context
 		Reader
+	}
+	StdWriter struct {
+		Ctx context.Context
+		Writer
 	}
 	StdCloser struct {
 		Ctx context.Context
@@ -31,6 +37,10 @@ type (
 		Ctx context.Context
 		ReaderAt
 	}
+	StdWriterAt struct {
+		Ctx context.Context
+		WriterAt
+	}
 )
 
 // FromStdReader wraps io.Reader as Reader.
@@ -38,6 +48,13 @@ func FromStdReader(r io.Reader) Reader { return fromStdReader{r} }
 
 func (r fromStdReader) Read(_ context.Context, dst []byte) (n int, err error) {
 	return r.Reader.Read(dst)
+}
+
+// FromStdWriter wraps io.Writer as Writer.
+func FromStdWriter(w io.Writer) Writer { return fromStdWriter{w} }
+
+func (w fromStdWriter) Write(_ context.Context, p []byte) (n int, err error) {
+	return w.Writer.Write(p)
 }
 
 // FromStdCloser wraps io.Closer as Closer.
@@ -82,6 +99,13 @@ func (r StdReader) Read(dst []byte) (n int, err error) {
 	return r.Reader.Read(r.Ctx, dst)
 }
 
+// ToStdWriter wraps Writer as io.Writer.
+func ToStdWriter(ctx context.Context, w Writer) io.Writer { return StdWriter{ctx, w} }
+
+func (w StdWriter) Write(p []byte) (n int, err error) {
+	return w.Writer.Write(w.Ctx, p)
+}
+
 // ToStdCloser wraps Closer as io.Closer.
 func ToStdCloser(ctx context.Context, c Closer) io.Closer { return StdCloser{ctx, c} }
 
@@ -117,4 +141,11 @@ func ToStdReaderAt(ctx context.Context, r ReaderAt) io.ReaderAt { return StdRead
 
 func (r StdReaderAt) ReadAt(dst []byte, off int64) (n int, err error) {
 	return r.ReaderAt.ReadAt(r.Ctx, dst, off)
+}
+
+// ToStdWriterAt wraps WriterAt as io.WriterAt.
+func ToStdWriterAt(ctx context.Context, w WriterAt) io.WriterAt { return StdWriterAt{ctx, w} }
+
+func (w StdWriterAt) WriteAt(dst []byte, off int64) (n int, err error) {
+	return w.WriterAt.WriteAt(w.Ctx, dst, off)
 }

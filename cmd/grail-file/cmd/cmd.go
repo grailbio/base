@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/gobwas/glob"
 	"github.com/gobwas/glob/syntax"
 	"github.com/gobwas/glob/syntax/ast"
+	"github.com/grailbio/base/cmd/grail-file/cmd/internal/semaphore"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 )
@@ -63,15 +65,19 @@ func Run(ctx context.Context, args []string) error {
 	return errors.E("unknown command", args[0])
 }
 
-const parallelism = 128
+// parLimiter controls concurrency as well as total memory buffer capacity.
+// grail-file is used on both small-ish laptops in office, etc. and large EC2 instances, so we
+// choose to scale with number of CPUs. The exact numbers are somewhat arbitrary.
+// A large-ish buffer size improves S3 throughput, at least in EC2.
+var parLimiter = semaphore.New(32*runtime.NumCPU(), 1<<20)
 
 // forEachFile runs the callback for every file under the directory in
 // parallel. It returns any of the errors returned by the callback.
 func forEachFile(ctx context.Context, dir string, callback func(path string) error) error {
 	err := errors.Once{}
 	wg := sync.WaitGroup{}
-	ch := make(chan string, parallelism*100)
-	for i := 0; i < parallelism; i++ {
+	ch := make(chan string, parLimiter.Cap()*100)
+	for i := 0; i < parLimiter.Cap(); i++ {
 		wg.Add(1)
 		go func() {
 			for path := range ch {
