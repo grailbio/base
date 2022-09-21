@@ -160,10 +160,8 @@ func init() {
 type Profile struct {
 	// The following are used by the flag registration and
 	// handling mechanism.
-	flagDefaultPath string
-	flagPaths       []string
-	flagParams      []string
-	flagDump        bool
+	flags    flags
+	flagDump bool
 
 	globals map[string]*Constructor
 

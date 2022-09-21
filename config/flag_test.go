@@ -9,6 +9,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/grailbio/base/must"
@@ -102,22 +104,114 @@ func TestFlag(t *testing.T) {
 		return p
 	}
 
-	expectCreds := func(fecreds, dbcreds string, args ...string) {
-		t.Helper()
-		p := profile(args...)
-		var fe frontend
-		if err := p.Instance("app/frontend", &fe); err != nil {
-			t.Fatal(err)
-		}
-		if got, want := fe.creds.Creds(), fecreds; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
-		if got, want := fe.db.creds.Creds(), dbcreds; got != want {
-			t.Errorf("got %v, want %v", got, want)
-		}
+	for _, test := range []struct {
+		line           int
+		args           []string
+		wantFE, wantDB string
+	}{
+		{
+			callerLine(),
+			nil,
+			"marius:supersecret", "marius:supersecret",
+		},
+		{
+			callerLine(),
+			[]string{"-set", "app/auth/login.password=public"},
+			"marius:public", "marius:public",
+		},
+		{
+			callerLine(),
+			[]string{"-set", "app/frontend.credentials=app/auth/env"},
+			"environment", "marius:supersecret",
+		},
+		{
+			callerLine(),
+			[]string{"-profileinline", `param app/auth/login password = "public"`},
+			"marius:public", "marius:public",
+		},
+		{
+			callerLine(),
+			[]string{
+				"-set", "app/auth/login.password=public",
+				"-profile", "testdata/profile",
+			},
+			// Parameter settings in profile file should override, since they come later.
+			"marius:supersecret", "marius:supersecret",
+		},
+		{
+			callerLine(),
+			[]string{
+				"-set", "app/auth/login.password=public",
+				"-profile", "testdata/profile",
+				"-set", "app/auth/login.password=hunter2",
+			},
+			"marius:hunter2", "marius:hunter2",
+		},
+		{
+			callerLine(),
+			[]string{
+				"-set", "app/auth/login.password=public",
+				"-profile", "testdata/profile",
+				"-set", "app/auth/login.password=hunter2",
+				"-profileinline", `
+					instance test/felogin app/auth/login (
+						user = "tester"
+					)
+					param app/frontend credentials = test/felogin
+				`,
+			},
+			"tester:hunter2", "marius:hunter2",
+		},
+		{
+			callerLine(),
+			[]string{
+				"-set", "app/auth/login.password=public",
+				"-profile", "testdata/profile",
+				"-set", "app/auth/login.password=hunter2",
+				"-profileinline", `
+					instance test/felogin app/auth/login (
+						user = "tester"
+					)
+					param app/frontend credentials = test/felogin
+					param test/felogin password = "abc"
+				`,
+			},
+			"tester:abc", "marius:hunter2",
+		},
+		{
+			callerLine(),
+			[]string{
+				"-set", "app/auth/login.password=public",
+				"-profile", "testdata/profile",
+				"-set", "app/auth/login.password=hunter2",
+				"-profileinline", `
+					instance test/felogin app/auth/login (
+						user = "tester"
+					)
+					param app/frontend credentials = test/felogin
+				`,
+				"-profile", "testdata/profile_felogin_password",
+			},
+			"tester:abc", "marius:hunter2",
+		},
+	} {
+		t.Run(strconv.Itoa(test.line), func(t *testing.T) {
+			p := profile(test.args...)
+			var fe frontend
+			if err := p.Instance("app/frontend", &fe); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := fe.creds.Creds(), test.wantFE; got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+			if got, want := fe.db.creds.Creds(), test.wantDB; got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
 	}
+}
 
-	expectCreds("marius:supersecret", "marius:supersecret")
-	expectCreds("marius:public", "marius:public", "-set", "app/auth/login.password=public")
-	expectCreds("environment", "marius:supersecret", "-set", "app/frontend.credentials=app/auth/env")
+func callerLine() int {
+	_, _, line, _ := runtime.Caller(1) // 1 skips the callerLine() frame.
+	return line
 }
