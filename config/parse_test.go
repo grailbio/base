@@ -18,6 +18,7 @@ param y a = "a"; param y b = b
 param y (
 	x = "blah"
 	y = 333
+	fprec = 0.123456789
 )
 
 instance z blah (
@@ -47,11 +48,12 @@ instance bigslice/system blah (
 		"y": &instance{
 			name: "y",
 			params: map[string]interface{}{
-				"x": "blah",
-				"y": 333,
-				"z": 123,
-				"a": "a",
-				"b": indirect("b"),
+				"x":     "blah",
+				"y":     333,
+				"z":     123,
+				"a":     "a",
+				"b":     indirect("b"),
+				"fprec": 0.123456789,
 			},
 		},
 		"z": &instance{

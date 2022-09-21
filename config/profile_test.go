@@ -11,12 +11,14 @@ import (
 
 type custom struct {
 	x int
+	f float64
 }
 
 func init() {
 	Register("test/custom", func(inst *Constructor) {
 		var c custom
 		inst.IntVar(&c.x, "x", -1, "the x value")
+		inst.FloatVar(&c.f, "f", 0, "the f value")
 		inst.New = func() (interface{}, error) {
 			return c, nil
 		}
@@ -72,6 +74,9 @@ instance testx test/1 (
 	x = 100
 )
 
+instance testf test/custom (
+	f = 1
+)
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +101,14 @@ instance testx test/1 (
 	err = p.Instance("testx", &str)
 	if err == nil || !strings.Contains(err.Error(), "testx: instance type int not assignable to provided type *string") {
 		t.Error(err)
+	}
+
+	var c custom
+	if err = p.Instance("testf", &c); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.f, 1.; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 

@@ -518,11 +518,14 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 			}
 			*param.intptr = ival
 		case paramFloat:
-			fval, ok := val.(float64)
-			if !ok {
+			switch tv := val.(type) {
+			case int:
+				*param.floatptr = float64(tv)
+			case float64:
+				*param.floatptr = tv
+			default:
 				return fmt.Errorf("%s.%s: wrong parameter type: expected float64, got %T", name, pname, val)
 			}
-			*param.floatptr = fval
 		case paramString:
 			sval, ok := val.(string)
 			if !ok {

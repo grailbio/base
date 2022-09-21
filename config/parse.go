@@ -157,6 +157,8 @@ func (m instances) Equal(n instances) bool {
 // which is also valid config syntax. Docs optionally provides
 // documentation for the parameters in the instance.
 func (inst *instance) SyntaxString(docs map[string]string) string {
+	// TODO: Consider printing floats with minimum precision (1 appears as 1.0) so users
+	// can easily contrast them with integers.
 	var b strings.Builder
 	if inst.parent == "" {
 		b.WriteString("param ")
