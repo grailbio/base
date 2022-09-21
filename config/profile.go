@@ -231,6 +231,12 @@ func (p *Profile) Set(path string, value string) error {
 	// Special case: toplevel instance assignment.
 	elems := strings.Split(path, ".")
 	if len(elems) == 1 {
+		if value == "" || value == "nil" {
+			return fmt.Errorf(
+				"%s: top-level path may only be set to an instance; cannot be set to nil/empty",
+				elems[0],
+			)
+		}
 		p.instances[elems[0]] = &instance{
 			name:   elems[0],
 			parent: value,
@@ -281,6 +287,9 @@ func (p *Profile) Set(path string, value string) error {
 	switch v := unwrap(inst.params[name]); v.(type) {
 	case indirect:
 		// TODO(marius): validate that it's a good identifier?
+		if value == "nil" {
+			value = ""
+		}
 		inst.params[name] = indirect(value)
 	case string:
 		inst.params[name] = value
@@ -491,8 +500,12 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 			if param.kind != paramInterface {
 				return fmt.Errorf("resolving %s.%s: cannot indirect parameters of type %T", name, pname, val)
 			}
-			if indir == "" { // nil: skip
-				continue
+			if indir == "" {
+				typ := reflect.ValueOf(param.ifaceptr).Elem().Type()
+				if !isNilAssignable(typ) {
+					return fmt.Errorf("resolving %s.%s: cannot assign nil/empty to parameter of type %s", name, pname, typ)
+				}
+				continue // nil: skip
 			}
 			if err := p.getLocked(string(indir), reflect.ValueOf(param.ifaceptr), param.file, param.line); err != nil {
 				return err
@@ -630,6 +643,10 @@ func assign(name string, instance interface{}, ptr reflect.Value, file string, l
 		return nil
 	}
 	v := reflect.ValueOf(instance)
+	if !v.IsValid() {
+		ptr.Elem().Set(reflect.Zero(ptr.Elem().Type()))
+		return nil
+	}
 	if !v.Type().AssignableTo(ptr.Elem().Type()) {
 		return fmt.Errorf("%s:%d: %s: instance type %s not assignable to provided type %s",
 			file, line, name, v.Type(), ptr.Type())

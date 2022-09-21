@@ -5,6 +5,7 @@
 package config
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"sync"
@@ -91,11 +92,28 @@ func newConstructor() *Constructor {
 // value is always an indirection; if it is left empty it is taken as
 // the nil value: it remains uninitialized by default.
 func (c *Constructor) InstanceVar(ptr interface{}, name string, value string, help string) {
-	if reflect.TypeOf(ptr).Kind() != reflect.Ptr {
-		panic("Instance.InterfaceVar: passed interface is not a pointer")
+	ptrTyp := reflect.TypeOf(ptr)
+	if ptrTyp.Kind() != reflect.Ptr {
+		panic(fmt.Sprintf(
+			"Instance.InterfaceVar: passed ptr %s is not a pointer",
+			ptrTyp,
+		))
 	}
 	param := c.define(name, paramInterface, help)
 	param.ifaceptr = ptr
+	if value == "nil" {
+		value = ""
+	}
+	if value == "" && !isNilAssignable(ptrTyp.Elem()) {
+		// TODO: Consider allowing empty values to mean zero values for types
+		// that are not nil-assignable.  We currently do not allow the empty
+		// string to be consistent with parsing, as there is no way to set a
+		// parameter to an empty value, as we require an identifier.
+		panic(fmt.Sprintf(
+			"Instance.InterfaceVar: ptr element %s cannot have nil/empty value",
+			ptrTyp.Elem(),
+		))
+	}
 	param.ifaceindir = indirect(value)
 }
 
@@ -207,4 +225,19 @@ func (p *param) Interface() interface{} {
 	default:
 		panic(p.kind)
 	}
+}
+
+func isNilAssignable(typ reflect.Type) bool {
+	switch typ.Kind() {
+	case reflect.Chan:
+	case reflect.Func:
+	case reflect.Interface:
+	case reflect.Map:
+	case reflect.Ptr:
+	case reflect.Slice:
+	case reflect.UnsafePointer:
+	default:
+		return false
+	}
+	return true
 }

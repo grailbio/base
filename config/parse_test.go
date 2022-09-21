@@ -14,6 +14,7 @@ func TestParse(t *testing.T) {
 param x y = "okay"
 param y z = 123
 param y a = "a"; param y b = b
+param y c = nil
 
 param y (
 	x = "blah"
@@ -53,6 +54,7 @@ instance bigslice/system blah (
 				"z":     123,
 				"a":     "a",
 				"b":     indirect("b"),
+				"c":     indirect(""),
 				"fprec": 0.123456789,
 			},
 		},
