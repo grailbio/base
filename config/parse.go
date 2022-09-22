@@ -312,6 +312,7 @@ func parse(r io.Reader) (instances, error) {
 //		float
 //		string
 func (p *parser) toplevel() (insts instances, ok bool) {
+	ok = true // Empty input is okay.
 	insts = make(instances)
 	for {
 		switch p.next() {

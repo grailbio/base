@@ -9,6 +9,29 @@ import (
 	"testing"
 )
 
+// TestParseEmpty verifies that parsing a (logically) empty file is valid.
+func TestParseEmpty(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		text string
+	}{
+		{"Empty", ""},
+		{"Whitespace", "\t\n \n\t  \n"},
+		{"Semicolons", ";;"},
+		{"Mix", " \t \n \n;\n ;"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			instances, err := parse(strings.NewReader(c.text))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := len(instances), 0; got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 func TestParse(t *testing.T) {
 	got, err := parse(strings.NewReader(`
 param x y = "okay"
