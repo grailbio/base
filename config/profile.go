@@ -305,6 +305,12 @@ func (p *Profile) Set(path string, value string) error {
 			return fmt.Errorf("param %s is an int, but could not parse %s into int: %v", path, value, err)
 		}
 		inst.params[name] = int(v)
+	case float64:
+		v, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return fmt.Errorf("param %s is a float, but could not parse %s into float: %v", path, value, err)
+		}
+		inst.params[name] = v
 	default:
 		panic(fmt.Sprintf("%T", v))
 	}
