@@ -16,13 +16,13 @@ import (
 )
 
 func init() {
-	config.Register("aws/ticket", func(constr *config.Constructor) {
+	config.RegisterGen("aws/ticket", func(constr *config.ConstructorGen[*session.Session]) {
 		var (
 			region = constr.String("region", "us-west-2", "the default AWS region for the session")
 			path   = constr.String("path", "tickets/eng/dev/aws", "path to AWS ticket")
 		)
 		constr.Doc = "configure an AWS session from a GRAIL ticket server path"
-		constr.New = func() (interface{}, error) {
+		constr.New = func() (*session.Session, error) {
 			return session.NewSession(&aws.Config{
 				Credentials: credentials.NewCredentials(&awssession.Provider{
 					Ctx:        vcontext.Background(),

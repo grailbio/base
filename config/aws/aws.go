@@ -11,12 +11,12 @@ import (
 )
 
 func init() {
-	config.Register("aws/env", func(constr *config.Constructor) {
-		var config aws.Config
-		config.Region = constr.String("region", "us-west-2", "the default AWS region for the session")
+	config.RegisterGen("aws/env", func(constr *config.ConstructorGen[*session.Session]) {
+		var cfg aws.Config
+		cfg.Region = constr.String("region", "us-west-2", "the default AWS region for the session")
 		constr.Doc = "configure an AWS session from the environment"
-		constr.New = func() (interface{}, error) {
-			return session.NewSession(&config)
+		constr.New = func() (*session.Session, error) {
+			return session.NewSession(&cfg)
 		}
 	})
 

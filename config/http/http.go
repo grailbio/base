@@ -14,10 +14,10 @@ import (
 )
 
 func init() {
-	config.Register("http", func(constr *config.Constructor) {
+	config.RegisterGen("http", func(constr *config.ConstructorGen[config.Nil]) {
 		addr := constr.String("addr", ":3333", "the address used for serving http")
 		constr.Doc = "configure a local HTTP server, using the default http muxer"
-		constr.New = func() (interface{}, error) {
+		constr.New = func() (config.Nil, error) {
 			go func() {
 				log.Print("http: serve ", *addr)
 				err := http.ListenAndServe(*addr, nil)
