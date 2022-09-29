@@ -205,7 +205,7 @@ instance testf test/custom (
 
 	var str string
 	err = p.Instance("testx", &str)
-	if err == nil || !strings.Contains(err.Error(), "testx: instance type int not assignable to provided type *string") {
+	if err == nil || !strings.Contains(err.Error(), "instance \"testx\" of type int is not assignable to provided pointer element type string") {
 		t.Error(err)
 	}
 

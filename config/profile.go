@@ -662,8 +662,9 @@ func assign(name string, instance interface{}, ptr reflect.Value, file string, l
 		return nil
 	}
 	if !v.Type().AssignableTo(ptr.Elem().Type()) {
-		return fmt.Errorf("%s:%d: %s: instance type %s not assignable to provided type %s",
-			file, line, name, v.Type(), ptr.Type())
+		return fmt.Errorf(
+			"%s:%d: instance %q of type %s is not assignable to provided pointer element type %s",
+			file, line, name, v.Type(), ptr.Elem().Type())
 	}
 	ptr.Elem().Set(v)
 	return nil
