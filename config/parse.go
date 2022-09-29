@@ -457,8 +457,8 @@ func (p *parser) assignlist() (assigns map[string]interface{}, ok bool) {
 //	integer
 //	float
 //	string
-func (p *parser) value() (value interface{}, ok bool) {
-	switch p.next() {
+func (p *parser) value() (value any, ok bool) {
+	switch tok := p.next(); tok {
 	case scanner.Ident:
 		switch p.text() {
 		case "true":
@@ -470,11 +470,30 @@ func (p *parser) value() (value interface{}, ok bool) {
 		default:
 			return indirect(p.text()), true
 		}
+	case scanner.String, scanner.RawString:
+		text, err := strconv.Unquote(p.text())
+		if err != nil {
+			p.errorf("could not parse string: %v", err)
+			return nil, false
+		}
+		return text, true
+	case '-':
+		return p.parseNumber(p.next(), true)
+	default:
+		return p.parseNumber(tok, false)
+	}
+}
+
+func (p *parser) parseNumber(tok rune, negate bool) (value any, ok bool) {
+	switch tok {
 	case scanner.Int:
 		v, err := strconv.ParseInt(p.text(), 0, 64)
 		if err != nil {
 			p.errorf("could not parse integer: %v", err)
 			return nil, false
+		}
+		if negate {
+			v = -v
 		}
 		return int(v), true
 	case scanner.Float:
@@ -483,14 +502,10 @@ func (p *parser) value() (value interface{}, ok bool) {
 			p.errorf("could not parse float: %v", err)
 			return nil, false
 		}
-		return v, true
-	case scanner.String, scanner.RawString:
-		text, err := strconv.Unquote(p.text())
-		if err != nil {
-			p.errorf("could not parse string: %v", err)
-			return nil, false
+		if negate {
+			v = -v
 		}
-		return text, true
+		return v, true
 	default:
 		p.errorf("parse error: not a value")
 		return nil, false

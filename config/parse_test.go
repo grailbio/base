@@ -47,6 +47,8 @@ param y (
 
 instance z blah (
 	bloop = 123
+	negint = -3
+	negfloat = -3.14
 )
 
 param z x = 89898
@@ -83,8 +85,10 @@ param zero-params ()
 			name:   "z",
 			parent: "blah",
 			params: map[string]interface{}{
-				"bloop": 123,
-				"x":     89898,
+				"bloop":    123,
+				"x":        89898,
+				"negint":   -3,
+				"negfloat": -3.14,
 			},
 		},
 		"bigslice/system": &instance{

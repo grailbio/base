@@ -409,8 +409,12 @@ instance testy test/1
 
 	mustSet("testx.custom.x", "1900")
 	mustGet("testx.custom.x", "1900")
+	mustSet("testx.custom.x", "-1900")
+	mustGet("testx.custom.x", "-1900")
 	mustSet("testx.custom.f", "3.14")
 	mustGet("testx.custom.f", "3.14")
+	mustSet("testx.custom.f", "-3.14")
+	mustGet("testx.custom.f", "-3.14")
 
 	mustSet("testy", "testx")
 	mustGet("testy.x", "100")
