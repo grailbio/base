@@ -163,16 +163,7 @@ func (p *Profile) ProcessFlags() error {
 			if len(inst.params) == 0 && inst.parent == "" {
 				continue
 			}
-			// Resolve each known key.
-			var docs map[string]string
-			if global := p.globals[inst.name]; global != nil {
-				// Populate the parameter docs.
-				docs = make(map[string]string)
-				for name, param := range global.params {
-					docs[name] = param.help
-				}
-			}
-			fmt.Fprintln(os.Stderr, inst.SyntaxString(docs))
+			fmt.Fprintln(os.Stderr, inst.SyntaxString(p.docs(inst)))
 		}
 		os.Exit(1)
 	}

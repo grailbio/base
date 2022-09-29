@@ -55,12 +55,10 @@ instance bigslice/system blah (
 	region = "us-west-2"
 )
 
+param zero-params ()
 `))
 	if err != nil {
 		t.Fatal(err)
-	}
-	for _, inst := range got {
-		t.Log(inst.SyntaxString(nil))
 	}
 	want := instances{
 		"x": &instance{
@@ -96,18 +94,26 @@ instance bigslice/system blah (
 				"region": "us-west-2",
 			},
 		},
+		"zero-params": &instance{
+			name:   "zero-params",
+			parent: "",
+			params: map[string]interface{}{},
+		},
 	}
 	if !got.Equal(want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
-	for _, wantInst := range want {
-		insts, err := parse(strings.NewReader(wantInst.SyntaxString(nil)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if gotInst := insts[wantInst.name]; !wantInst.Equal(gotInst) {
-			t.Errorf("got %v, want %v", got, want)
-		}
+	for name, wantInst := range want {
+		t.Run(name, func(t *testing.T) {
+			syntax := wantInst.SyntaxString(nil)
+			insts, err := parse(strings.NewReader(syntax))
+			if err != nil {
+				t.Fatalf("%v. syntax:\n%s", err, syntax)
+			}
+			if gotInst := insts[wantInst.name]; !wantInst.Equal(gotInst) {
+				t.Errorf("got %v, want %v, syntax:\n%s", got, want, syntax)
+			}
+		})
 	}
 }
 

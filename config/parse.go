@@ -33,14 +33,15 @@ var insertionToks = map[rune]bool{
 }
 
 // def wraps a value to indicate that it is a default.
-type def struct{ value interface{} }
+type def struct{ value any }
 
 // unwrap returns the value v, unwrapped from def.
-func unwrap(v interface{}) interface{} {
+func unwrap(v interface{}) (_ any, wasDef bool) {
 	if v, ok := v.(def); ok {
-		return unwrap(v.value)
+		u, _ := unwrap(v.value)
+		return u, true
 	}
-	return v
+	return v, false
 }
 
 // indirect is a type that indicates an indirection.
@@ -92,7 +93,8 @@ func (inst *instance) Equal(other *instance) bool {
 		if !ok {
 			return false
 		}
-		v, w = unwrap(v), unwrap(w)
+		v, _ = unwrap(v)
+		w, _ = unwrap(w)
 		switch vval := v.(type) {
 		case indirect:
 			wval, ok := w.(indirect)
@@ -160,54 +162,54 @@ func (inst *instance) SyntaxString(docs map[string]string) string {
 	// TODO: Consider printing floats with minimum precision (1 appears as 1.0) so users
 	// can easily contrast them with integers.
 	var b strings.Builder
+	writeDoc(&b, "", docs[""])
 	if inst.parent == "" {
 		b.WriteString("param ")
 		b.WriteString(inst.name)
-		b.WriteString(" ")
-		var prefix string
-		if len(inst.params) > 1 {
-			b.WriteString("(\n")
-			prefix = "\t"
+		if len(inst.params) == 0 {
+			b.WriteString(" ()\n")
+			return b.String()
 		}
-		forEachParam(inst.params, func(k string, v any) {
-			b.WriteString(prefix)
-			b.WriteString(k)
-			b.WriteString(" = ")
-			fmt.Fprintf(&b, "%#v", unwrap(v))
-			if docs[k] != "" {
-				b.WriteString(" // ")
-				b.WriteString(docs[k])
-			}
-			b.WriteString("\n")
-		})
-		if len(inst.params) > 1 {
-			b.WriteString(")\n")
-		}
+		b.WriteString(" (\n")
+		writeParams(&b, inst.params, docs)
+		b.WriteString(")\n")
 		return b.String()
 	}
-
 	b.WriteString("instance ")
 	b.WriteString(inst.name)
 	b.WriteString(" ")
 	b.WriteString(inst.parent)
-	if len(inst.params) == 0 {
-		b.WriteString("\n")
-		return b.String()
+	if len(inst.params) > 0 {
+		b.WriteString(" (\n")
+		writeParams(&b, inst.params, docs)
+		b.WriteString(")")
 	}
-	b.WriteString(" (\n")
-	forEachParam(inst.params, func(k string, v any) {
-		b.WriteString("\t")
-		b.WriteString(k)
-		b.WriteString(" = ")
-		fmt.Fprintf(&b, "%#v", unwrap(v))
-		if docs[k] != "" {
-			b.WriteString(" // ")
-			b.WriteString(docs[k])
+	b.WriteString("\n")
+	return b.String()
+}
+
+func writeDoc(b *strings.Builder, prefix string, doc string) {
+	if doc == "" {
+		return
+	}
+	for _, line := range strings.Split(doc, "\n") {
+		b.WriteString(prefix)
+		b.WriteString("// ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+}
+
+func writeParams(b *strings.Builder, params map[string]any, docs map[string]string) {
+	forEachParam(params, func(name string, v any) {
+		writeDoc(b, "\t", docs[name])
+		v, wasDef := unwrap(v)
+		fmt.Fprintf(b, "\t%s = %#v", name, v)
+		if wasDef {
+			b.WriteString(" // default")
 		}
 		b.WriteString("\n")
 	})
-	b.WriteString(")\n")
-	return b.String()
 }
 
 func forEachParam(params map[string]any, fn func(k string, v any)) {

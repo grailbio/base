@@ -262,7 +262,7 @@ func (p *Profile) Set(path string, value string) error {
 			}
 			inst = p.instances[inst.parent]
 		}
-		v = unwrap(v)
+		v, _ = unwrap(v)
 		indir, ok := v.(indirect)
 		if !ok {
 			return fmt.Errorf("%s: path not found: %s is not an instance", path, strings.Join(elems[:i], "."))
@@ -284,7 +284,7 @@ func (p *Profile) Set(path string, value string) error {
 		inst = p.instances[inst.parent]
 	}
 
-	switch v := unwrap(inst.params[name]); v.(type) {
+	switch v, _ := unwrap(inst.params[name]); v.(type) {
 	case indirect:
 		// TODO(marius): validate that it's a good identifier?
 		if value == "nil" {
@@ -344,7 +344,7 @@ func (p *Profile) Get(path string) (value string, ok bool) {
 		if inst == nil {
 			return "", false
 		}
-		v := unwrap(inst.params[elem])
+		v, _ := unwrap(inst.params[elem])
 		indir, ok := v.(indirect)
 		if !ok {
 			return "", false
@@ -357,7 +357,8 @@ func (p *Profile) Get(path string) (value string, ok bool) {
 
 	for elem := elems[len(elems)-1]; inst != nil; inst = p.instances[inst.parent] {
 		if v, ok := inst.params[elem]; ok {
-			return fmt.Sprintf("%#v", unwrap(v)), true
+			v, _ = unwrap(v)
+			return fmt.Sprintf("%#v", v), true
 		}
 	}
 	return "", false
@@ -439,19 +440,26 @@ func (p *Profile) PrintTo(w io.Writer) error {
 		if len(inst.params) == 0 && inst.parent == "" {
 			continue
 		}
-		// Try to populate parameter docs if we can.
-		var docs map[string]string
-		if global := p.globals[inst.name]; global != nil {
-			docs = make(map[string]string)
-			for name, param := range global.params {
-				docs[name] = param.help
-			}
-		}
-		if _, err := fmt.Fprintln(w, inst.SyntaxString(docs)); err != nil {
+		if _, err := fmt.Fprintln(w, inst.SyntaxString(p.docs(inst))); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// docs collects the documentation strings for inst and its parameters.
+// Special key "" holds the documentation for the instance itself.
+// Remaining keys are inst's param names.
+func (p *Profile) docs(inst *instance) map[string]string {
+	global, ok := p.globals[inst.name]
+	if !ok {
+		return nil
+	}
+	docs := map[string]string{"": global.Doc}
+	for name, param := range global.params {
+		docs[name] = param.help
+	}
+	return docs
 }
 
 func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line int) error {
@@ -501,7 +509,7 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 		if _, ok := val.(def); ok && param.kind != paramInterface {
 			continue
 		}
-		val = unwrap(val)
+		val, _ = unwrap(val)
 		if indir, ok := val.(indirect); ok {
 			if param.kind != paramInterface {
 				return fmt.Errorf("resolving %s.%s: cannot indirect parameters of type %T", name, pname, val)
