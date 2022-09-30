@@ -28,6 +28,7 @@ import (
 	"syscall"
 
 	"github.com/grailbio/base/log"
+	"v.io/v23/verror"
 )
 
 func init() {
@@ -298,6 +299,21 @@ func E(args ...interface{}) error {
 		if e.Kind != Other {
 			break
 		}
+		// Interpret verror errors.
+		if err, ok := asVerrorE(e.Err); ok {
+			// TODO: Make this less fragile by using errors.Is:
+			//  if errors.Is(err, verror.ErrNoAccess) {
+			// See https://github.com/vanadium/core/pull/282 .  Once we upgrade
+			// verror to a version that supports errors.Is properly, we can
+			// expand this to include other verror errors.  For now, use our
+			// workaround narrowly for specific use cases.
+			if strings.Contains(err.Error(), string(verror.ErrNoAccess.ID)) {
+				e.Kind = NotAllowed
+			}
+		}
+		if e.Kind != Other {
+			break
+		}
 		if isTimeoutErr(e.Err) {
 			e.Kind = Timeout
 		}
@@ -551,4 +567,16 @@ func pad(b *bytes.Buffer, s string) {
 		return
 	}
 	b.WriteString(s)
+}
+
+func asVerrorE(err error) (verror.E, bool) {
+	switch e := err.(type) {
+	case verror.E:
+		return e, true
+	case *verror.E:
+		if e != nil {
+			return *e, true
+		}
+	}
+	return verror.E{}, false
 }
