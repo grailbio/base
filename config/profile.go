@@ -152,38 +152,45 @@ func init() {
 	})
 }
 
-// Profile stores a set of parameters and configures instances based
-// on these. It is the central data structure of this package as
-// detailed in the package docs. Each Profile instance maintains its
-// own set of instances. Most users should use the package-level
-// methods that operate on the default profile.
-type Profile struct {
-	// The following are used by the flag registration and
-	// handling mechanism.
-	flags    flags
-	flagDump bool
+type (
+	// Profile stores a set of parameters and configures instances based
+	// on these. It is the central data structure of this package as
+	// detailed in the package docs. Each Profile instance maintains its
+	// own set of instances. Most users should use the package-level
+	// methods that operate on the default profile.
+	Profile struct {
+		// The following are used by the flag registration and
+		// handling mechanism.
+		flags    flags
+		flagDump bool
 
-	globals map[string]*Constructor
+		globals map[string]typedConstructor
 
-	mu        sync.Mutex
-	instances instances
-	cached    map[string]interface{}
-}
+		mu        sync.Mutex
+		instances instances
+		cached    map[string]interface{}
+	}
+	typedConstructor struct {
+		*Constructor
+		// typ is optional (see configureAndType).
+		typ reflect.Type
+	}
+)
 
 // New creates and returns a new profile, installing all currently
 // registered global objects. Global objects registered after a call
 // to New are not reflected in the returned profile.
 func New() *Profile {
 	p := &Profile{
-		globals:   make(map[string]*Constructor),
+		globals:   make(map[string]typedConstructor),
 		instances: make(instances),
 		cached:    make(map[string]interface{}),
 	}
 
 	globalsMu.Lock()
-	for name, configure := range globals {
-		p.globals[name] = newConstructor()
-		configure(p.globals[name])
+	for name, ct := range globals {
+		p.globals[name] = typedConstructor{newConstructor(), ct.typ}
+		ct.configure(p.globals[name].Constructor)
 	}
 	globalsMu.Unlock()
 
@@ -458,6 +465,26 @@ func (p *Profile) docs(inst *instance) map[string]string {
 	docs := map[string]string{"": global.Doc}
 	for name, param := range global.params {
 		docs[name] = param.help
+
+		var paramType reflect.Type
+		if param.kind == paramInterface {
+			paramType = reflect.ValueOf(param.ifaceptr).Elem().Type()
+		} else {
+			paramType = reflect.TypeOf(param.Interface())
+		}
+		var insts []string
+		// TODO: This is asymptotically slow. Make it faster, perhaps with indexing.
+		for name, other := range p.globals {
+			if name != inst.name && other.typ != nil && other.typ.AssignableTo(paramType) {
+				insts = append(insts, name)
+			}
+		}
+		sort.Strings(insts)
+		if len(insts) > 0 {
+			docs[name] += "\n\nAvailable instances:\n\t" + strings.Join(insts, "\n\t")
+		} else {
+			docs[name] += "\n\nNo instances."
+		}
 	}
 	return docs
 }
@@ -488,17 +515,17 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 		inst = parent
 	}
 
-	if p.globals[inst.name] == nil {
+	if _, ok := p.globals[inst.name]; !ok {
 		return fmt.Errorf("missing global instance: %q", inst.name)
 	}
 	// Even though we have a configured instance in globals, we create
 	// a new one to reduce the changes that multiple instances clobber
 	// each other.
 	globalsMu.Lock()
-	configure := globals[inst.name]
+	ct := globals[inst.name]
 	globalsMu.Unlock()
 	instance := newConstructor()
-	configure(instance)
+	ct.configure(instance)
 
 	for pname, param := range instance.params {
 		val, ok := resolved[pname]

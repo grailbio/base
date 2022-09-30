@@ -11,9 +11,15 @@ import (
 	"sync"
 )
 
+type typedConfigure struct {
+	configure func(*Constructor)
+	// typ is optional (Register leaves it nil, RegisterGen sets it).
+	typ reflect.Type
+}
+
 var (
 	globalsMu sync.Mutex
-	globals   = make(map[string]func(*Constructor))
+	globals   = make(map[string]typedConfigure)
 	defaults  = make(map[string]string)
 )
 
@@ -22,7 +28,7 @@ var (
 //
 // Deprecated: New callers should use RegisterGen.
 func Register(name string, configure func(*Constructor)) {
-	RegisterGen(name, configure)
+	register(name, nil, configure)
 }
 
 // RegisterGen registers a constructor and later invokes the provided
@@ -42,16 +48,23 @@ func Register(name string, configure func(*Constructor)) {
 //		constr.Doc = "a customizable integer"
 //	})
 func RegisterGen[T any](name string, configure func(*ConstructorGen[T])) {
+	register(name, reflect.TypeOf(new(T)).Elem(), configure)
+}
+
+func register[T any](name string, typ reflect.Type, configure func(*ConstructorGen[T])) {
 	globalsMu.Lock()
 	defer globalsMu.Unlock()
-	if globals[name] != nil {
+	if _, found := globals[name]; found {
 		panic("config.Register: instance with name " + name + " has already been registered")
 	}
-	globals[name] = func(untyped *Constructor) {
-		typed := ConstructorGen[T]{params: untyped.params}
-		configure(&typed)
-		untyped.Doc = typed.Doc
-		untyped.New = func() (any, error) { return typed.New() }
+	globals[name] = typedConfigure{
+		func(untyped *Constructor) {
+			typed := ConstructorGen[T]{params: untyped.params}
+			configure(&typed)
+			untyped.Doc = typed.Doc
+			untyped.New = func() (any, error) { return typed.New() }
+		},
+		typ,
 	}
 }
 
@@ -66,10 +79,10 @@ func RegisterGen[T any](name string, configure func(*ConstructorGen[T])) {
 func Default(name, instance string) {
 	globalsMu.Lock()
 	defer globalsMu.Unlock()
-	if globals[name] != nil {
+	if _, found := globals[name]; found {
 		panic("config.Default: default " + name + " has same name as a global")
 	}
-	if globals[instance] == nil {
+	if _, found := globals[instance]; !found {
 		panic("config.Default: instance " + instance + " does not exist")
 	}
 	defaults[name] = instance
