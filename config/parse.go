@@ -204,7 +204,19 @@ func writeParams(b *strings.Builder, params map[string]any, docs map[string]stri
 	forEachParam(params, func(name string, v any) {
 		writeDoc(b, "\t", docs[name])
 		v, wasDef := unwrap(v)
-		fmt.Fprintf(b, "\t%s = %#v", name, v)
+		var repr string
+		switch vt := v.(type) {
+		case string:
+			// Improve readability by using a raw literal (no quote-escaping), if possible.
+			if strings.ContainsRune(vt, '"') && !strings.ContainsRune(vt, '`') {
+				repr = "`" + vt + "`"
+			} else {
+				repr = strconv.Quote(vt)
+			}
+		default:
+			repr = fmt.Sprintf("%#v", v)
+		}
+		fmt.Fprintf(b, "\t%s = %s", name, repr)
 		if wasDef {
 			b.WriteString(" // default")
 		}

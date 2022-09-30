@@ -33,7 +33,7 @@ func TestParseEmpty(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	got, err := parse(strings.NewReader(`
+	got, err := parse(strings.NewReader(strings.ReplaceAll(`
 param x y = "okay"
 param y z = 123
 param y a = "a"; param y b = b
@@ -43,6 +43,8 @@ param y (
 	x = "blah"
 	y = 333
 	fprec = 0.123456789
+	raw = ${"it's json":
+12.3}$
 )
 
 instance z blah (
@@ -58,7 +60,7 @@ instance bigslice/system blah (
 )
 
 param zero-params ()
-`))
+`, "$", "`")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +81,8 @@ param zero-params ()
 				"b":     indirect("b"),
 				"c":     indirect(""),
 				"fprec": 0.123456789,
+				"raw": `{"it's json":
+12.3}`,
 			},
 		},
 		"z": &instance{
