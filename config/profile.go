@@ -482,8 +482,6 @@ func (p *Profile) docs(inst *instance) map[string]string {
 		sort.Strings(insts)
 		if len(insts) > 0 {
 			docs[name] += "\n\nAvailable instances:\n\t" + strings.Join(insts, "\n\t")
-		} else {
-			docs[name] += "\n\nNo instances."
 		}
 	}
 	return docs
