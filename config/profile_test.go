@@ -183,6 +183,8 @@ instance testx test/1 (
 instance testf test/custom (
 	f = 1
 )
+
+instance test/default testf
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -211,6 +213,14 @@ instance testf test/custom (
 
 	var c custom
 	if err = p.Instance("testf", &c); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.f, 1.; got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// Verify that test/default derives from testf.
+	if err = p.Instance("test/default", &c); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := c.f, 1.; got != want {
