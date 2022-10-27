@@ -53,8 +53,13 @@ func TestCmd(t *testing.T) {
 		homeDir, cleanUp := testutil.TempDir(t, "", "")
 		defer cleanUp()
 		principalDir := path.Join(homeDir, ".v23")
-		decoyPrincipalDir := path.Join(homeDir, "decoy_principal_dir")
 		principal, err := libsecurity.CreatePersistentPrincipal(principalDir, nil)
+		assert.NoError(t, err)
+		decoyPrincipalDir := path.Join(homeDir, "decoy_principal_dir")
+		// Create a principal in the decoyPrincipalDir, as -dir still requires
+		// a valid principal at $V23_CREDENTIALS.
+		// TODO: Consider removing -dir flag, as this is surprising behavior.
+		_, err = libsecurity.CreatePersistentPrincipal(decoyPrincipalDir, nil)
 		assert.NoError(t, err)
 
 		const blessingName = "grail-access-test-blessing-ln7z94"

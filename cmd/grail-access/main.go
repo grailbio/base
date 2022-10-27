@@ -11,10 +11,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/grailbio/base/cmd/grail-access/internal/remote"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/log"
 	_ "github.com/grailbio/v23/factories/grail"
 	v23 "v.io/v23"
+	"v.io/v23/context"
 	"v.io/v23/security"
 	"v.io/x/lib/cmdline"
 	"v.io/x/ref"
@@ -48,7 +50,15 @@ var (
 	dumpFlag                 bool
 	doNotRefreshDurationFlag time.Duration
 	expiryCaveatFlag         string
+
+	blessRemotesFlag        bool
+	blessRemotesModeFlag    string
+	blessRemotesTargetsFlag FlagStrings
 )
+
+func init() {
+	blessRemotesTargetsFlag = []string{os.ExpandEnv("ec2-name:ubuntu@adhoc.${USER}.*")}
+}
 
 func main() {
 	var defaultCredentialsDir string
@@ -102,6 +112,14 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	cmd.Flags.DurationVar(&doNotRefreshDurationFlag, "do-not-refresh-duration", 7*24*time.Hour, "Do not refresh credentials if they are present and do not expire within this duration.")
 	cmd.Flags.StringVar(&expiryCaveatFlag, "expiry-caveat", "", "Duration of expiry caveat added to blessings (for testing); empty means no caveat added")
 
+	// TODO(2022-10-18): Fix commentary generation to bring doc.go up to date.
+	// go.mod is currently broken such that required go tooling fails.  We are
+	// apparently specifying old versions of protobuf related packages, which
+	// causes `go install` to fail, which causes doc generation to fail.
+	cmd.Flags.BoolVar(&blessRemotesFlag, "bless-remotes", false, "Whether to attempt to bless remotes with local blessings")
+	cmd.Flags.StringVar(&blessRemotesModeFlag, remote.FlagNameMode, "", "(INTERNAL) Controls the mode in which we run for the remote blessing protocol; one of {public-key,receive,send}")
+	cmd.Flags.Var(&blessRemotesTargetsFlag, "bless-remotes-targets", "Comma-separated list of targets to bless; targets may be \"ssh:[user@]host[:port]\" SSH destinations or \"ec2-name:[user@]ec2-instance-name-filter\" EC2 instance name filter; see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Filtering.html")
+
 	cmdline.HideGlobalFlagsExcept()
 	cmdline.Main(cmd)
 }
@@ -130,17 +148,37 @@ func run(*cmdline.Env, []string) error {
 		return errors.E("failed to load principal", err)
 	}
 
-	defaultBlessings, _ := principal.BlessingStore().Default()
-	if dumpFlag || defaultBlessings.Expiry().After(time.Now().Add(doNotRefreshDurationFlag)) {
-		dump(principal)
-		return nil
-	}
-
 	ctx, shutDown := v23.Init()
 	defer shutDown()
 	ctx, err = v23.WithPrincipal(ctx, principal)
 	if err != nil {
 		return errors.E("failed to initialize context", err)
+	}
+	switch blessRemotesModeFlag {
+	case "":
+		// No-op.
+	case remote.ModeSend:
+		// Handle with maybeBlessRemotes.
+	case remote.ModePublicKey:
+		if err = remote.PrintPublicKey(ctx, os.Stdout); err != nil {
+			return errors.E("failed to print public key", err)
+		}
+		return nil
+	case remote.ModeReceive:
+		if err = remote.ReceiveBlessings(ctx, os.Stdin); err != nil {
+			return errors.E("failed to receive blessings", err)
+		}
+		return nil
+	default:
+		return errors.E("invalid -"+remote.FlagNameMode, blessRemotesModeFlag)
+	}
+	defaultBlessings, _ := principal.BlessingStore().Default()
+	if dumpFlag || defaultBlessings.Expiry().After(time.Now().Add(doNotRefreshDurationFlag)) {
+		dump(principal)
+		if err = maybeBlessRemotes(ctx); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	var blessings security.Blessings
@@ -182,7 +220,9 @@ func run(*cmdline.Env, []string) error {
 
 	fmt.Println("Successfully applied new blessing:")
 	dump(principal)
-
+	if err = maybeBlessRemotes(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -196,4 +236,14 @@ func dump(principal security.Principal) {
 
 	blessing, _ := principal.BlessingStore().Default()
 	fmt.Printf("Expires on %s (in %s)\n", blessing.Expiry().Local(), time.Until(blessing.Expiry()))
+}
+
+func maybeBlessRemotes(ctx *context.T) error {
+	if !blessRemotesFlag && blessRemotesModeFlag != remote.ModeSend {
+		return nil
+	}
+	if err := remote.Bless(ctx, blessRemotesTargetsFlag); err != nil {
+		return errors.E("failed to send blessings to instances", err)
+	}
+	return nil
 }
