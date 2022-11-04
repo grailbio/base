@@ -307,6 +307,12 @@ func (f *s3File) ReadAt(ctx context.Context, buf []byte, off int64) (int, error)
 	if bytesUntilEOF := f.info.size - off; bytesUntilEOF <= 0 {
 		err = io.EOF
 	} else {
+		// Because we know the size of the object, pass a smaller buffer to the
+		// chunk reader to save it the effort of trying to fill it (with
+		// parallel reads). This is an optimization that does not affect
+		// correctness.
+		// TODO: Consider how to move this optimization into the chunk reader
+		// itself, possibly by optionally passing in the size/metadata.
 		if len(buf) > int(bytesUntilEOF) {
 			buf = buf[:bytesUntilEOF]
 		}

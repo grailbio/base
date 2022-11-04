@@ -132,7 +132,7 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 			err = nil
 			remainingBuf := chunk.dst[chunk.dstN:]
 			if len(remainingBuf) == 0 {
-				break attemptLoop
+				break
 			}
 
 			if attempt > 0 {
@@ -148,24 +148,36 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 				fallthrough
 			default:
 				chunk.r, err = newPosReader(ctx, policy.client(), r.name, r.bucket, r.key, r.versionID, rangeStart)
+				if err == io.EOF {
+					// rangeStart is at or past EOF, so this chunk is done.
+					err = nil
+					break attemptLoop
+				}
 				if err != nil {
 					continue
 				}
 			}
 
-			if chunk.r.info != (s3Info{}) {
-				infoMu.Lock()
-				if info == (s3Info{}) {
-					info = chunk.r.info
-				} else if info.etag != chunk.r.info.etag {
-					err = eTagChangedError(r.name, info.etag, chunk.r.info.etag)
-				}
-				infoMu.Unlock()
+			var size int64
+			infoMu.Lock()
+			if info == (s3Info{}) {
+				info = chunk.r.info
+			} else if info.etag != chunk.r.info.etag {
+				err = eTagChangedError(r.name, info.etag, chunk.r.info.etag)
 			}
+			size = info.size
+			infoMu.Unlock()
 			if err != nil {
 				continue
 			}
 
+			bytesUntilEOF := size - chunk.s3Offset - int64(chunk.dstN)
+			if bytesUntilEOF <= 0 {
+				break
+			}
+			if bytesUntilEOF < int64(len(remainingBuf)) {
+				remainingBuf = remainingBuf[:bytesUntilEOF]
+			}
 			var n int
 			n, err = io.ReadFull(chunk.r, remainingBuf)
 			chunk.dstN += n
@@ -242,15 +254,22 @@ func newPosReader(
 		return nil, err
 	}
 	_ = atomic.AddInt32(&nOpenPos, 1)
-	r.rc, r.offset = output.Body, offset
-	if output.ETag != nil && *output.ETag != "" {
-		r.info = s3Info{
-			name:    filepath.Base(name),
-			size:    *output.ContentLength,
-			modTime: *output.LastModified,
-			etag:    *output.ETag,
-		}
+	if output.ContentLength == nil || output.ETag == nil || output.LastModified == nil {
+		return nil, errors.E("s3file.newPosReader: object missing metadata (ContentLength, ETag, LastModified)")
 	}
+	if *output.ContentLength < 0 {
+		// We do not expect AWS to return negative ContentLength, but we are
+		// defensive, as things may otherwise break very confusingly for
+		// callers.
+		return nil, io.EOF
+	}
+	r.info = s3Info{
+		name:    filepath.Base(name),
+		size:    offset + *output.ContentLength,
+		modTime: *output.LastModified,
+		etag:    *output.ETag,
+	}
+	r.rc = output.Body
 	return &r, nil
 }
 
