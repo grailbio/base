@@ -50,12 +50,11 @@ const (
 	remoteExecSHA256 = "e64a0c3dabbea244297ae1d5cdb1811731914fac40e7acc9621979067f9291f5"
 	// remoteExecPath is the path on the remote target at which we install and
 	// later invoke the grail-access executable.  This string will be
-	// double-quoted in a bash script, so variable expansions can be used.  We
-	// adhere to XDG defaults[1], however for simplicity we do not consider
-	// ${XDG_DATA_HOME}.
+	// double-quoted in a bash script, so variable expansions can be used.
 	//
-	// [1] https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-	remoteExecPath = "${HOME}/.local/share/grail-access/grail-access"
+	// See XDG Base Directory Specification:
+	// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+	remoteExecPath = "${XDG_DATA_HOME:-${HOME}/.local/share}/grail-access/grail-access"
 )
 
 // Bless blesses the principals of targets with unconstrained extensions of
