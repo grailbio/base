@@ -124,6 +124,7 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 				// In rare cases the S3 SDK returns EOF for chunks that are not actually at EOF.
 				// To work around this, we ignore EOF errors, and keep reading as long as the
 				// object metadata size field says we're not done. See BXDS-2220 for details.
+				// See also: https://github.com/aws/aws-sdk-go/issues/4510
 			default:
 				if !policy.shouldRetry(ctx, err, r.name) {
 					break attemptLoop
