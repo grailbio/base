@@ -2,7 +2,7 @@
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
 
-// +build !amd64 appengine
+//go:build !amd64 || appengine
 
 package simd
 
@@ -182,7 +182,7 @@ func MakeNibbleLookupTable(table [16]byte) (t NibbleLookupTable) {
 func UnpackedNibbleLookupUnsafeInplace(main []byte, tablePtr *NibbleLookupTable) {
 	for pos, curByte := range main {
 		if curByte < 128 {
-			curByte = tablePtr[0][curByte&15]
+			curByte = tablePtr.shuffle[0][curByte&15]
 		} else {
 			curByte = 0
 		}
@@ -196,7 +196,7 @@ func UnpackedNibbleLookupUnsafeInplace(main []byte, tablePtr *NibbleLookupTable)
 func UnpackedNibbleLookupInplace(main []byte, tablePtr *NibbleLookupTable) {
 	for pos, curByte := range main {
 		if curByte < 128 {
-			curByte = tablePtr[0][curByte&15]
+			curByte = tablePtr.shuffle[0][curByte&15]
 		} else {
 			curByte = 0
 		}
@@ -224,7 +224,7 @@ func UnpackedNibbleLookupInplace(main []byte, tablePtr *NibbleLookupTable) {
 func UnpackedNibbleLookupUnsafe(dst, src []byte, tablePtr *NibbleLookupTable) {
 	for pos, curByte := range src {
 		if curByte < 128 {
-			curByte = tablePtr[0][curByte&15]
+			curByte = tablePtr.shuffle[0][curByte&15]
 		} else {
 			curByte = 0
 		}
@@ -242,7 +242,7 @@ func UnpackedNibbleLookup(dst, src []byte, tablePtr *NibbleLookupTable) {
 	}
 	for pos, curByte := range src {
 		if curByte < 128 {
-			curByte = tablePtr[NibbleLookupDup][curByte&15]
+			curByte = tablePtr.shuffle[0][curByte&15]
 		} else {
 			curByte = 0
 		}
@@ -293,12 +293,12 @@ func PackedNibbleLookupUnsafe(dst, src []byte, tablePtr *NibbleLookupTable) {
 	srcOdd := dstLen & 1
 	for srcPos := 0; srcPos < nSrcFullByte; srcPos++ {
 		srcByte := src[srcPos]
-		dst[2*srcPos] = tablePtr[0][srcByte&15]
-		dst[2*srcPos+1] = tablePtr[0][srcByte>>4]
+		dst[2*srcPos] = tablePtr.shuffle[0][srcByte&15]
+		dst[2*srcPos+1] = tablePtr.shuffle[0][srcByte>>4]
 	}
 	if srcOdd == 1 {
 		srcByte := src[nSrcFullByte]
-		dst[2*nSrcFullByte] = tablePtr[0][srcByte&15]
+		dst[2*nSrcFullByte] = tablePtr.shuffle[0][srcByte&15]
 	}
 }
 
@@ -319,12 +319,12 @@ func PackedNibbleLookup(dst, src []byte, tablePtr *NibbleLookupTable) {
 	}
 	for srcPos := 0; srcPos < nSrcFullByte; srcPos++ {
 		srcByte := src[srcPos]
-		dst[2*srcPos] = tablePtr[0][srcByte&15]
-		dst[2*srcPos+1] = tablePtr[0][srcByte>>4]
+		dst[2*srcPos] = tablePtr.shuffle[0][srcByte&15]
+		dst[2*srcPos+1] = tablePtr.shuffle[0][srcByte>>4]
 	}
 	if srcOdd == 1 {
 		srcByte := src[nSrcFullByte]
-		dst[2*nSrcFullByte] = tablePtr[0][srcByte&15]
+		dst[2*nSrcFullByte] = tablePtr.shuffle[0][srcByte&15]
 	}
 }
 

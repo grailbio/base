@@ -1,8 +1,6 @@
-// Copyright 2018 GRAIL, Inc.  All rights reserved.
+// Copyright 2022 GRAIL, Inc.  All rights reserved.
 // Use of this source code is governed by the Apache-2.0
 // license that can be found in the LICENSE file.
-
-// +build amd64,!appengine
 
 // This is similar to github.com/willf/bitset , but with some extraneous
 // abstraction removed.  See also simd/count_amd64.go.
