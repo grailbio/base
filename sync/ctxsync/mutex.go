@@ -12,6 +12,7 @@ import (
 )
 
 // Mutex is a context-aware mutex.  It must not be copied.
+// The zero value is ready to use.
 type Mutex struct {
 	initOnce sync.Once
 	lockCh   chan struct{}
