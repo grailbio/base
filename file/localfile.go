@@ -230,6 +230,9 @@ var (
 	_ ioctx.WriterAt = (*localFile)(nil)
 )
 
+func (f *localFile) ReaderAt() ioctx.ReaderAt { return f }
+
+// TODO: Stop implementing ReaderAt in *localFile, instead return a different object from ReaderAt.
 func (f *localFile) ReadAt(_ context.Context, dst []byte, off int64) (n int, err error) {
 	return f.f.ReadAt(dst, off)
 }

@@ -274,6 +274,9 @@ func (f *s3File) handleSeek(req request) {
 
 var _ ioctx.ReaderAt = (*s3File)(nil)
 
+func (f *s3File) ReaderAt() ioctx.ReaderAt { return f }
+
+// TODO: Stop implementing ReaderAt in *localFile, instead return a different object from ReaderAt.
 func (f *s3File) ReadAt(ctx context.Context, buf []byte, off int64) (int, error) {
 	if f.mode != readonly {
 		return 0, errors.E(errors.NotAllowed, "not opened for read")

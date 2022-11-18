@@ -15,7 +15,6 @@ import (
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
-	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/traverse"
 	"github.com/grailbio/testutil/assert"
 )
@@ -396,8 +395,8 @@ func TestReadAts(
 
 	f, err := impl.Open(ctx, path)
 	assert.NoError(t, err)
-	r, ok := f.(ioctx.ReaderAt)
-	assert.True(t, ok, "not ReaderAt: %T", f)
+	r := f.ReaderAt()
+	assert.NotNil(t, r, "not ReaderAt: %T", f)
 
 	rnds := make([]*rand.Rand, parallelism)
 	rnds[0] = rand.New(rand.NewSource(1))

@@ -33,11 +33,20 @@ type File interface {
 	// REQUIRES: Close has not been called
 	Reader(ctx context.Context) io.ReadSeeker
 
+	// ReaderAt returns a ReaderAt, if supported, otherwise nil.
+	// Note: ioctx.ReaderAt (like io.ReaderAt) supports concurrent,
+	// arbitrarily-positioned reads, entirely independent of Reader().
+	//
+	// REQUIRES: Close has not been called
+	ReaderAt() ioctx.ReaderAt
+
 	// Writer creates a writes that to the file. If Writer() is called multiple
 	// times, they share the seek pointer.
 	//
 	// REQUIRES: Close has not been called
 	Writer(ctx context.Context) io.Writer
+
+	// TODO: Introduce WriterAt() ioctx.WriterAt, analogous to ReaderAt.
 
 	// Discard discards a file before it is closed, relinquishing any
 	// temporary resources implied by pending writes. This should be

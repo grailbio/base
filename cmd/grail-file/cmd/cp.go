@@ -101,9 +101,10 @@ func Cp(ctx context.Context, out io.Writer, args []string) error {
 var copyFileChunkSize = s3file.ReadChunkBytes
 
 func copyFile(ctx context.Context, dst file.File, src file.File) error {
+	// TODO: Use dst.WriterAt(), after it's introduced.
 	dstAt, dstOK := dst.(ioctx.WriterAt)
-	srcAt, srcOK := src.(ioctx.ReaderAt)
-	if !dstOK || !srcOK {
+	srcAt := src.ReaderAt()
+	if !dstOK || srcAt == nil {
 		return copyStream(ctx, dst.Writer(ctx), src.Reader(ctx))
 	}
 	info, err := src.Stat(ctx)
