@@ -29,6 +29,13 @@ type gfile struct {
 	// flag holds the flag bits specified when this file was opened.
 	flag int
 
+	// readerAt is an optional ReaderAt implementation. It may only be set upon
+	// construction, and must not be modified later. Thus, it can be read by
+	// multiple goroutines without holding the lock, without a data race.
+	// When non-nil, it serves ReadAt requests concurrently, without ops.
+	// Otherwise, gfile.ReadAt uses ops.ReadAt.
+	readerAt ioctx.ReaderAt
+
 	// mutexCh is used to provide mutually exclusive access to the fields
 	// below.
 	mutexCh chan struct{}
@@ -78,6 +85,7 @@ func OpenFile(ctx context.Context, n *fileNode, flag int) (*gfile, error) {
 			f: f,
 			r: f.Reader(context.Background()), // TODO: Tie to gf lifetime?
 		}
+		gf.readerAt = f.ReaderAt() // Returns nil if unsupported.
 		return gf, nil
 	}
 	return gf, nil
@@ -124,6 +132,9 @@ func (gf *gfile) Read(ctx context.Context, p []byte) (int, error) {
 
 // ReadAt implements ioctx.ReaderAt.
 func (gf *gfile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+	if gf.readerAt != nil {
+		return gf.readerAt.ReadAt(ctx, p, off)
+	}
 	select {
 	case gf.mutexCh <- struct{}{}:
 		defer func() { <-gf.mutexCh }()
