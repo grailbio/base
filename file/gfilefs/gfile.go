@@ -18,6 +18,7 @@ import (
 	"github.com/grailbio/base/file/fsnodefuse"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/ioctx/fsctx"
+	"github.com/grailbio/base/sync/ctxsync"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
@@ -36,9 +37,8 @@ type gfile struct {
 	// Otherwise, gfile.ReadAt uses ops.ReadAt.
 	readerAt ioctx.ReaderAt
 
-	// mutexCh is used to provide mutually exclusive access to the fields
-	// below.
-	mutexCh chan struct{}
+	// mu provides mutually exclusive access to the fields below.
+	mu ctxsync.Mutex
 	// requestedSize is the size requested by Truncate.  Note that we only
 	// really support truncation to 0 well, as it is mainly used by go-fuse for
 	// truncation when handling O_TRUNC.
@@ -68,7 +68,6 @@ func OpenFile(ctx context.Context, n *fileNode, flag int) (*gfile, error) {
 	gf := &gfile{
 		n:             n,
 		flag:          flag,
-		mutexCh:       make(chan struct{}, 1),
 		requestedSize: -1,
 		// Creation and truncation require flushing.
 		flushed: (flag&os.O_CREATE) == 0 && (flag&os.O_TRUNC) == 0,
@@ -93,12 +92,10 @@ func OpenFile(ctx context.Context, n *fileNode, flag int) (*gfile, error) {
 
 // Stat implements fsctx.File.
 func (gf *gfile) Stat(ctx context.Context) (os.FileInfo, error) {
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return nil, errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return nil, err
 	}
+	defer gf.mu.Unlock()
 	if err := gf.lockedInitOps(ctx); err != nil {
 		return nil, err
 	}
@@ -118,12 +115,10 @@ func (gf *gfile) Stat(ctx context.Context) (os.FileInfo, error) {
 
 // Read implements fsctx.File.
 func (gf *gfile) Read(ctx context.Context, p []byte) (int, error) {
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return 0, errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return 0, err
 	}
+	defer gf.mu.Unlock()
 	if err := gf.lockedInitOps(ctx); err != nil {
 		return 0, err
 	}
@@ -135,12 +130,10 @@ func (gf *gfile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	if gf.readerAt != nil {
 		return gf.readerAt.ReadAt(ctx, p, off)
 	}
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return 0, errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return 0, err
 	}
+	defer gf.mu.Unlock()
 	if err := gf.lockedInitOps(ctx); err != nil {
 		return 0, err
 	}
@@ -149,12 +142,10 @@ func (gf *gfile) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 
 // WriteAt implements fsnodefuse.Writable.
 func (gf *gfile) WriteAt(ctx context.Context, p []byte, off int64) (int, error) {
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return 0, errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return 0, err
 	}
+	defer gf.mu.Unlock()
 	if err := gf.lockedInitOps(ctx); err != nil {
 		return 0, err
 	}
@@ -169,12 +160,10 @@ func (gf *gfile) WriteAt(ctx context.Context, p []byte, off int64) (int, error) 
 
 // Truncate implements fsnodefuse.Writable.
 func (gf *gfile) Truncate(ctx context.Context, size int64) error {
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return err
 	}
+	defer gf.mu.Unlock()
 	gf.flushed = false
 	if gf.ops == nil {
 		gf.requestedSize = 0
@@ -185,12 +174,10 @@ func (gf *gfile) Truncate(ctx context.Context, size int64) error {
 
 // Flush implements fsnodefuse.Writable.
 func (gf *gfile) Flush(ctx context.Context) error {
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return err
 	}
+	defer gf.mu.Unlock()
 	return gf.lockedFlush()
 }
 
@@ -203,12 +190,10 @@ func (gf *gfile) Fsync(ctx context.Context) error {
 
 // Close implements fsctx.File.
 func (gf *gfile) Close(ctx context.Context) error {
-	select {
-	case gf.mutexCh <- struct{}{}:
-		defer func() { <-gf.mutexCh }()
-	case <-ctx.Done():
-		return errors.E(errors.Canceled)
+	if err := gf.mu.Lock(ctx); err != nil {
+		return err
 	}
+	defer gf.mu.Unlock()
 	if gf.ops == nil {
 		return nil
 	}
