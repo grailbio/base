@@ -387,15 +387,15 @@ func (ops *directRead) ReadAt(ctx context.Context, p []byte, off int64) (int, er
 	return n, err
 }
 
-func (_ directRead) WriteAt(ctx context.Context, p []byte, off int64) (int, error) {
+func (directRead) WriteAt(ctx context.Context, p []byte, off int64) (int, error) {
 	return 0, errors.E(errors.Invalid, "writing read-only file")
 }
 
-func (_ directRead) Truncate(ctx context.Context, size int64) error {
+func (directRead) Truncate(ctx context.Context, size int64) error {
 	return errors.E(errors.Invalid, "cannot truncate read-only file")
 }
 
-func (_ directRead) Flush(ctx context.Context) (reuseOps bool, _ error) {
+func (directRead) Flush(ctx context.Context) (reuseOps bool, _ error) {
 	return true, nil
 }
 
@@ -418,11 +418,11 @@ func (ops directWrite) Stat(ctx context.Context) (file.Info, error) {
 	return ops.f.Stat(ctx)
 }
 
-func (_ directWrite) Read(ctx context.Context, p []byte) (int, error) {
+func (directWrite) Read(ctx context.Context, p []byte) (int, error) {
 	return 0, errors.E(errors.Invalid, "reading write-only file")
 }
 
-func (_ directWrite) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
+func (directWrite) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	return 0, errors.E(errors.Invalid, "reading write-only file")
 }
 
