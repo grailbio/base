@@ -118,7 +118,7 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	// causes `go install` to fail, which causes doc generation to fail.
 	cmd.Flags.BoolVar(&blessRemotesFlag, "bless-remotes", false, "Whether to attempt to bless remotes with local blessings")
 	cmd.Flags.StringVar(&blessRemotesModeFlag, remote.FlagNameMode, "", "(INTERNAL) Controls the mode in which we run for the remote blessing protocol; one of {public-key,receive,send}")
-	cmd.Flags.Var(&blessRemotesTargetsFlag, "bless-remotes-targets", "Comma-separated list of targets to bless; targets may be \"ssh:[user@]host[:port]\" SSH destinations or \"ec2-name:[user@]ec2-instance-name-filter\" EC2 instance name filter; see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Filtering.html")
+	cmd.Flags.Var(&blessRemotesTargetsFlag, "bless-remotes-targets", "Comma-separated list of targets to bless; targets may be \"ssh:[user@]host[:port]\" SSH destinations or \"ec2-name:[user@]ec2-instance-name-filter\" EC2 instance name filters; see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Filtering.html")
 
 	cmdline.HideGlobalFlagsExcept()
 	cmdline.Main(cmd)
