@@ -151,8 +151,56 @@ func TestOverwrite(t *testing.T) {
 	}
 }
 
-// TestTruncate verifies that truncation to zero works.
+// TestTruncFlag verifies that opening with O_TRUNC truncates the file.
+func TestTruncFlag(t *testing.T) {
+	t.Run("WRONLY", func(t *testing.T) {
+		testTruncFlag(t, os.O_WRONLY)
+	})
+	t.Run("RDWR", func(t *testing.T) {
+		testTruncFlag(t, os.O_RDWR)
+	})
+}
+
+func testTruncFlag(t *testing.T, flag int) {
+	var (
+		m, cleanUp = makeTestMount(t)
+		path       = filepath.Join(m.dir, "test")
+	)
+	defer cleanUp()
+
+	// Write the file we will truncate to test.
+	err := ioutil.WriteFile(path, []byte{0, 1, 2}, 0644)
+	require.NoError(t, err, "writing file")
+
+	f, err := os.OpenFile(path, flag|os.O_TRUNC, 0666)
+	require.NoError(t, err, "opening for truncation")
+	func() {
+		defer func() {
+			require.NoError(t, f.Close())
+		}()
+		var info gofs.FileInfo
+		info, err = f.Stat()
+		require.NoError(t, err, "getting file stats")
+		assert.Equal(t, int64(0), info.Size(), "truncated file should be zero bytes")
+	}()
+
+	// Verify that reading the truncated file yields zero bytes.
+	bsRead, err := ioutil.ReadFile(path)
+	require.NoError(t, err, "reading truncated file")
+	assert.Empty(t, bsRead, "reading truncated file should yield no data")
+}
+
+// TestTruncateZero verifies that truncation to zero works.
 func TestTruncateZero(t *testing.T) {
+	t.Run("WRONLY", func(t *testing.T) {
+		testTruncateZero(t, os.O_WRONLY)
+	})
+	t.Run("RDWR", func(t *testing.T) {
+		testTruncateZero(t, os.O_RDWR)
+	})
+}
+
+func testTruncateZero(t *testing.T, flag int) {
 	var (
 		m, cleanUp = makeTestMount(t)
 		path       = filepath.Join(m.dir, "test")
@@ -174,7 +222,7 @@ func TestTruncateZero(t *testing.T) {
 		var info gofs.FileInfo
 		info, err = f.Stat()
 		require.NoError(t, err, "getting file stats")
-		assert.Equal(t, int64(3), info.Size(), "truncated file should be three bytes")
+		assert.Equal(t, int64(3), info.Size(), "file to truncate should be three bytes")
 
 		require.NoError(t, f.Truncate(0), "truncating")
 

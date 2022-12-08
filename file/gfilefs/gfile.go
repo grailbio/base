@@ -235,6 +235,11 @@ func (gf *gfile) lockedInitOps(ctx context.Context) (err error) {
 		if err != nil {
 			return errors.E(err, fmt.Sprintf("creating file at %q", gf.n.path))
 		}
+		// This is a workaround for the fact that directWrite ops do not
+		// support Stat (as write-only s3files do not support Stat).  Callers,
+		// e.g. fsnodefuse, may fall back to use the node's information, so we
+		// zero that to keep a sensible view.
+		gf.n.setFsnodeInfo(gf.n.fsnodeInfo().WithSize(0))
 		gf.ops = &directWrite{
 			n:   gf.n,
 			f:   f,
