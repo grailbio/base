@@ -32,7 +32,7 @@ var Func func(int, ...interface{}) = func(depth int, v ...interface{}) {
 }
 
 // Nil asserts that v is nil; v is typically a value of type error.
-// If v is not nil, Nil formats a message in hte manner of fmt.Sprint
+// If v is not nil, Nil formats a message in the manner of fmt.Sprint
 // and calls must.Func. Nil also suffixes the message with the
 // fmt.Sprint-formatted value of v.
 func Nil(v interface{}, args ...interface{}) {
@@ -47,7 +47,7 @@ func Nil(v interface{}, args ...interface{}) {
 }
 
 // Nilf asserts that v is nil; v is typically a value of type error.
-// If v is not nil, Nilf formats a message in hte manner of
+// If v is not nil, Nilf formats a message in the manner of
 // fmt.Sprintf and calls must.Func. Nilf also suffixes the message
 // with the fmt.Sprint-formatted value of v.
 func Nilf(v interface{}, format string, args ...interface{}) {
