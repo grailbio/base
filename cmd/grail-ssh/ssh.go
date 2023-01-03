@@ -108,6 +108,7 @@ func runSsh(ctx *context.T, out io.Writer, env *cmdline.Env, args []string) erro
 	// Not the best regex (e.g. doesn't match IPV6) to use here ... better regexs are available at
 	// https://stackoverflow.com/questions/106179/regular-expression-to-match-dns-hostname-or-ip-address
 	hostIpMatch := regexp.MustCompile("^([a-zA-Z0-9]+\\.)+[a-zA-Z0-9]+$")
+	dnsMatch := regexp.MustCompile("^(([a-zA-Z]|[a-zA-Z][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*([A-Za-z]|[A-Za-z][A-Za-z0-9\\-]*[A-Za-z0-9])$")
 	stopMatch := regexp.MustCompile("^--$")
 
 	// Loop through the arguments provided to the CLI tool - and try to match to a hostname or an instanceID.
@@ -118,6 +119,7 @@ func runSsh(ctx *context.T, out io.Writer, env *cmdline.Env, args []string) erro
 		if err != nil {
 			return fmt.Errorf("Failed to check if input %s matched an instanceId - %v", arg, err)
 		}
+
 		// Find matching instanceId in list
 		if match {
 			// Remove the matched element from the list
@@ -125,6 +127,7 @@ func runSsh(ctx *context.T, out io.Writer, env *cmdline.Env, args []string) erro
 			for _, instance := range computeInstances {
 				if instance.InstanceId == arg {
 					vlog.Errorf("Matched InstanceID %s - %s", instance.InstanceId, instance.PublicIp)
+					fmt.Printf("Matched InstanceID %s - %s \n", instance.InstanceId, instance.PublicIp)
 					host = instance.PublicIp
 					break
 				}
@@ -132,6 +135,18 @@ func runSsh(ctx *context.T, out io.Writer, env *cmdline.Env, args []string) erro
 			if host == "" {
 				return fmt.Errorf("Failed to find a match for InstanceId provided %s", arg)
 			}
+			break
+		}
+
+		// // check for a dns name to stop processing
+		match = dnsMatch.MatchString(arg)
+		if err != nil {
+			return fmt.Errorf("Failed to check if input %s matched a DNS name' - %v", arg, err)
+		}
+		if match {
+			host = arg
+			args = append(args[:i], args[i+1:]...)
+			fmt.Printf("Matched DNS %s \n", host)
 			break
 		}
 
@@ -143,6 +158,7 @@ func runSsh(ctx *context.T, out io.Writer, env *cmdline.Env, args []string) erro
 		if match {
 			host = arg
 			args = append(args[:i], args[i+1:]...)
+			fmt.Printf("Matched Host IP %s \n", host)
 			break
 		}
 
