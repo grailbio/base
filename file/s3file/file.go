@@ -34,17 +34,14 @@ type s3File struct {
 	// info is file metadata. Set at construction if mode == readonly, otherwise nil.
 	info *s3Info
 
-	bodyReader chunkReaderCache
-
 	// reqCh transports user operations (like Read) to the worker goroutine (handleRequests).
 	// This allows respecting context cancellation (regardless of what underlying AWS SDK operations
 	// do). It also guards subsequent fields; they are only accessed by the handleRequests
 	// goroutine.
 	reqCh chan request
 
-	// Seek offset.
-	// INVARIANT: position >= 0 && (position > 0 ⇒ info != nil)
-	position int64
+	// readerState is used for Reader(), which shares state across multiple callers.
+	readerState
 
 	// Used by files opened for writing.
 	uploader *s3Uploader
@@ -82,14 +79,41 @@ func (f *s3File) Stat(ctx context.Context) (file.Info, error) {
 	return f.info, nil
 }
 
-// s3Reader implements io.ReadSeeker for S3.
-type s3Reader struct {
-	ctx context.Context
-	f   *s3File
+type (
+	reader struct {
+		f *s3File
+		*readerState
+	}
+	readerState struct {
+		position   int64
+		bodyReader chunkReaderCache
+	}
+	defaultReader struct {
+		ctx context.Context
+		f   *s3File
+	}
+)
+
+func (r reader) Read(ctx context.Context, p []byte) (int, error) {
+	// TODO: Defensively guard against the underlying http body reader not respecting context
+	// cancellation. Note that the handleRequests mechanism guards against this for its
+	// operations (in addition to synchronizing), but that's not true here.
+	// Such defense may be appropriate here, or deeper in the stack.
+	n, err := r.f.readAt(ctx, &r.bodyReader, p, r.position)
+	r.position += int64(n)
+	return n, err
 }
 
-// Read implements io.Reader
-func (r *s3Reader) Read(p []byte) (n int, err error) {
+func (r *readerState) Close(ctx context.Context) error {
+	r.bodyReader.close()
+	return nil
+}
+
+func (f *s3File) OffsetReader(offset int64) ioctx.ReadCloser {
+	return reader{f, &readerState{position: offset}}
+}
+
+func (r defaultReader) Read(p []byte) (int, error) {
 	res := r.f.runRequest(r.ctx, request{
 		reqType: readRequest,
 		buf:     p,
@@ -97,8 +121,7 @@ func (r *s3Reader) Read(p []byte) (n int, err error) {
 	return res.n, res.err
 }
 
-// Seek implements io.Seeker
-func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
+func (r defaultReader) Seek(offset int64, whence int) (int64, error) {
 	res := r.f.runRequest(r.ctx, request{
 		reqType: seekRequest,
 		off:     offset,
@@ -107,11 +130,14 @@ func (r *s3Reader) Seek(offset int64, whence int) (int64, error) {
 	return res.off, res.err
 }
 
+// Reader returns the default reader. There is only one default reader state for the entire file,
+// and all objects returned by Reader share it.
+// TODO: Consider deprecating this in favor of NewReader.
 func (f *s3File) Reader(ctx context.Context) io.ReadSeeker {
 	if f.mode != readonly {
 		return file.NewError(fmt.Errorf("reader %v: file is not opened in read mode", f.name))
 	}
-	return &s3Reader{ctx: ctx, f: f}
+	return defaultReader{ctx, f}
 }
 
 // s3Writer implements a placeholder io.Writer for S3.
@@ -272,12 +298,12 @@ func (f *s3File) handleSeek(req request) {
 	req.ch <- response{off: f.position}
 }
 
-var _ ioctx.ReaderAt = (*s3File)(nil)
-
-func (f *s3File) ReaderAt() ioctx.ReaderAt { return f }
-
-// TODO: Stop implementing ReaderAt in *localFile, instead return a different object from ReaderAt.
-func (f *s3File) ReadAt(ctx context.Context, buf []byte, off int64) (int, error) {
+func (f *s3File) readAt(
+	ctx context.Context,
+	readerCache *chunkReaderCache,
+	buf []byte,
+	off int64,
+) (int, error) {
 	if f.mode != readonly {
 		return 0, errors.E(errors.NotAllowed, "not opened for read")
 	}
@@ -285,7 +311,7 @@ func (f *s3File) ReadAt(ctx context.Context, buf []byte, off int64) (int, error)
 		panic("stat not filled")
 	}
 
-	reader, cleanUp, err := f.bodyReader.getOrCreate(ctx, func() (*chunkReaderAt, error) {
+	reader, cleanUp, err := readerCache.getOrCreate(ctx, func() (*chunkReaderAt, error) {
 		clients, err := f.clientsForAction(ctx, "GetObject", f.bucket, f.key)
 		if err != nil {
 			return nil, errors.E(err, "getting clients")
@@ -334,8 +360,7 @@ func (f *s3File) ReadAt(ctx context.Context, buf []byte, off int64) (int, error)
 }
 
 func (f *s3File) handleRead(req request) {
-	n, err := f.ReadAt(req.ctx, req.buf, f.position)
-	f.position += int64(n)
+	n, err := reader{f, &f.readerState}.Read(req.ctx, req.buf)
 	req.ch <- response{n: n, err: err}
 }
 
@@ -349,7 +374,7 @@ func (f *s3File) handleClose(req request) {
 	if f.uploader != nil {
 		err = f.uploader.finish()
 	}
-	f.bodyReader.close()
+	errors.CleanUpCtx(req.ctx, f.readerState.Close, &err)
 	if err != nil {
 		err = errors.E(err, "s3file.close", f.name)
 	}

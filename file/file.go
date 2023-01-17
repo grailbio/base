@@ -30,15 +30,24 @@ type File interface {
 	// Reader creates an io.ReadSeeker object that operates on the file.  If
 	// Reader() is called multiple times, they share the seek pointer.
 	//
+	// For emphasis: these share state, which is different from OffsetReader!
+	//
 	// REQUIRES: Close has not been called
 	Reader(ctx context.Context) io.ReadSeeker
 
-	// ReaderAt returns a ReaderAt, if supported, otherwise nil.
-	// Note: ioctx.ReaderAt (like io.ReaderAt) supports concurrent,
-	// arbitrarily-positioned reads, entirely independent of Reader().
+	// OffsetReader creates a new, independent ioctx.ReadCloser, starting at
+	// offset. Unlike Reader, its position in the file is only modified by Read
+	// on this object. The returned object is not thread-safe, and callers are
+	// responsible for serializing all of their calls, including calling Close
+	// after all Reads are done. Of course, callers can use separate
+	// OffsetReaders in parallel.
+	//
+	// Background: This API reflects S3's performance characteristics, where
+	// initiating a new read position is relatively expensive, but then
+	// streaming data is fast (including in parallel with multiple readers).
 	//
 	// REQUIRES: Close has not been called
-	ReaderAt() ioctx.ReaderAt
+	OffsetReader(offset int64) ioctx.ReadCloser
 
 	// Writer creates a writes that to the file. If Writer() is called multiple
 	// times, they share the seek pointer.

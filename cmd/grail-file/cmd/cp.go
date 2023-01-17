@@ -103,8 +103,7 @@ var copyFileChunkSize = s3file.ReadChunkBytes
 func copyFile(ctx context.Context, dst file.File, src file.File) error {
 	// TODO: Use dst.WriterAt(), after it's introduced.
 	dstAt, dstOK := dst.(ioctx.WriterAt)
-	srcAt := src.ReaderAt()
-	if !dstOK || srcAt == nil {
+	if !dstOK {
 		return copyStream(ctx, dst.Writer(ctx), src.Reader(ctx))
 	}
 	info, err := src.Stat(ctx)
@@ -119,9 +118,11 @@ func copyFile(ctx context.Context, dst file.File, src file.File) error {
 		if wantN > copyFileChunkSize {
 			wantN = copyFileChunkSize
 		}
+		srcR := src.OffsetReader(offset)
+		defer errors.CleanUpCtx(ctx, srcR.Close, &err)
 		return copyStream(ctx,
 			ioctx.ToStdWriter(ctx, &offsetWriter{at: dstAt, offset: offset}),
-			io.LimitReader(ioctx.ToStdReader(ctx, &offsetReader{at: srcAt, offset: offset}), wantN),
+			io.LimitReader(ioctx.ToStdReader(ctx, srcR), wantN),
 		)
 	})
 }
@@ -134,17 +135,6 @@ func copyStream(ctx context.Context, dst io.Writer, src io.Reader) error {
 	defer item.Release()
 	_, err = io.CopyBuffer(dst, src, item.Buf())
 	return err
-}
-
-type offsetReader struct {
-	at     ioctx.ReaderAt
-	offset int64
-}
-
-func (r *offsetReader) Read(ctx context.Context, dst []byte) (int, error) {
-	n, err := r.at.ReadAt(ctx, dst, r.offset)
-	r.offset += int64(n)
-	return n, err
 }
 
 type offsetWriter struct {

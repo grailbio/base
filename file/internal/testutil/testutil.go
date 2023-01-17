@@ -15,6 +15,7 @@ import (
 
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/traverse"
 	"github.com/grailbio/testutil/assert"
 )
@@ -378,8 +379,8 @@ func TestStandard(ctx context.Context, t *testing.T, impl file.Implementation, d
 	t.Run(iName+"_ListDir", func(t *testing.T) { TestListDir(ctx, t, impl, dir+"/dirmatch") })
 }
 
-// TestReadAts tests arbitrarily-ordered, concurrent reads.
-func TestReadAts(
+// TestConcurrentOffsetReads tests arbitrarily-ordered, concurrent reads.
+func TestConcurrentOffsetReads(
 	ctx context.Context,
 	t *testing.T,
 	impl file.Implementation,
@@ -395,8 +396,6 @@ func TestReadAts(
 
 	f, err := impl.Open(ctx, path)
 	assert.NoError(t, err)
-	r := f.ReaderAt()
-	assert.NotNil(t, r, "not ReaderAt: %T", f)
 
 	rnds := make([]*rand.Rand, parallelism)
 	rnds[0] = rand.New(rand.NewSource(1))
@@ -410,9 +409,11 @@ func TestReadAts(
 			start := rnd.Intn(len(expected))
 			limit := start + rnd.Intn(len(expected)-start)
 			got := make([]byte, limit-start)
-			_, err := r.ReadAt(ctx, got, int64(start))
+			rc := f.OffsetReader(int64(start))
+			_, err = io.ReadFull(ioctx.ToStdReader(ctx, rc), got)
 			assert.NoError(t, err)
 			assert.EQ(t, expected[start:limit], string(got))
+			assert.NoError(t, rc.Close(ctx))
 		}
 		return nil
 	})

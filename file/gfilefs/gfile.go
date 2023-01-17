@@ -84,7 +84,7 @@ func OpenFile(ctx context.Context, n *fileNode, flag int) (*gfile, error) {
 			f: f,
 			r: f.Reader(context.Background()), // TODO: Tie to gf lifetime?
 		}
-		gf.readerAt = f.ReaderAt() // Returns nil if unsupported.
+		gf.readerAt = gf.ops
 		return gf, nil
 	}
 	return gf, nil
@@ -372,23 +372,13 @@ func (ops directRead) Read(ctx context.Context, p []byte) (int, error) {
 	return ops.r.Read(p)
 }
 
-func (ops *directRead) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
-	// TODO: This implementation violates the io.ReaderAt contract in that it
-	// is both affected by and affects the seek offset.  This is not a problem
-	// in practice yet, as we do not support seeking, and all callers exclusive
-	// use Read or ReadAt.
-	newOff, err := ops.r.Seek(off, io.SeekStart)
-	if err != nil {
-		return 0, errors.E(err, "seeking to %d", off)
+func (ops *directRead) ReadAt(ctx context.Context, p []byte, off int64) (_ int, err error) {
+	rc := ops.f.OffsetReader(off)
+	defer errors.CleanUpCtx(ctx, rc.Close, &err)
+	n, err := io.ReadFull(ioctx.ToStdReader(ctx, rc), p)
+	if err == io.ErrUnexpectedEOF {
+		return n, io.EOF
 	}
-	if newOff != off {
-		panic("seek failed; broken io.ReadSeeker")
-	}
-	n, err := ops.r.Read(p)
-	if err != nil {
-		return n, err
-	}
-	ops.off += int64(n)
 	return n, err
 }
 

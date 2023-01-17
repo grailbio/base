@@ -175,6 +175,30 @@ func (f *localFile) Reader(context.Context) io.ReadSeeker {
 	return f.f
 }
 
+type localReader struct {
+	f   *os.File
+	pos int64
+}
+
+func (r *localReader) Read(_ context.Context, p []byte) (int, error) {
+	n, err := r.f.ReadAt(p, r.pos)
+	r.pos += int64(n)
+	return n, err
+}
+
+func (r *localReader) Close(context.Context) error {
+	r.f = nil
+	return nil
+}
+
+// OffsetReader implements file.File
+func (f *localFile) OffsetReader(offset int64) ioctx.ReadCloser {
+	if f.mode != readonly {
+		return ioctx.FromStdReadCloser(NewError(fmt.Errorf("reader %v: file is not opened in read mode", f.Name())))
+	}
+	return &localReader{f: f.f, pos: offset}
+}
+
 // Writer implements file.Writer
 func (f *localFile) Writer(context.Context) io.Writer {
 	if f.mode == readonly {
@@ -225,17 +249,7 @@ func (f *localFile) Stat(context.Context) (Info, error) {
 	return &localInfo{size: info.Size(), modTime: info.ModTime()}, nil
 }
 
-var (
-	_ ioctx.ReaderAt = (*localFile)(nil)
-	_ ioctx.WriterAt = (*localFile)(nil)
-)
-
-func (f *localFile) ReaderAt() ioctx.ReaderAt { return f }
-
-// TODO: Stop implementing ReaderAt in *localFile, instead return a different object from ReaderAt.
-func (f *localFile) ReadAt(_ context.Context, dst []byte, off int64) (n int, err error) {
-	return f.f.ReadAt(dst, off)
-}
+var _ ioctx.WriterAt = (*localFile)(nil)
 
 func (f *localFile) WriteAt(_ context.Context, p []byte, off int64) (n int, err error) {
 	return f.f.WriteAt(p, off)
