@@ -1,0 +1,99 @@
+For reference, whoever's changing base/file code may occasionally run this benchmark and
+update the snapshot below. It can be useful for showing code reviewers the result of a change,
+or just so readers can get a sense of performance without running the benchmarks themselves.
+
+Of course, since we're not totally controlling the environment or the data, be careful to
+set a baseline before evaluating your change.
+
+Some context for the numbers below:
+  * S3 performance guidelines [1] suggest that each request should result in around 85–90 MB/s
+    of read throughput. Our numbers are MiB/s (not sure if they mean M = 1000^2 or Mi = 1024^2) and
+    it looks like our sequential reads ramp up to the right vicinity.
+  * EC2 documentation offers network performance expectations (Gbps):
+      * m5.x:      1.25 (base) - 10 (burst)
+      * m5.4x:     5           - 10
+      * m5.12x:   12
+      * m5.24x:   25
+      * m5n.24x: 100
+    Note that a 1000 in the table below is MiB/s which is 8*1.024^2 ~= 8.4 Gbps.
+
+[1] https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance-design-patterns.html#optimizing-performance-parallelization
+[2] https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/general-purpose-instances.html#general-purpose-network-performance
+
+Very brief summary and speculations about our current S3 performance for non-parallel(!) clients:
+  * Could be improved for small sequential reads (few MiB at a time) in the current io.Reader
+    model by adding (read-ahead) buffering (basically speculating about future reads).
+  * Can't get much better for large reads (GiBs) with large buffers (100s MiBs) on small instance
+    types because we're getting close to documented network performance.
+  * Can probably get better for large reads with large buffers on large, network-optimized (*n)
+    instances where we're not especially close to network limits yet. Maybe this requires more
+    careful CPU and allocation usage.
+Parallel clients might matter more:
+  * Clients reading many small files in parallel (like machine learning training reading V3
+    fragments file columns) may already do chunked reads pretty effectively. We should measure to
+    verify, though; maybe the chunks are not right-sized.
+  * Clients reading very large files may benefit even more from a parallel-friendly API (ReaderAt):
+      * Copies to disk could be accelerated without huge memory buffers.
+        Examples: `grail-file cp`, biofs/gfilefs, reflow interning, bigslice shuffling.
+      * Copies to memory could be accelerated without duplicated memory buffers:
+        Examples: bio/align/mapper's index (if it was Go), FASTA.
+
+Results:
+Rows are read chunk sizes (MiB), columns are number of sequential chunks.
+Data cells are average MiB/s for the entire sequential read.
+
+Note: During development, the results seemed worse on some days, peaking around 75 MiB/s rather
+than 95 MiB/s. It was consistent for several runs within that day. Unclear if the cause was
+something local in the benchmarking machines (or in our builds) or the S3 service.
+
+The numbers below were generated using the bigmachine runner in us-west-2 reading a GRAIL-internal
+113 GiB file residing in an S3 bucket in us-west-2. The first columns are reading directly from S3;
+the next ones are through FUSE.
+
+[0] m5.4xlarge
+        1       8      64     512    1     8     64    512
+0       0       0      0      3      0     0     0     2
+1       5       29     63     64     3     7     8     7
+8       32      64     68     73     6     7     7     9
+16      60      55     61            8     8     7
+32      101     94     104           7     10    13
+128     249     279                  8     8
+512     707     749                  15    7
+1024    1018                         7
+4096    1083                         7
+
+[1] m5.12xlarge
+        1       8       64     512    1     8     64    512
+0       0       0       1      4      0     0     1     3
+1       8       47      75     93     5     8     8     8
+8       44      77      86     94     8     7     7     9
+16      77      80      87            8     8     8
+32      119     148     136           8     10    13
+128     370     422                   8     8
+512     1173    1217                  14    7
+1024    1250                          7
+4096    1368                          7
+
+[2] m5.24xlarge
+        1       8       64     512    1     8     64    512
+0       0       0       1      5      0     0     1     3
+1       9       46      86     95     6     8     8     7
+8       56      84      86     95     8     7     7     9
+16      77      84      95            9     8     8
+32      147     160     132           7     10    12
+128     467     330                   9     8
+512     2058    1986                  14    7
+1024    2524                          7
+4096    2562                          7
+
+[3] m5n.24xlarge
+        1       8       64     512    1     8     64    512
+0       0       0       1      5      0     0     1     4
+1       10      50      88     95     5     7     8     8
+8       57      88      95     95     8     7     7     9
+16      75      92      95            9     8     8
+32      144     156     143           7     10    13
+128     577     433                   8     8
+512     1346    2006                  16    7
+1024    2035                          7
+4096    6236                          7
