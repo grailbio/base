@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/grailbio/base/cmd/grail-access/internal/remote"
+	"github.com/grailbio/base/cmd/grail-access/remote"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/log"
 	_ "github.com/grailbio/v23/factories/grail"

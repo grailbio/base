@@ -7,7 +7,7 @@ package remote_test
 import (
 	"testing"
 
-	_ "github.com/grailbio/base/cmd/grail-access/internal/remote"
+	_ "github.com/grailbio/base/cmd/grail-access/remote"
 )
 
 // TestInit verifies that init code does not panic.
