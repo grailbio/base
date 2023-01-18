@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/file/internal/s3bufpool"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/morebufio"
 	"github.com/grailbio/base/must"
@@ -80,12 +81,28 @@ func (r *ReaderAt) ReadAt(ctx context.Context, dst []byte, off int64) (int, erro
 
 	// Skip forward in r.pr, if necessary.
 	if skip := off - r.off; skip > 0 {
-		n, err := io.CopyN(io.Discard, ioctx.ToStdReader(ctx, r.pr), skip)
+		// Copying to io.Discard ends up using small chunks from an internal pool. This is a fairly
+		// pessimal S3 read size, so since we sometimes read from S3 streams here, we use larger
+		// buffers.
+		//
+		// Note that we may eventually want to use some internal read buffer for all S3 reads, so
+		// clients don't accidentally experience bad performance because their application happens
+		// to use a pattern of small reads. In that case, this special skip buffer would just add
+		// copies, and not help, and we may want to remove it.
+		discardBuf := s3bufpool.Get()
+		n, err := io.CopyBuffer(
+			// Hide io.Discard's io.ReadFrom implementation because CopyBuffer detects that and
+			// ignores our buffer.
+			struct{ io.Writer }{io.Discard},
+			io.LimitReader(ioctx.ToStdReader(ctx, r.pr), skip),
+			*discardBuf)
+		s3bufpool.Put(discardBuf)
 		r.off += n
+		if n < skip {
+			r.eof = true
+			err = io.EOF
+		}
 		if err != nil {
-			if err == io.EOF {
-				r.eof = true
-			}
 			return nDst, err
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/file/internal/s3bufpool"
 	"github.com/grailbio/base/file/s3file/internal/autolog"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/traverse"
@@ -64,8 +65,7 @@ type (
 //   Amazon EC2, we suggest making concurrent requests for byte ranges of an object at the
 //   granularity of 8–16 MB.
 //   https://web.archive.org/web/20220325121400/https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance-design-patterns.html
-// It's exposed for tests only and client should not use it.
-var ReadChunkBytes int64 = 16 * 1024 * 1024
+func ReadChunkBytes() int { return s3bufpool.BufBytes }
 
 // ReadAt is not concurrency-safe.
 // s3Info may be empty if no object metadata is fetched (zero-sized request, error).
@@ -75,15 +75,15 @@ func (r *chunkReaderAt) ReadAt(ctx context.Context, dst []byte, offset int64) (i
 	}
 	r.chunks = r.chunks[:0]
 	for buf, bufOff := dst, offset; len(buf) > 0; {
-		size := int64(len(buf))
-		if size > ReadChunkBytes {
-			size = ReadChunkBytes
+		size := len(buf)
+		if size > s3bufpool.BufBytes {
+			size = s3bufpool.BufBytes
 		}
 		r.chunks = append(r.chunks, readChunk{
 			s3Offset: bufOff,
 			dst:      buf[:size:size],
 		})
-		bufOff += size
+		bufOff += int64(size)
 		buf = buf[size:]
 	}
 

@@ -97,9 +97,9 @@ func Cp(ctx context.Context, out io.Writer, args []string) error {
 	})
 }
 
-// TODO: Move copyFile to a common location so it doesn't need to depend on s3file's test-only data.
-var copyFileChunkSize = s3file.ReadChunkBytes
+var copyFileChunkSize = int64(s3file.ReadChunkBytes())
 
+// TODO: Move copyFile to a common location.
 func copyFile(ctx context.Context, dst file.File, src file.File) error {
 	// TODO: Use dst.WriterAt(), after it's introduced.
 	dstAt, dstOK := dst.(ioctx.WriterAt)

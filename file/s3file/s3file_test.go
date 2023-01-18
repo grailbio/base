@@ -30,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/file/internal/s3bufpool"
 	"github.com/grailbio/base/file/internal/testutil"
 	"github.com/grailbio/base/file/s3file/s3transport"
 	"github.com/grailbio/base/log"
@@ -307,7 +308,7 @@ func TestReadRetryAfterError(t *testing.T) {
 			tearDownRCB := setReadChunkBytes()
 			defer tearDownRCB()
 
-			assert.GT(t, int64(len(contents))%ReadChunkBytes, 0)
+			assert.GT(t, len(contents)%ReadChunkBytes(), 0)
 
 			impl := newImpl(client)
 			ctx := context.Background()
@@ -631,9 +632,9 @@ func setZeroBackoffPolicy() (tearDown func()) {
 }
 
 func setReadChunkBytes() (tearDown func()) {
-	old := ReadChunkBytes
-	ReadChunkBytes = 100
-	return func() { ReadChunkBytes = old }
+	old := s3bufpool.BufBytes
+	s3bufpool.SetBufSize(100)
+	return func() { s3bufpool.SetBufSize(old) }
 }
 
 func setFakeWithDeadline() (tearDown func()) {
