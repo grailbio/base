@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/grailbio/base/cmd/grail-access/remote"
@@ -116,7 +117,7 @@ a '[server]:ec2:619867110810:role:adhoc:i-0aec7b085f8432699' blessing where
 	// go.mod is currently broken such that required go tooling fails.  We are
 	// apparently specifying old versions of protobuf related packages, which
 	// causes `go install` to fail, which causes doc generation to fail.
-	cmd.Flags.BoolVar(&blessRemotesFlag, "bless-remotes", false, "Whether to attempt to bless remotes with local blessings")
+	cmd.Flags.BoolVar(&blessRemotesFlag, "bless-remotes", true, "Whether to attempt to bless remotes with local blessings; only applies to Google blessings")
 	cmd.Flags.StringVar(&blessRemotesModeFlag, remote.FlagNameMode, "", "(INTERNAL) Controls the mode in which we run for the remote blessing protocol; one of {public-key,receive,send}")
 	cmd.Flags.Var(&blessRemotesTargetsFlag, "bless-remotes-targets", "Comma-separated list of targets to bless; targets may be \"ssh:[user@]host[:port]\" SSH destinations or \"ec2-name:[user@]ec2-instance-name-filter\" EC2 instance name filters; see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Filtering.html")
 
@@ -157,8 +158,6 @@ func run(*cmdline.Env, []string) error {
 	switch blessRemotesModeFlag {
 	case "":
 		// No-op.
-	case remote.ModeSend:
-		// Handle with maybeBlessRemotes.
 	case remote.ModePublicKey:
 		if err = remote.PrintPublicKey(ctx, os.Stdout); err != nil {
 			return errors.E("failed to print public key", err)
@@ -239,7 +238,14 @@ func dump(principal security.Principal) {
 }
 
 func maybeBlessRemotes(ctx *context.T) error {
-	if !blessRemotesFlag && blessRemotesModeFlag != remote.ModeSend {
+	if !blessRemotesFlag {
+		return nil
+	}
+	// The only use case for blessing remotes is for Google blessings, i.e.
+	// using the local browser for OAuth to bless a headless EC2 instance.
+	const prefix = "v23.grail.com:google:"
+	blessings, _ := v23.GetPrincipal(ctx).BlessingStore().Default()
+	if !strings.HasPrefix(blessings.String(), prefix) {
 		return nil
 	}
 	if err := remote.Bless(ctx, blessRemotesTargetsFlag); err != nil {
