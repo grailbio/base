@@ -288,6 +288,11 @@ func remoteExecCommand(ctx *context.T, dest, mode string) *exec.Cmd {
 
 func sshCommand(ctx *context.T, dest string, args ...string) *exec.Cmd {
 	cmdArgs := []string{
+		// Use batch mode which prevents prompting for an SSH passphrase.  The
+		// prompt is more confusing than failing outright, as we run multiple
+		// SSH commands, so even if the user enters the correct passphrase,
+		// they will see more prompts.
+		"-o", "BatchMode yes",
 		// Don't check the identity of the remote host.
 		"-o", "StrictHostKeyChecking no",
 		// Don't store the identity of the remote host.
