@@ -41,13 +41,15 @@ func NewBigmachine(rs ReadSizes) Bigmachine {
 
 // RunAndPrint starts a machine in each d.Bs and then executes ReadSizes.RunAndPrint on it.
 // It writes all the machine results to out, identifying each section by d.Bs's keys.
-func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...string) {
+func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...string) error {
 	var results = make([]string, len(d.Bs))
 
-	must.Nil(traverse.Each(len(d.Bs), func(bIdx int) error {
+	err := traverse.Each(len(d.Bs), func(bIdx int) error {
 		b := d.Bs[bIdx]
 		machines, err := b.Start(ctx, 1, d.Environ, d.Services)
-		must.Nil(err)
+		if err != nil {
+			return err
+		}
 		machine := machines[0]
 
 		// Benchmark runs have encountered some throttling from S3 (503 SlowDown). Sleep a bit
@@ -58,9 +60,12 @@ func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...str
 		time.Sleep(time.Minute * time.Duration(bIdx))
 
 		return machine.Call(ctx, "FileBench.Run", benchRequest{Paths: paths}, &results[bIdx])
-	}))
+	})
 
 	for bIdx, result := range results {
+		if result == "" {
+			continue
+		}
 		if bIdx > 0 {
 			_, err := fmt.Fprintln(out)
 			must.Nil(err)
@@ -68,6 +73,7 @@ func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...str
 		_, err := fmt.Fprintf(out, "[%d] %s\n%s", bIdx, d.Bs[bIdx].Name(), result)
 		must.Nil(err)
 	}
+	return err
 }
 
 type (
