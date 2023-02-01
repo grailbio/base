@@ -362,7 +362,7 @@ func resolveEC2Target(ctx *context.T, ec2API ec2iface.EC2API, s string) ([]sshDe
 	var dests []sshDest
 	for _, i := range instances {
 		var (
-			s          = fmt.Sprintf("%s@%s", user, *i.PrivateIpAddress)
+			s          = fmt.Sprintf("%s@%s", user, *i.PublicIpAddress)
 			notRunning = *i.State.Name != ec2.InstanceStateNameRunning
 		)
 		dests = append(dests, sshDest{s: s, notRunning: notRunning})
