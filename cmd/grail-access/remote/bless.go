@@ -82,7 +82,7 @@ func Bless(ctx *context.T, targets []string) error {
 			continue
 		}
 		for _, d := range dests[i] {
-			if d.notRunning {
+			if !d.running {
 				fmt.Printf("  %-60s [ NOT RUNNING ]\n", d.s)
 				continue
 			}
@@ -96,11 +96,12 @@ func Bless(ctx *context.T, targets []string) error {
 }
 
 type sshDest struct {
+	// s represents this destination.  If running is true, then it is a valid
+	// SSH destination, i.e. we can connect to it using SSH.
 	s string
-	// notRunning is whether we know that the host in s is not currently
-	// running, e.g. because EC2 tells us so.  We use this to show nicer
-	// status messages.
-	notRunning bool
+	// running is false if we believe that the host is not currently running,
+	// e.g. because EC2 tells us so.  Otherwise, it is true.
+	running bool
 }
 
 // blessSSHDest uses commands over SSH to bless dest's principal.  p is the
@@ -325,7 +326,7 @@ func resolveTargets(ctx *context.T, sess *session.Session, targets []string) ([]
 		)
 		switch typ {
 		case "ssh":
-			dests[i] = append(dests[i], sshDest{s: val})
+			dests[i] = append(dests[i], sshDest{s: val, running: true})
 		case "ec2-name":
 			ec2Dests, err := resolveEC2Target(ctx, ec2API, val)
 			if err != nil {
@@ -361,11 +362,26 @@ func resolveEC2Target(ctx *context.T, ec2API ec2iface.EC2API, s string) ([]sshDe
 	}
 	var dests []sshDest
 	for _, i := range instances {
-		var (
-			s          = fmt.Sprintf("%s@%s", user, *i.PublicIpAddress)
-			notRunning = *i.State.Name != ec2.InstanceStateNameRunning
-		)
-		dests = append(dests, sshDest{s: s, notRunning: notRunning})
+		if i.InstanceId == nil {
+			return nil, fmt.Errorf("instance has no ID: %s", i.String())
+		}
+		if i.State == nil || i.State.Name == nil {
+			return nil, fmt.Errorf("instance has no state: %s", i.String())
+		}
+		if *i.State.Name != ec2.InstanceStateNameRunning {
+			dests = append(dests, sshDest{
+				s:       fmt.Sprintf("%s@%s", user, *i.InstanceId),
+				running: false,
+			})
+			continue
+		}
+		if i.PublicIpAddress == nil {
+			return nil, fmt.Errorf("running instance %q has no public IP address", *i.InstanceId)
+		}
+		dests = append(dests, sshDest{
+			s:       fmt.Sprintf("%s@%s", user, *i.PublicIpAddress),
+			running: true,
+		})
 	}
 	return dests, nil
 }
