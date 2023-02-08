@@ -205,7 +205,7 @@ func (gf *gfile) Close(ctx context.Context) error {
 // downloading a remotely stored file locally.  Initialization may also depend
 // on other operations, e.g. if the first manipulation is truncation, then we
 // won't download existing data.  gf.ops is non-nil iff lockedInitOps returns a
-// nil error.  The caller must have locked access granted by gf.mutexCh.
+// nil error.  The caller must have gf.mu locked.
 func (gf *gfile) lockedInitOps(ctx context.Context) (err error) {
 	if gf.ops != nil {
 		return nil
@@ -299,7 +299,7 @@ func (gf *gfile) lockedInitOps(ctx context.Context) (err error) {
 }
 
 // lockedFlush flushes writes to the backing write I/O state.  The caller must
-// have locked access granted by gf.mutexCh.
+// have gf.mu locked.
 func (gf *gfile) lockedFlush() (err error) {
 	// We use a background context when flushing as a workaround for handling
 	// interrupted operations, particularly from Go clients.  As of Go 1.14,
