@@ -301,13 +301,15 @@ func E(args ...interface{}) error {
 		}
 		// Interpret verror errors.
 		if err, ok := asVerrorE(e.Err); ok {
-			// TODO: Make this less fragile by using errors.Is:
-			//  if errors.Is(err, verror.ErrNoAccess) {
-			// See https://github.com/vanadium/core/pull/282 .  Once we upgrade
-			// verror to a version that supports errors.Is properly, we can
-			// expand this to include other verror errors.  For now, use our
-			// workaround narrowly for specific use cases.
-			if strings.Contains(err.Error(), string(verror.ErrNoAccess.ID)) {
+			// TODO: Kill this workaround for chained ErrNoAccess errors. See
+			// https://github.com/vanadium/core/pull/282 .  Once we upgrade
+			// verror to a version whose error.Is supports matching of chained
+			// errors, we can kill the string check.
+			//
+			// Separately, we can consider expanding to map more verror error
+			// types.
+			if errors.Is(err, verror.ErrNoAccess) ||
+				strings.Contains(err.Error(), string(verror.ErrNoAccess.ID)) {
 				e.Kind = NotAllowed
 			}
 		}

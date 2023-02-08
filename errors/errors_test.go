@@ -17,6 +17,8 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/grailbio/base/errors"
+	"github.com/grailbio/base/vcontext"
+	"v.io/v23/verror"
 )
 
 // generate random errors and test encoding, etc.  (fuzz)
@@ -215,6 +217,13 @@ func TestStdInterop(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestVerrorInterop(t *testing.T) {
+	err := errors.E(verror.ErrNoAccess.Errorf(vcontext.Background(), "test error"))
+	if got, want := errors.Recover(err).Kind, errors.NotAllowed; got != want {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
