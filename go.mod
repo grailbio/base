@@ -10,7 +10,6 @@ require (
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cespare/xxhash/v2 v2.1.0
 	github.com/coreos/go-oidc v2.1.0+incompatible
-	github.com/fullsailor/pkcs7 v0.0.0-20190404230743-d7302db945fa
 	github.com/go-test/deep v1.0.4
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/protobuf v1.4.3
@@ -39,15 +38,18 @@ require (
 
 require (
 	github.com/cespare/xxhash v1.1.0
-	github.com/gin-gonic/gin v1.6.3
+	github.com/gin-gonic/gin v1.7.7
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/google/go-cmp v0.4.0
 	github.com/google/uuid v1.1.2
 	github.com/shirou/gopsutil v2.19.9+incompatible
+	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352
 	go.uber.org/zap v1.16.0
+	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	google.golang.org/api v0.10.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.0.0-20181213150558-05914d821849
-	k8s.io/apimachinery v0.0.0-20181127025237-2b1284ed4c93
+	k8s.io/apimachinery v0.0.0-20181127025237-2b1284ed4c93 // indirect
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/klog v1.0.0 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
