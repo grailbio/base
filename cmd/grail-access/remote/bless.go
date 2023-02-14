@@ -34,20 +34,17 @@ const (
 
 	// remoteExecS3Bucket is the bucket in which the known-compatible
 	// grail-access binary installed on remote targets is stored.
-	// TODO: Configure for an official build.
 	remoteExecS3Bucket = "grail-bin-public"
 	// remoteExecS3Key is the object key of the known-compatible grail-access
 	// binary installed on remote targets.
-	// TODO: Configure for an official build.
 	// TODO: Stop assuming single platform (Linux/AMD64) of targets.
-	remoteExecS3Key = "linux/amd64/2022-11-04.jcharumilind-181224/grail-access"
+	remoteExecS3Key = "linux/amd64/2023-02-10.dev-201357/grail-access"
 	// remoteExecExpiry is the expiry of the presigned URL we generate to
 	// download (remoteExecS3Bucket, remoteExecS3Key).
 	remoteExecExpiry = 15 * time.Minute
 	// remoteExecSHA256 is the expected SHA-256 of the executable at
 	// (remoteExecS3Bucket, remoteExecS3Key).
-	// TODO: Set this to the official build's SHA-256.
-	remoteExecSHA256 = "e64a0c3dabbea244297ae1d5cdb1811731914fac40e7acc9621979067f9291f5"
+	remoteExecSHA256 = "eeede8ad76ee106735867facfe70d5ae917f645de3d7c6a7274cbd25da34460d"
 	// remoteExecPath is the path on the remote target at which we install and
 	// later invoke the grail-access executable.  This string will be
 	// double-quoted in a bash script, so variable expansions can be used.
