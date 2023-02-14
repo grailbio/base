@@ -12,7 +12,7 @@ import (
 
 func TestBasic(t *testing.T) {
 	const src = "0123456789"
-	r := New(ioctx.FromStdReader(strings.NewReader(src)), 2)
+	r := New(ioctx.FromStdReader(strings.NewReader(src)), 0, 2)
 	ctx := context.Background()
 
 	// Initial read, larger than trail buf.

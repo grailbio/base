@@ -9,6 +9,7 @@ import (
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file/fsnode"
 	"github.com/grailbio/base/file/fsnodefuse/trailingbuf"
+	"github.com/grailbio/base/file/internal/kernel"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/ioctx/fsctx"
 	"github.com/grailbio/base/ioctx/spliceio"
@@ -27,7 +28,7 @@ func makeHandle(n *regInode, flags uint32, file fsctx.File) (fs.FileHandle, erro
 		ioctxReaderAt, isIoctxReaderAt       = file.(ioctx.ReaderAt)
 	)
 	if (flags&fuse.O_ANYWRITE) == 0 && !isSpliceioReaderAt && !isIoctxReaderAt {
-		tbReaderAt := trailingbuf.New(file, maxReadAhead)
+		tbReaderAt := trailingbuf.New(file, 0, kernel.MaxReadAhead)
 		return sizingHandle{
 			n:     n,
 			f:     file,

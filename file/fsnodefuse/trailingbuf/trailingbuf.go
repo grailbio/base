@@ -30,10 +30,16 @@ type ReaderAt struct {
 // New creates a ReaderAt that can respond to arbitrary reads as long as they're close
 // to the current position. trailSize controls the max distance (controlling buffer space usage).
 // Reads too far behind the current position return an error with cause ErrTooFarBehind.
-func New(r ioctx.Reader, trailSize int) *ReaderAt {
+// off is the current position of r (for example, zero for the start of a file, or non-zero for
+// reading somewhere in the middle).
+// Note: Alternatively, callers could manipulate the offsets in their ReadAt calls to be relative
+// to r's initial position. However, since we put offsets in our error message strings, users may
+// find debugging easier if they don't need to de-relativize the errors.
+func New(r ioctx.Reader, off int64, trailSize int) *ReaderAt {
 	return &ReaderAt{
 		semaphore: make(chan struct{}, 1),
 		pr:        morebufio.NewPeekBackReader(r, trailSize),
+		off:       off,
 	}
 }
 

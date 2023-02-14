@@ -16,6 +16,7 @@ import (
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
 	"github.com/grailbio/base/file/fsnodefuse"
+	"github.com/grailbio/base/file/internal/readmatcher"
 	"github.com/grailbio/base/ioctx"
 	"github.com/grailbio/base/ioctx/fsctx"
 	"github.com/grailbio/base/sync/ctxsync"
@@ -80,11 +81,13 @@ func OpenFile(ctx context.Context, n *fileNode, flag int) (*gfile, error) {
 		if err != nil {
 			return nil, err
 		}
-		gf.ops = &directRead{
-			f: f,
-			r: f.Reader(context.Background()), // TODO: Tie to gf lifetime?
+		dr := directRead{
+			f:       f,
+			matcher: readmatcher.New(f.OffsetReader),
+			r:       f.Reader(context.Background()), // TODO: Tie to gf lifetime?
 		}
-		gf.readerAt = gf.ops
+		gf.ops = &dr
+		gf.readerAt = dr.matcher
 		return gf, nil
 	}
 	return gf, nil
@@ -357,45 +360,45 @@ type ioOps interface {
 // directRead implements ioOps.  It reads directly using base/file and does not
 // support writes, e.g. to handle O_RDONLY.
 type directRead struct {
-	f   file.File
+	f       file.File
+	matcher interface {
+		ioctx.ReaderAt
+		ioctx.Closer
+	}
 	r   io.ReadSeeker
 	off int64
 }
 
 var _ ioOps = (*directRead)(nil)
 
-func (ops directRead) Stat(ctx context.Context) (file.Info, error) {
+func (ops *directRead) Stat(ctx context.Context) (file.Info, error) {
 	return ops.f.Stat(ctx)
 }
 
-func (ops directRead) Read(ctx context.Context, p []byte) (int, error) {
+func (ops *directRead) Read(ctx context.Context, p []byte) (int, error) {
 	return ops.r.Read(p)
 }
 
 func (ops *directRead) ReadAt(ctx context.Context, p []byte, off int64) (_ int, err error) {
-	rc := ops.f.OffsetReader(off)
-	defer errors.CleanUpCtx(ctx, rc.Close, &err)
-	n, err := io.ReadFull(ioctx.ToStdReader(ctx, rc), p)
-	if err == io.ErrUnexpectedEOF {
-		return n, io.EOF
-	}
-	return n, err
+	return ops.matcher.ReadAt(ctx, p, off)
 }
 
-func (directRead) WriteAt(ctx context.Context, p []byte, off int64) (int, error) {
+func (*directRead) WriteAt(ctx context.Context, p []byte, off int64) (int, error) {
 	return 0, errors.E(errors.Invalid, "writing read-only file")
 }
 
-func (directRead) Truncate(ctx context.Context, size int64) error {
+func (*directRead) Truncate(ctx context.Context, size int64) error {
 	return errors.E(errors.Invalid, "cannot truncate read-only file")
 }
 
-func (directRead) Flush(ctx context.Context) (reuseOps bool, _ error) {
+func (*directRead) Flush(ctx context.Context) (reuseOps bool, _ error) {
 	return true, nil
 }
 
-func (ops directRead) Close(ctx context.Context) error {
-	return ops.f.Close(ctx)
+func (ops *directRead) Close(ctx context.Context) error {
+	err := ops.matcher.Close(ctx)
+	errors.CleanUpCtx(ctx, ops.f.Close, &err)
+	return err
 }
 
 // directWrite implements ioOps.  It writes directly using base/file and does

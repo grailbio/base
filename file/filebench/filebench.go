@@ -170,6 +170,8 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 		contiguousChunks := r.ContiguousChunks[c.contiguousChunksIdx]
 		offset := rnd.Int63n(f.Info.Size() - int64(chunkBytes*contiguousChunks) + 1)
 
+		parIdx := 0
+		start := time.Now()
 		func() {
 			var (
 				traverser traverse.T
@@ -177,7 +179,6 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 					r   io.Reader
 					dst []byte
 				}, contiguousChunks)
-				parIdx = 0
 			)
 			if c.parallel {
 				parIdx = 1
@@ -197,19 +198,17 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 					chunks[i].dst = dst[:chunkBytes]
 				}
 			}
-
-			start := time.Now()
 			_ = traverser.Each(contiguousChunks, func(i int) error {
 				n, err := io.ReadFull(chunks[i].r, chunks[i].dst)
 				must.Nil(err)
 				must.True(n == chunkBytes)
 				return nil
 			})
-			elapsed := time.Since(start)
-
-			results[c.pathIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalBytes += chunkBytes * contiguousChunks
-			results[c.pathIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalTime += elapsed
 		}()
+		elapsed := time.Since(start)
+
+		results[c.pathIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalBytes += chunkBytes * contiguousChunks
+		results[c.pathIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalTime += elapsed
 	}
 
 	tw := tabwriter.NewWriter(out, 0, 4, 4, ' ', 0)

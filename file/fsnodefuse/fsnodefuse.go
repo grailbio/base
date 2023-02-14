@@ -21,6 +21,7 @@ import (
 	"runtime"
 
 	"github.com/grailbio/base/file/fsnode"
+	"github.com/grailbio/base/file/internal/kernel"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -42,7 +43,7 @@ func NewRoot(node fsnode.T) fs.InodeEmbedder {
 // implementation. Users of NewRoot must use these options, and they should call this last,
 // to make sure the required options take effect.
 func ConfigureRequiredMountOptions(opts *fuse.MountOptions) {
-	opts.MaxReadAhead = maxReadAhead
+	opts.MaxReadAhead = kernel.MaxReadAhead
 }
 
 // ConfigureDefaultMountOptions provides defaults that callers may want to start with, for performance.
