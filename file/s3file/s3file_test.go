@@ -152,7 +152,7 @@ func TestS3(t *testing.T) {
 	impl := newImpl(
 		errorClient(t, awserr.New(
 			"", // TODO(swami): Use an AWS error code that represents a permission error.
-			fmt.Sprintf("test permission error: %s", string(debug.Stack())),
+			"test permission error",
 			nil,
 		)),
 		newClient(t),
@@ -173,14 +173,14 @@ func TestS3WithRetries(t *testing.T) {
 		go func() {
 			r := rand.New(rand.NewSource(int64(iter)))
 			for {
-				randIntsC <- r.Intn(6)
+				randIntsC <- r.Intn(20)
 			}
 		}()
 		client := newClient(t)
 		client.Err = func(api string, input interface{}) error {
 			switch <-randIntsC {
 			case 0:
-				return awserr.New(awsrequest.ErrCodeSerialization, fmt.Sprintf("test failure %s (%s)", api, string(debug.Stack())), nil)
+				return awserr.New(awsrequest.ErrCodeSerialization, "injected serialization failure", nil)
 			case 1:
 				return awserr.New("RequestError", "send request failed", readConnResetError{})
 			}

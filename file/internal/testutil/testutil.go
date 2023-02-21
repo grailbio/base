@@ -6,9 +6,11 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -389,10 +391,8 @@ func TestConcurrentOffsetReads(
 	expected := "A purple fox jumped over a blue cat"
 	doWriteFile(ctx, t, impl, path, expected)
 
-	const (
-		parallelism   = 2
-		readsPerShard = 1
-	)
+	parallelism := runtime.NumCPU()
+	const readsPerShard = 1024
 
 	f, err := impl.Open(ctx, path)
 	assert.NoError(t, err)
@@ -403,20 +403,24 @@ func TestConcurrentOffsetReads(
 		rnds[i] = rand.New(rand.NewSource(rnds[0].Int63()))
 	}
 
-	_ = traverse.Limit(parallelism).Each(parallelism, func(shard int) (err error) {
+	assert.NoError(t, traverse.Limit(parallelism).Each(parallelism, func(shard int) (err error) {
 		rnd := rnds[shard]
 		for i := 0; i < readsPerShard; i++ {
 			start := rnd.Intn(len(expected))
-			limit := start + rnd.Intn(len(expected)-start)
+			limit := start + rnd.Intn(len(expected)+1-start)
 			got := make([]byte, limit-start)
 			rc := f.OffsetReader(int64(start))
+			defer errors.CleanUpCtx(ctx, rc.Close, &err)
 			_, err = io.ReadFull(ioctx.ToStdReader(ctx, rc), got)
-			assert.NoError(t, err)
-			assert.EQ(t, expected[start:limit], string(got))
-			assert.NoError(t, rc.Close(ctx))
+			if err != nil {
+				return err
+			}
+			if got, want := string(got), expected[start:limit]; got != want {
+				return fmt.Errorf("got: %s, want: %s", got, want)
+			}
 		}
 		return nil
-	})
+	}))
 
 	assert.NoError(t, f.Close(ctx))
 }
