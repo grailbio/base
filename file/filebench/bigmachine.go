@@ -41,7 +41,13 @@ func NewBigmachine(rs ReadSizes) Bigmachine {
 
 // RunAndPrint starts a machine in each d.Bs and then executes ReadSizes.RunAndPrint on it.
 // It writes all the machine results to out, identifying each section by d.Bs's keys.
-func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...string) error {
+func (d Bigmachine) RunAndPrint(
+	ctx context.Context,
+	out io.Writer,
+	pathPrefixes []Prefix,
+	pathSuffix0 string,
+	pathSuffixes ...string,
+) error {
 	var results = make([]string, len(d.Bs))
 
 	err := traverse.Each(len(d.Bs), func(bIdx int) error {
@@ -59,7 +65,9 @@ func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...str
 		// systematic bias in comparing results between machines, but we accept that for now.
 		time.Sleep(time.Minute * time.Duration(bIdx))
 
-		return machine.Call(ctx, "FileBench.Run", benchRequest{Paths: paths}, &results[bIdx])
+		return machine.Call(ctx, "FileBench.Run",
+			benchRequest{pathPrefixes, pathSuffix0, pathSuffixes},
+			&results[bIdx])
 	})
 
 	for bIdx, result := range results {
@@ -78,7 +86,11 @@ func (d Bigmachine) RunAndPrint(ctx context.Context, out io.Writer, paths ...str
 
 type (
 	benchService struct{ ReadSizes }
-	benchRequest struct{ Paths []string }
+	benchRequest struct {
+		PathPrefixes []Prefix
+		PathSuffix0  string
+		PathSuffixes []string
+	}
 
 	fuseService struct{}
 )
@@ -90,7 +102,7 @@ func init() {
 
 func (s benchService) Run(ctx context.Context, req benchRequest, out *string) error {
 	var buf bytes.Buffer
-	s.ReadSizes.RunAndPrint(ctx, &buf, req.Paths...)
+	s.ReadSizes.RunAndPrint(ctx, &buf, req.PathPrefixes, req.PathSuffix0, req.PathSuffixes...)
 	*out = buf.String()
 	return nil
 }

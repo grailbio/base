@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
@@ -68,32 +69,54 @@ func (r ReadSizes) sort() {
 	sort.Ints(r.ContiguousChunks)
 }
 
-// RunAndPrint executes the benchmark cases and prints a human-readable summary to w.
-func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...string) {
+type Prefix struct {
+	Path string
+	// MaxReadBytes optionally overrides ReadSizes.MaxReadBytes (only to become smaller).
+	// Useful if one prefix (like FUSE) is slower than others.
+	MaxReadBytes int
+}
+
+// RunAndPrint executes the benchmark cases and prints a human-readable summary to out.
+// pathPrefixes is typically s3:// or a FUSE mount point. Results are reported for each one.
+// pathSuffix* are at least one S3-relative path (like bucket/some/file.txt) to a large file to read
+// during benchmarking. If there are multiple, reads are spread across them (not multiplied for each
+// suffix). Caller may want to pass multiple to try to reduce throttling when several benchmark
+// tasks are running in parallel (see Bigmachine.RunAndPrint).
+func (r ReadSizes) RunAndPrint(
+	ctx context.Context,
+	out io.Writer,
+	pathPrefixes []Prefix,
+	pathSuffix0 string,
+	pathSuffixes ...string,
+) {
 	minFileSize := r.MinFileSize()
 	r.sort() // Make sure table is easy to read.
 
-	files := make([]struct {
+	pathSuffixes = append([]string{pathSuffix0}, pathSuffixes...)
+	type fileOption struct {
 		file.File
 		Info file.Info
-	}, len(paths))
-	for i, path := range paths {
-		f, err := file.Open(ctx, path)
-		must.Nil(err)
-		defer func() { must.Nil(f.Close(ctx)) }()
-		files[i].File = f
-
-		files[i].Info, err = f.Stat(ctx)
-		must.Nil(err)
-		must.True(files[i].Info.Size() >= int64(minFileSize), "file too small")
 	}
+	files := make([][]fileOption, len(pathPrefixes))
+	for prefixIdx, prefix := range pathPrefixes {
+		files[prefixIdx] = make([]fileOption, len(pathSuffixes))
+		for suffixIdx, suffix := range pathSuffixes {
+			f, err := file.Open(ctx, file.Join(prefix.Path, suffix))
+			must.Nil(err)
+			defer func() { must.Nil(f.Close(ctx)) }()
+			o := &files[prefixIdx][suffixIdx]
+			o.File = f
 
-	rnd := rand.New(rand.NewSource(1))
+			o.Info, err = f.Stat(ctx)
+			must.Nil(err)
+			must.True(o.Info.Size() >= int64(minFileSize), "file too small", f.Name())
+		}
+	}
 
 	type (
 		condition struct {
-			pathIdx, chunkBytesIdx, contiguousChunksIdx int
-			parallel                                    bool
+			prefixIdx, chunkBytesIdx, contiguousChunksIdx int
+			parallel                                      bool
 		}
 		result struct {
 			totalBytes int
@@ -102,16 +125,20 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 	)
 	var (
 		tasks   []condition
-		results = make([][][][]result, len(paths))
+		results = make([][][][]result, len(pathPrefixes))
 	)
-	for pathIdx := range paths {
-		results[pathIdx] = make([][][]result, len(r.ChunkBytes))
+	for prefixIdx, prefix := range pathPrefixes {
+		results[prefixIdx] = make([][][]result, len(r.ChunkBytes))
 		for chunkBytesIdx, chunkBytes := range r.ChunkBytes {
-			results[pathIdx][chunkBytesIdx] = make([][]result, len(r.ContiguousChunks))
+			results[prefixIdx][chunkBytesIdx] = make([][]result, len(r.ContiguousChunks))
 			for contiguousChunksIdx, contiguousChunks := range r.ContiguousChunks {
-				results[pathIdx][chunkBytesIdx][contiguousChunksIdx] = make([]result, 2)
+				results[prefixIdx][chunkBytesIdx][contiguousChunksIdx] = make([]result, 2)
 				totalReadBytes := chunkBytes * contiguousChunks
-				if totalReadBytes > r.MaxReadBytes {
+				maxReadBytes := r.MaxReadBytes
+				if 0 < prefix.MaxReadBytes && prefix.MaxReadBytes < maxReadBytes {
+					maxReadBytes = prefix.MaxReadBytes
+				}
+				if totalReadBytes > maxReadBytes {
 					continue
 				}
 				replicates := 1
@@ -124,7 +151,7 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 				for _, parallel := range []bool{false, true} {
 					for ri := 0; ri < replicates; ri++ {
 						tasks = append(tasks, condition{
-							pathIdx:             pathIdx,
+							prefixIdx:           prefixIdx,
 							chunkBytesIdx:       chunkBytesIdx,
 							contiguousChunksIdx: contiguousChunksIdx,
 							parallel:            parallel,
@@ -134,10 +161,16 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 			}
 		}
 	}
-	rnd.Shuffle(len(tasks), func(i, j int) {
+
+	var (
+		reproducibleRandom = rand.New(rand.NewSource(1))
+		ephemeralRandom    = rand.New(rand.NewSource(time.Now().UnixNano()))
+	)
+	// While benchmarking is running, it's easy to compare the current task index from different
+	// benchmarking machines to judge their relative progress.
+	reproducibleRandom.Shuffle(len(tasks), func(i, j int) {
 		tasks[i], tasks[j] = tasks[j], tasks[i]
 	})
-	dst := make([]byte, r.MaxReadBytes)
 
 	var (
 		currentTaskIdx int32
@@ -151,10 +184,11 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 			case <-ticker.C:
 				taskIdx := atomic.LoadInt32(&currentTaskIdx)
 				c := tasks[taskIdx]
+				prefix := pathPrefixes[c.prefixIdx]
 				chunkBytes := r.ChunkBytes[c.chunkBytesIdx]
 				contiguousChunks := r.ContiguousChunks[c.contiguousChunksIdx]
-				log.Printf("done %d of %d tasks, current: %dB * %d",
-					taskIdx, len(tasks), chunkBytes, contiguousChunks)
+				log.Printf("done %d of %d tasks, current: %dB * %d on %s",
+					taskIdx, len(tasks), chunkBytes, contiguousChunks, prefix.Path)
 			case <-cancelled:
 				break
 			}
@@ -162,13 +196,24 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 	}()
 	defer close(cancelled)
 
+	dst := make([]byte, r.MaxReadBytes)
 	for taskIdx, c := range tasks {
 		atomic.StoreInt32(&currentTaskIdx, int32(taskIdx))
 
-		f := files[c.pathIdx]
 		chunkBytes := r.ChunkBytes[c.chunkBytesIdx]
 		contiguousChunks := r.ContiguousChunks[c.contiguousChunksIdx]
-		offset := rnd.Int63n(f.Info.Size() - int64(chunkBytes*contiguousChunks) + 1)
+
+		// Vary read locations non-reproducibly to try to spread load and avoid S3 throttling.
+		// There's a tradeoff here: we're also likely introducing variance in benchmark results
+		// if S3 read performance varies between objects and over time, which it probably does [1].
+		// For now, empirically, it seems like throttling is the bigger problem, especially because
+		// our benchmark runs are relatively brief (compared to large batch workloads) and thus
+		// significantly affected by some throttling. We may revisit this in the future if a
+		// different choice helps make the benchmark a better guide for optimization.
+		//
+		// [1] https://web.archive.org/web/20221220192142/https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance.html
+		f := files[c.prefixIdx][ephemeralRandom.Intn(len(pathSuffixes))]
+		offset := ephemeralRandom.Int63n(f.Info.Size() - int64(chunkBytes*contiguousChunks) + 1)
 
 		parIdx := 0
 		start := time.Now()
@@ -207,8 +252,8 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 		}()
 		elapsed := time.Since(start)
 
-		results[c.pathIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalBytes += chunkBytes * contiguousChunks
-		results[c.pathIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalTime += elapsed
+		results[c.prefixIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalBytes += chunkBytes * contiguousChunks
+		results[c.prefixIdx][c.chunkBytesIdx][c.contiguousChunksIdx][parIdx].totalTime += elapsed
 	}
 
 	tw := tabwriter.NewWriter(out, 0, 4, 4, ' ', 0)
@@ -216,7 +261,12 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 		_, err := fmt.Fprintf(tw, format, args...)
 		must.Nil(err)
 	}
-	for range paths {
+	mustPrintf("\t")
+	for _, prefix := range pathPrefixes {
+		mustPrintf("%s%s", prefix.Path, strings.Repeat("\t", 2*len(r.ContiguousChunks)))
+	}
+	mustPrintf("\n")
+	for range files {
 		for _, parLabel := range []string{"", "p"} {
 			for _, contiguousChunks := range r.ContiguousChunks {
 				mustPrintf("\t%s%d", parLabel, contiguousChunks)
@@ -226,10 +276,10 @@ func (r ReadSizes) RunAndPrint(ctx context.Context, out io.Writer, paths ...stri
 	mustPrintf("\n")
 	for chunkBytesIdx, chunkBytes := range r.ChunkBytes {
 		mustPrintf("%d", chunkBytes/(1<<20))
-		for pathIdx := range paths {
+		for prefixIdx := range files {
 			for _, parIdx := range []int{0, 1} {
 				for contiguousChunksIdx := range r.ContiguousChunks {
-					s := results[pathIdx][chunkBytesIdx][contiguousChunksIdx][parIdx]
+					s := results[prefixIdx][chunkBytesIdx][contiguousChunksIdx][parIdx]
 					mustPrintf("\t")
 					if s.totalTime > 0 {
 						mibs := float64(s.totalBytes) / s.totalTime.Seconds() / float64(1<<20)
