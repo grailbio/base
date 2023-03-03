@@ -35,6 +35,8 @@ func init() {
 
 	Default("test/default", "test/custom")
 
+	Default("test/default2", "test/default")
+
 	Register("test/custom-ptr", func(inst *Constructor) {
 		var c custom
 		inst.IntVar(&c.x, "x", -1, "the x value")
@@ -142,7 +144,7 @@ func init() {
 	})
 }
 
-func TestProfileDefault(t *testing.T) {
+func TestProfileParamDefault(t *testing.T) {
 	p := New()
 	var x int
 	if err := p.Instance("test/1", &x); err != nil {
@@ -162,6 +164,201 @@ func TestProfileDefault(t *testing.T) {
 	if got, want := x, 23; got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+func TestProfileDefaultInstance(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		p := New()
+		if err := p.Instance("test/default", nil); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("override-default", func(t *testing.T) {
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance custom13 test/custom (
+				x = 13
+			)
+			instance test/default custom13
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	t.Run("override-second-default", func(t *testing.T) {
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance custom13 test/custom (
+				x = 13
+			)
+			instance test/default2 custom13
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, -1; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	t.Run("override-defaults-differently", func(t *testing.T) {
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance custom13 test/custom (
+				x = 13
+			)
+			instance custom132 test/custom (
+				x = 132
+			)
+			instance test/default custom13
+			instance test/default2 custom132
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 132; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	t.Run("override-default-instance-with-param", func(t *testing.T) {
+		t.Skip() // BXDS-2886
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance test/default test/custom (
+				x = 13
+			)
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	t.Run("set-default", func(t *testing.T) {
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance custom13 test/custom (
+				x = 13
+			)
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Set("test/default", "custom13"); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	t.Run("set-second-default", func(t *testing.T) {
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance custom13 test/custom (
+				x = 13
+			)
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Set("test/default2", "custom13"); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, -1; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	t.Run("set-defaults-differently", func(t *testing.T) {
+		p := New()
+		if err := p.Parse(strings.NewReader(`
+			instance custom13 test/custom (
+				x = 13
+			)
+			instance custom132 test/custom (
+				x = 132
+			)
+			instance test/default custom13
+			instance test/default2 custom132
+		`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Set("test/default", "custom13"); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Set("test/default2", "custom132"); err != nil {
+			t.Fatal(err)
+		}
+		var c custom
+		if err := p.Instance("test/default", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 13; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+		if err := p.Instance("test/default2", &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.x, 132; got != want {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
 }
 
 func TestProfile(t *testing.T) {

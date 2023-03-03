@@ -83,7 +83,9 @@ func Default(name, instance string) {
 		panic("config.Default: default " + name + " has same name as a global")
 	}
 	if _, found := globals[instance]; !found {
-		panic("config.Default: instance " + instance + " does not exist")
+		if _, found = defaults[instance]; !found {
+			panic("config.Default: instance " + instance + " does not exist")
+		}
 	}
 	defaults[name] = instance
 }
