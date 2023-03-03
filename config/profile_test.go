@@ -24,11 +24,11 @@ type paramFields struct {
 }
 
 func init() {
-	Register("test/custom", func(inst *Constructor) {
+	Register("test/custom", func(inst *ConstructorGen[custom]) {
 		var c custom
 		inst.IntVar(&c.x, "x", -1, "the x value")
 		inst.FloatVar(&c.f, "f", 0, "the f value")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (custom, error) {
 			return c, nil
 		}
 	})
@@ -37,68 +37,68 @@ func init() {
 
 	Default("test/default2", "test/default")
 
-	Register("test/custom-ptr", func(inst *Constructor) {
+	Register("test/custom-ptr", func(inst *ConstructorGen[*custom]) {
 		var c custom
 		inst.IntVar(&c.x, "x", -1, "the x value")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (*custom, error) {
 			return &c, nil
 		}
 	})
 
-	Register("test/1", func(inst *Constructor) {
+	Register("test/1", func(inst *ConstructorGen[int]) {
 		var c custom
 		inst.InstanceVar(&c, "custom", "test/default", "the custom struct")
 		x := inst.Int("x", 123, "the x value")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (int, error) {
 			return *x + c.x, nil
 		}
 	})
 
-	Register("test/custom-nil", func(inst *Constructor) {
-		inst.New = func() (interface{}, error) {
+	Register("test/custom-nil", func(inst *ConstructorGen[*custom]) {
+		inst.New = func() (*custom, error) {
 			return (*custom)(nil), nil
 		}
 	})
 
 	Default("test/default-custom-nil", "test/custom-nil")
 
-	Register("test/untyped-nil", func(inst *Constructor) {
-		inst.New = func() (interface{}, error) {
+	Register("test/untyped-nil", func(inst *ConstructorGen[any]) {
+		inst.New = func() (any, error) {
 			return nil, nil
 		}
 	})
 
 	Default("test/default-untyped-nil", "test/untyped-nil")
 
-	Register("test/params/empty", func(inst *Constructor) {
+	Register("test/params/empty", func(inst *ConstructorGen[paramFields]) {
 		var pf paramFields
 		inst.InstanceVar(&pf.p, "p", "test/custom-nil", "")
 		inst.InstanceVar(&pf.ch, "ch", "", "")
 		inst.InstanceVar(&pf.a, "a", "", "")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (paramFields, error) {
 			return pf, nil
 		}
 	})
 
-	Register("test/params/nil", func(inst *Constructor) {
+	Register("test/params/nil", func(inst *ConstructorGen[paramFields]) {
 		var pf paramFields
 		inst.InstanceVar(&pf.p, "p", "nil", "")
 		inst.InstanceVar(&pf.ch, "ch", "", "")
 		inst.InstanceVar(&pf.a, "a", "nil", "")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (paramFields, error) {
 			return pf, nil
 		}
 	})
 
-	Register("test/params/nil-instance", func(inst *Constructor) {
+	Register("test/params/nil-instance", func(inst *ConstructorGen[paramFields]) {
 		var pf paramFields
 		inst.InstanceVar(&pf.p, "p", "test/custom-nil", "")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (paramFields, error) {
 			return pf, nil
 		}
 	})
 
-	Register("test/params/empty-non-nilable-recovered", func(inst *Constructor) {
+	Register("test/params/empty-non-nilable-recovered", func(inst *ConstructorGen[any]) {
 		var r any
 		func() {
 			defer func() {
@@ -107,12 +107,12 @@ func init() {
 			var pf paramFields
 			inst.InstanceVar(&pf.c, "c", "", "")
 		}()
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (any, error) {
 			return r, nil
 		}
 	})
 
-	Register("test/params/nil-non-nilable-recovered", func(inst *Constructor) {
+	Register("test/params/nil-non-nilable-recovered", func(inst *ConstructorGen[any]) {
 		var r any
 		func() {
 			defer func() {
@@ -121,24 +121,24 @@ func init() {
 			var pf paramFields
 			inst.InstanceVar(&pf.c, "c", "nil", "")
 		}()
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (any, error) {
 			return r, nil
 		}
 	})
 
-	Register("test/chan", func(inst *Constructor) {
-		inst.New = func() (interface{}, error) {
+	Register("test/chan", func(inst *ConstructorGen[chan struct{}]) {
+		inst.New = func() (chan struct{}, error) {
 			return make(chan struct{}), nil
 		}
 	})
 
-	Register("test/params/non-nil", func(inst *Constructor) {
+	Register("test/params/non-nil", func(inst *ConstructorGen[paramFields]) {
 		var pf paramFields
 		inst.InstanceVar(&pf.c, "c", "test/custom", "")
 		inst.InstanceVar(&pf.p, "p", "test/custom-ptr", "")
 		inst.InstanceVar(&pf.ch, "ch", "test/chan", "")
 		inst.InstanceVar(&pf.a, "a", "test/custom", "")
-		inst.New = func() (interface{}, error) {
+		inst.New = func() (paramFields, error) {
 			return pf, nil
 		}
 	})

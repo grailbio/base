@@ -42,41 +42,41 @@ type frontend struct {
 }
 
 func init() {
-	Register("app/auth/env", func(constr *Constructor) {
-		constr.New = func() (interface{}, error) {
+	Register("app/auth/env", func(constr *ConstructorGen[envCredentials]) {
+		constr.New = func() (envCredentials, error) {
 			return envCredentials{}, nil
 		}
 	})
-	Register("app/auth/login", func(constr *Constructor) {
+	Register("app/auth/login", func(constr *ConstructorGen[userCredentials]) {
 		var (
 			username = constr.String("user", "test", "the username")
 			password = constr.String("password", "secret", "the password")
 		)
-		constr.New = func() (interface{}, error) {
+		constr.New = func() (userCredentials, error) {
 			return userCredentials(fmt.Sprintf("%s:%s", *username, *password)), nil
 		}
 	})
 
-	Register("app/database", func(constr *Constructor) {
+	Register("app/database", func(constr *ConstructorGen[database]) {
 		var db database
 		constr.StringVar(&db.table, "table", "defaulttable", "the database table")
 		constr.InstanceVar(&db.creds, "credentials", "app/auth/env", "credentials used for database access")
-		constr.New = func() (interface{}, error) {
+		constr.New = func() (database, error) {
 			if db.creds == nil {
-				return nil, errors.New("credentials not defined")
+				return database{}, errors.New("credentials not defined")
 			}
 			return db, nil
 		}
 	})
 
-	Register("app/frontend", func(constr *Constructor) {
+	Register("app/frontend", func(constr *ConstructorGen[frontend]) {
 		var fe frontend
 		constr.InstanceVar(&fe.db, "database", "app/database", "the database to be used")
 		constr.InstanceVar(&fe.creds, "credentials", "app/auth/env", "credentials to use for authentication")
 		constr.IntVar(&fe.limit, "limit", 128, "maximum number of concurrent requests to handle")
-		constr.New = func() (interface{}, error) {
+		constr.New = func() (frontend, error) {
 			if fe.db == (database{}) || fe.creds == nil {
-				return nil, errors.New("missing configuration")
+				return frontend{}, errors.New("missing configuration")
 			}
 			return fe, nil
 		}

@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	config.RegisterGen("http", func(constr *config.ConstructorGen[config.Nil]) {
+	config.Register("http", func(constr *config.ConstructorGen[config.Nil]) {
 		addr := constr.String("addr", ":3333", "the address used for serving http")
 		constr.Doc = "configure a local HTTP server, using the default http muxer"
 		constr.New = func() (config.Nil, error) {

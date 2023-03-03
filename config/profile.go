@@ -170,10 +170,10 @@ type (
 		instances instances
 		cached    map[string]interface{}
 	}
+	// typedConstructor is a type-erased *ConstructorGen[T].
 	typedConstructor struct {
-		*Constructor
-		// typ is optional (see configureAndType).
-		typ reflect.Type
+		constructor *ConstructorGen[any]
+		typ         reflect.Type
 	}
 )
 
@@ -190,7 +190,7 @@ func New() *Profile {
 	globalsMu.Lock()
 	for name, ct := range globals {
 		p.globals[name] = typedConstructor{newConstructor(), ct.typ}
-		ct.configure(p.globals[name].Constructor)
+		ct.configure(p.globals[name].constructor)
 	}
 	globalsMu.Unlock()
 
@@ -201,7 +201,7 @@ func New() *Profile {
 	// profile.
 	for name, global := range p.globals {
 		inst := &instance{name: name, params: make(map[string]interface{})}
-		for pname, param := range global.params {
+		for pname, param := range global.constructor.params {
 			// Special case for interface params: use their indirections
 			// instead of their value; this is always how they are satisfied
 			// in practice.
@@ -462,8 +462,8 @@ func (p *Profile) docs(inst *instance) map[string]string {
 	if !ok {
 		return nil
 	}
-	docs := map[string]string{"": global.Doc}
-	for name, param := range global.params {
+	docs := map[string]string{"": global.constructor.Doc}
+	for name, param := range global.constructor.params {
 		docs[name] = param.help
 
 		var paramType reflect.Type

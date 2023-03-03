@@ -11,10 +11,10 @@ import (
 	"sync"
 )
 
+// typedConfigure is a type-erased version of func(*ConstructorGen[T]).
 type typedConfigure struct {
-	configure func(*Constructor)
-	// typ is optional (Register leaves it nil, RegisterGen sets it).
-	typ reflect.Type
+	configure func(*ConstructorGen[any])
+	typ       reflect.Type
 }
 
 var (
@@ -23,16 +23,15 @@ var (
 	defaults  = make(map[string]string)
 )
 
-// Register is an earlier, non-generic version of RegisterGen. After migrating
-// existing callers, it will be replaced by RegisterGen.
+// RegisterGen is leftover from migrating Register to use generics.
 //
-// Deprecated: New callers should use RegisterGen.
-func Register(name string, configure func(*Constructor)) {
-	register(name, nil, configure)
+// Deprecated: New callers should use Register.
+func RegisterGen[T any](name string, configure func(*ConstructorGen[T])) {
+	Register(name, configure)
 }
 
-// RegisterGen registers a constructor and later invokes the provided
-// function whenever a new profile instance is created. RegisterGen
+// Register registers a constructor and later invokes the provided
+// function whenever a new profile instance is created. Register
 // panics if multiple constructors are registered with the same name.
 // Constructors should typically be registered in package init
 // functions, and the configure function must define at least
@@ -40,31 +39,27 @@ func Register(name string, configure func(*Constructor)) {
 // constructor with a single parameter, n, which simply returns its
 // value.
 //
-//	config.RegisterGen("config/test", func(constr *config.ConstructorGen[int]) {
+//	config.Register("config/test", func(constr *config.ConstructorGen[int]) {
 //		n := constr.Int("n", 32, "the number configured")
 //		constr.New = func() (int, error) {
 //			return *n, nil
 //		}
 //		constr.Doc = "a customizable integer"
 //	})
-func RegisterGen[T any](name string, configure func(*ConstructorGen[T])) {
-	register(name, reflect.TypeOf(new(T)).Elem(), configure)
-}
-
-func register[T any](name string, typ reflect.Type, configure func(*ConstructorGen[T])) {
+func Register[T any](name string, configure func(*ConstructorGen[T])) {
 	globalsMu.Lock()
 	defer globalsMu.Unlock()
 	if _, found := globals[name]; found {
 		panic("config.Register: instance with name " + name + " has already been registered")
 	}
 	globals[name] = typedConfigure{
-		func(untyped *Constructor) {
+		func(untyped *ConstructorGen[any]) {
 			typed := ConstructorGen[T]{params: untyped.params}
 			configure(&typed)
 			untyped.Doc = typed.Doc
 			untyped.New = func() (any, error) { return typed.New() }
 		},
-		typ,
+		reflect.TypeOf(new(T)).Elem(),
 	}
 }
 
@@ -91,13 +86,11 @@ func Default(name, instance string) {
 }
 
 type (
-	// ConstructorGen is an earlier, non-generic version of Constructor. After
-	// migrating existing callers, it will be replaced by RegisterGen.
-	Constructor = ConstructorGen[any]
 	// ConstructorGen defines a constructor, as configured by RegisterGen.
 	// Typically a constructor registers a set of parameters through the
 	// flags-like methods provided by ConstructorGen. The value returned by
 	// New is configured by these parameters.
+	// TODO: Rename to Constructor.
 	ConstructorGen[T any] struct {
 		New    func() (T, error)
 		Doc    string
@@ -108,8 +101,8 @@ type (
 	Nil interface{ neverImplemented() }
 )
 
-func newConstructor() *Constructor {
-	return &Constructor{
+func newConstructor() *ConstructorGen[any] {
+	return &ConstructorGen[any]{
 		params: make(map[string]*param),
 	}
 }

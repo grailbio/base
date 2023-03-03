@@ -44,7 +44,7 @@ const syncInterval = 1 * time.Second
 const eventBufferSize = 32768
 
 func init() {
-	config.Register("eventer/cloudwatch", func(constr *config.Constructor) {
+	config.Register("eventer/cloudwatch", func(constr *config.ConstructorGen[*Eventer]) {
 		var sess *session.Session
 		constr.InstanceVar(&sess, "aws", "aws", "AWS configuration for all CloudWatch calls")
 		var group string
@@ -52,7 +52,7 @@ func init() {
 		var stream string
 		constr.StringVar(&stream, "stream", "", "the CloudWatch log stream to which events will be sent")
 		constr.Doc = "eventer/cloudwatch configures an eventer that sends events to a CloudWatch log stream"
-		constr.New = func() (interface{}, error) {
+		constr.New = func() (*Eventer, error) {
 			cw := cloudwatchlogs.New(sess)
 			if stream == "" {
 				// All the information of RFC 3339 but without colons, as stream
