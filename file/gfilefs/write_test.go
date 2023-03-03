@@ -342,6 +342,7 @@ func withTestMounts(t *testing.T, f func(m testMount)) {
 			server, err := fs.Mount(
 				mountPoint,
 				fsnodefuse.NewRoot(gfilefs.New(root, "root")),
+				// TODO: Set fsnodefuse.ConfigureRequiredMountOptions.
 				&fs.Options{
 					MountOptions: fuse.MountOptions{
 						FsName:        "test",
