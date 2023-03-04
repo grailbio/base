@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	config.Register("aws/env", func(constr *config.ConstructorGen[*session.Session]) {
+	config.Register("aws/env", func(constr *config.Constructor[*session.Session]) {
 		var cfg aws.Config
 		cfg.Region = constr.String("region", "us-west-2", "the default AWS region for the session")
 		constr.Doc = "configure an AWS session from the environment"

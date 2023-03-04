@@ -25,13 +25,13 @@ import (
 )
 
 func init() {
-	config.Register("eventer/nop", func(constr *config.ConstructorGen[Nop]) {
+	config.Register("eventer/nop", func(constr *config.Constructor[Nop]) {
 		constr.Doc = "eventer/nop configures a no-op event logger"
 		constr.New = func() (Nop, error) {
 			return Nop{}, nil
 		}
 	})
-	config.Register("eventer/log-info", func(constr *config.ConstructorGen[Log]) {
+	config.Register("eventer/log-info", func(constr *config.Constructor[Log]) {
 		constr.Doc = "eventer/log-info configures an eventer that writes events at log level info"
 		constr.New = func() (Log, error) {
 			return Log(log.Info), nil

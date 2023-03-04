@@ -170,9 +170,9 @@ type (
 		instances instances
 		cached    map[string]interface{}
 	}
-	// typedConstructor is a type-erased *ConstructorGen[T].
+	// typedConstructor is a type-erased *Constructor[T].
 	typedConstructor struct {
-		constructor *ConstructorGen[any]
+		constructor *Constructor[any]
 		typ         reflect.Type
 	}
 )

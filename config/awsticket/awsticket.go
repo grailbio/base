@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	config.Register("aws/ticket", func(constr *config.ConstructorGen[*session.Session]) {
+	config.Register("aws/ticket", func(constr *config.Constructor[*session.Session]) {
 		var (
 			region = constr.String("region", "us-west-2", "the default AWS region for the session")
 			path   = constr.String("path", "tickets/eng/dev/aws", "path to AWS ticket")

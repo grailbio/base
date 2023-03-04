@@ -44,7 +44,7 @@ const syncInterval = 1 * time.Second
 const eventBufferSize = 32768
 
 func init() {
-	config.Register("eventer/cloudwatch", func(constr *config.ConstructorGen[*Eventer]) {
+	config.Register("eventer/cloudwatch", func(constr *config.Constructor[*Eventer]) {
 		var sess *session.Session
 		constr.InstanceVar(&sess, "aws", "aws", "AWS configuration for all CloudWatch calls")
 		var group string

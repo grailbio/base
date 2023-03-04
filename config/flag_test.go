@@ -42,12 +42,12 @@ type frontend struct {
 }
 
 func init() {
-	Register("app/auth/env", func(constr *ConstructorGen[envCredentials]) {
+	Register("app/auth/env", func(constr *Constructor[envCredentials]) {
 		constr.New = func() (envCredentials, error) {
 			return envCredentials{}, nil
 		}
 	})
-	Register("app/auth/login", func(constr *ConstructorGen[userCredentials]) {
+	Register("app/auth/login", func(constr *Constructor[userCredentials]) {
 		var (
 			username = constr.String("user", "test", "the username")
 			password = constr.String("password", "secret", "the password")
@@ -57,7 +57,7 @@ func init() {
 		}
 	})
 
-	Register("app/database", func(constr *ConstructorGen[database]) {
+	Register("app/database", func(constr *Constructor[database]) {
 		var db database
 		constr.StringVar(&db.table, "table", "defaulttable", "the database table")
 		constr.InstanceVar(&db.creds, "credentials", "app/auth/env", "credentials used for database access")
@@ -69,7 +69,7 @@ func init() {
 		}
 	})
 
-	Register("app/frontend", func(constr *ConstructorGen[frontend]) {
+	Register("app/frontend", func(constr *Constructor[frontend]) {
 		var fe frontend
 		constr.InstanceVar(&fe.db, "database", "app/database", "the database to be used")
 		constr.InstanceVar(&fe.creds, "credentials", "app/auth/env", "credentials to use for authentication")

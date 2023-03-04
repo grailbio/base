@@ -11,9 +11,9 @@ import (
 	"sync"
 )
 
-// typedConfigure is a type-erased version of func(*ConstructorGen[T]).
+// typedConfigure is a type-erased version of func(*Constructor[T]).
 type typedConfigure struct {
-	configure func(*ConstructorGen[any])
+	configure func(*Constructor[any])
 	typ       reflect.Type
 }
 
@@ -23,38 +23,31 @@ var (
 	defaults  = make(map[string]string)
 )
 
-// RegisterGen is leftover from migrating Register to use generics.
-//
-// Deprecated: New callers should use Register.
-func RegisterGen[T any](name string, configure func(*ConstructorGen[T])) {
-	Register(name, configure)
-}
-
 // Register registers a constructor and later invokes the provided
 // function whenever a new profile instance is created. Register
 // panics if multiple constructors are registered with the same name.
 // Constructors should typically be registered in package init
 // functions, and the configure function must define at least
-// ConstructorGen.New. For example, the following configures a
+// Constructor.New. For example, the following configures a
 // constructor with a single parameter, n, which simply returns its
 // value.
 //
-//	config.Register("config/test", func(constr *config.ConstructorGen[int]) {
+//	config.Register("config/test", func(constr *config.Constructor[int]) {
 //		n := constr.Int("n", 32, "the number configured")
 //		constr.New = func() (int, error) {
 //			return *n, nil
 //		}
 //		constr.Doc = "a customizable integer"
 //	})
-func Register[T any](name string, configure func(*ConstructorGen[T])) {
+func Register[T any](name string, configure func(*Constructor[T])) {
 	globalsMu.Lock()
 	defer globalsMu.Unlock()
 	if _, found := globals[name]; found {
 		panic("config.Register: instance with name " + name + " has already been registered")
 	}
 	globals[name] = typedConfigure{
-		func(untyped *ConstructorGen[any]) {
-			typed := ConstructorGen[T]{params: untyped.params}
+		func(untyped *Constructor[any]) {
+			typed := Constructor[T]{params: untyped.params}
 			configure(&typed)
 			untyped.Doc = typed.Doc
 			untyped.New = func() (any, error) { return typed.New() }
@@ -86,12 +79,11 @@ func Default(name, instance string) {
 }
 
 type (
-	// ConstructorGen defines a constructor, as configured by RegisterGen.
+	// Constructor defines a constructor, as configured by Register.
 	// Typically a constructor registers a set of parameters through the
-	// flags-like methods provided by ConstructorGen. The value returned by
+	// flags-like methods provided by Constructor. The value returned by
 	// New is configured by these parameters.
-	// TODO: Rename to Constructor.
-	ConstructorGen[T any] struct {
+	Constructor[T any] struct {
 		New    func() (T, error)
 		Doc    string
 		params map[string]*param
@@ -101,8 +93,8 @@ type (
 	Nil interface{ neverImplemented() }
 )
 
-func newConstructor() *ConstructorGen[any] {
-	return &ConstructorGen[any]{
+func newConstructor() *Constructor[any] {
+	return &Constructor[any]{
 		params: make(map[string]*param),
 	}
 }
@@ -111,7 +103,7 @@ func newConstructor() *ConstructorGen[any] {
 // instance; the method panics if ptr is not a pointer. The default
 // value is always an indirection; if it is left empty it is taken as
 // the nil value: it remains uninitialized by default.
-func (c *ConstructorGen[_]) InstanceVar(ptr interface{}, name string, value string, help string) {
+func (c *Constructor[_]) InstanceVar(ptr interface{}, name string, value string, help string) {
 	ptrTyp := reflect.TypeOf(ptr)
 	if ptrTyp.Kind() != reflect.Ptr {
 		panic(fmt.Sprintf(
@@ -139,7 +131,7 @@ func (c *ConstructorGen[_]) InstanceVar(ptr interface{}, name string, value stri
 
 // Int registers an integer parameter with a default value. The returned
 // pointer points to its value.
-func (c *ConstructorGen[_]) Int(name string, value int, help string) *int {
+func (c *Constructor[_]) Int(name string, value int, help string) *int {
 	p := new(int)
 	c.IntVar(p, name, value, help)
 	return p
@@ -147,14 +139,14 @@ func (c *ConstructorGen[_]) Int(name string, value int, help string) *int {
 
 // IntVar registers an integer parameter with a default value. The parameter's
 // value written to the location pointed to by ptr.
-func (c *ConstructorGen[_]) IntVar(ptr *int, name string, value int, help string) {
+func (c *Constructor[_]) IntVar(ptr *int, name string, value int, help string) {
 	*ptr = value
 	c.define(name, paramInt, help).intptr = ptr
 }
 
 // Float registers floating point parameter with a default value. The returned
 // pointer points to its value.
-func (c *ConstructorGen[_]) Float(name string, value float64, help string) *float64 {
+func (c *Constructor[_]) Float(name string, value float64, help string) *float64 {
 	p := new(float64)
 	c.FloatVar(p, name, value, help)
 	return p
@@ -162,14 +154,14 @@ func (c *ConstructorGen[_]) Float(name string, value float64, help string) *floa
 
 // FloatVar register a floating point parameter with a default value. The parameter's
 // value is written to the provided pointer.
-func (c *ConstructorGen[_]) FloatVar(ptr *float64, name string, value float64, help string) {
+func (c *Constructor[_]) FloatVar(ptr *float64, name string, value float64, help string) {
 	*ptr = value
 	c.define(name, paramFloat, help).floatptr = ptr
 }
 
 // String registers a string parameter with a default value. The returned pointer
 // points to its value.
-func (c *ConstructorGen[_]) String(name string, value string, help string) *string {
+func (c *Constructor[_]) String(name string, value string, help string) *string {
 	p := new(string)
 	c.StringVar(p, name, value, help)
 	return p
@@ -177,14 +169,14 @@ func (c *ConstructorGen[_]) String(name string, value string, help string) *stri
 
 // StringVar registers a string parameter with a default value. The parameter's
 // value written to the location pointed to by ptr.
-func (c *ConstructorGen[_]) StringVar(ptr *string, name string, value string, help string) {
+func (c *Constructor[_]) StringVar(ptr *string, name string, value string, help string) {
 	*ptr = value
 	c.define(name, paramString, help).strptr = ptr
 }
 
 // Bool registers a boolean parameter with a default value. The returned pointer
 // points to its value.
-func (c *ConstructorGen[_]) Bool(name string, value bool, help string) *bool {
+func (c *Constructor[_]) Bool(name string, value bool, help string) *bool {
 	p := new(bool)
 	c.BoolVar(p, name, value, help)
 	return p
@@ -192,12 +184,12 @@ func (c *ConstructorGen[_]) Bool(name string, value bool, help string) *bool {
 
 // BoolVar registers a boolean parameter with a default value. The parameter's
 // value written to the location pointed to by ptr.
-func (c *ConstructorGen[_]) BoolVar(ptr *bool, name string, value bool, help string) {
+func (c *Constructor[_]) BoolVar(ptr *bool, name string, value bool, help string) {
 	*ptr = value
 	c.define(name, paramBool, help).boolptr = ptr
 }
 
-func (c *ConstructorGen[_]) define(name string, kind int, help string) *param {
+func (c *Constructor[_]) define(name string, kind int, help string) *param {
 	if c.params[name] != nil {
 		panic("config: parameter " + name + " already defined")
 	}
