@@ -376,7 +376,7 @@ func TestV2TransformerWithRestart(t *testing.T) {
 	var nPlus, nMinus, nXor int32
 
 	// A transformer that adds N to every byte.
-	recordio.RegisterTransformer("testplus",
+	recordio.RegisterTransformer("restart-testplus",
 		func(config string) (recordio.TransformFunc, error) {
 			delta, err := strconv.Atoi(config)
 			if err != nil {
@@ -409,12 +409,12 @@ func TestV2TransformerWithRestart(t *testing.T) {
 			return bytewiseTransform(scratch, in, func(b uint8) uint8 { return b ^ uint8(delta) })
 		}, nil
 	}
-	recordio.RegisterTransformer("testxor", xorTransformerFactory, xorTransformerFactory)
+	recordio.RegisterTransformer("restart-testxor", xorTransformerFactory, xorTransformerFactory)
 
 	ogBuf := &bytes.Buffer{}
 	writerOpts := recordio.WriterOpts{
 		Marshal:      marshalString,
-		Transformers: []string{"testplus 3", "testxor 111"},
+		Transformers: []string{"restart-testplus 3", "restart-testxor 111"},
 		KeyTrailer:   true,
 	}
 	wr := recordio.NewWriter(ogBuf, writerOpts)
@@ -438,8 +438,8 @@ func TestV2TransformerWithRestart(t *testing.T) {
 
 	header, body, _ := readAllV2(t, restartBuf)
 	expect.EQ(t, recordio.ParsedHeader{
-		recordio.KeyValue{"transformer", "testplus 3"},
-		recordio.KeyValue{"transformer", "testxor 111"},
+		recordio.KeyValue{"transformer", "restart-testplus 3"},
+		recordio.KeyValue{"transformer", "restart-testxor 111"},
 		recordio.KeyValue{"trailer", true},
 	}, header)
 	expect.EQ(t, body, []string{"F0", "F1", "F2"})
