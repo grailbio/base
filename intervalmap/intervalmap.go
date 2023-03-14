@@ -6,7 +6,7 @@
 // (http://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf).
 package intervalmap
 
-//go:generate ../gtl/generate_randomized_freepool.py --output=search_freepool --prefix=searcher -DELEM=*searcher --package=intervalmap
+//go:generate ../gtl/generate_randomized_freepool.py --output=search_freepool --prefix=searcher --PREFIX=searcher -DELEM=*searcher --package=intervalmap
 
 import (
 	"bytes"

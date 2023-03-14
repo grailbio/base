@@ -16,12 +16,10 @@ The global flags are:
    log to standard error as well as files
  -block-profile=
    filename prefix for block profiles
- -block-profile-rate=1
-   rate for runtime. SetBlockProfileRate
+ -block-profile-rate=200
+   rate for runtime.SetBlockProfileRate
  -cpu-profile=
    filename for cpu profile
- -gops=false
-   enable the gops listener
  -heap-profile=
    filename prefix for heap profiles
  -log_backtrace_at=:0
@@ -36,7 +34,7 @@ The global flags are:
    Displays metadata for the program and exits.
  -mutex-profile=
    filename prefix for mutex profiles
- -mutex-profile-rate=1
+ -mutex-profile-rate=200
    rate for runtime.SetMutexProfileFraction
  -pprof=
    address for pprof server
@@ -51,35 +49,6 @@ The global flags are:
    Dump timing information to stderr before exiting the program.
  -v=0
    log level for V logs
- -v23.credentials=
-   directory to use for storing security credentials
- -v23.i18n-catalogue=
-   18n catalogue files to load, comma separated
- -v23.namespace.root=[/(v23.grail.com:internal:mounttabled)@ns.v23.grail.com:8101]
-   local namespace root; can be repeated to provided multiple roots
- -v23.permissions.file=map[]
-   specify a perms file as <name>:<permsfile>
- -v23.permissions.literal=
-   explicitly specify the runtime perms as a JSON-encoded access.Permissions.
-   Overrides all --v23.permissions.file flags.
- -v23.proxy=
-   object name of proxy service to use to export services across network
-   boundaries
- -v23.tcp.address=
-   address to listen on
- -v23.tcp.protocol=wsh
-   protocol to listen with
- -v23.vtrace.cache-size=1024
-   The number of vtrace traces to store in memory.
- -v23.vtrace.collect-regexp=
-   Spans and annotations that match this regular expression will trigger trace
-   collection.
- -v23.vtrace.dump-on-shutdown=true
-   If true, dump all stored traces on runtime shutdown.
- -v23.vtrace.sample-rate=0
-   Rate (from 0.0 to 1.0) to sample vtrace traces.
- -v23.vtrace.v=0
-   The verbosity level of the log messages to be captured in traces
  -vmodule=
    comma-separated list of globpattern=N settings for filename-filtered logging
    (without the .go suffix).  E.g. foo/bar/baz.go is matched by patterns baz or
