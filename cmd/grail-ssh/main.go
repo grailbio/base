@@ -1,6 +1,6 @@
 // The following enables go generate to generate the doc.go file.
-//
 //go:generate go run v.io/x/lib/cmdline/gendoc "--build-cmd=go install" --copyright-notice= . -help
+
 package main
 
 import (
