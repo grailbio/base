@@ -6,6 +6,11 @@ import (
 	"github.com/grailbio/base/file"
 )
 
+type ShardLister interface {
+	// NewShard adds a new worker shard, or nil if not supported.
+	NewShard() BatchLister
+}
+
 type BatchLister interface {
 	// Note: !more means client should stop Scan()-ing. len(batch) == 0 does not imply !more.
 	Scan(context.Context) (batch []Info, more bool)
