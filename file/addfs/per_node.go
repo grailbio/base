@@ -2,11 +2,8 @@ package addfs
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/grailbio/base/file/fsnode"
-	"github.com/grailbio/base/log"
 )
 
 type (
@@ -66,116 +63,22 @@ func NewPerNodeFunc(fn func(context.Context, fsnode.T) ([]fsnode.T, error)) PerN
 }
 func (f perNodeFunc) Apply(ctx context.Context, n fsnode.T) ([]fsnode.T, error) { return f(ctx, n) }
 
-const addsDirName = "..."
-
-// perNodeImpl extends the original Parent with the .../ child.
-type perNodeImpl struct {
-	fsnode.Parent
-	fns  []PerNodeFunc
-	adds fsnode.Parent
-}
-
-var (
-	_ fsnode.Parent    = (*perNodeImpl)(nil)
-	_ fsnode.Cacheable = (*perNodeImpl)(nil)
-)
-
 // ApplyPerNodeFuncs returns a new Parent that contains original's nodes plus any added by fns.
 // See PerNodeFunc's for more documentation on how this works.
 // Later fns's added nodes will overwrite earlier ones, if any names conflict.
 func ApplyPerNodeFuncs(original fsnode.Parent, fns ...PerNodeFunc) fsnode.Parent {
-	fns = append([]PerNodeFunc{}, fns...)
-	adds := perNodeAdds{
-		fsnode.CopyFileInfo(original).WithName(addsDirName),
-		original, fns}
-	return &perNodeImpl{original, fns, &adds}
-}
-
-func (n *perNodeImpl) CacheableFor() time.Duration { return fsnode.CacheableFor(n.Parent) }
-func (n *perNodeImpl) Child(ctx context.Context, name string) (fsnode.T, error) {
-	if name == addsDirName {
-		return n.adds, nil
+	sfns := make([]PerSubtreeFunc, len(fns))
+	for i, fn := range fns {
+		sfns[i] = AsSubtree(fn)
 	}
-	child, err := n.Parent.Child(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return perNodeRecurse(child, n.fns), nil
-}
-func (n *perNodeImpl) Children() fsnode.Iterator {
-	return fsnode.NewConcatIterator(
-		// TODO: Consider omitting .../ if the directory has no other children.
-		fsnode.NewIterator(n.adds),
-		// TODO: Filter out any conflicting ... to be consistent with Child.
-		fsnode.MapIterator(n.Parent.Children(), func(_ context.Context, child fsnode.T) (fsnode.T, error) {
-			return perNodeRecurse(child, n.fns), nil
-		}),
-	)
+	return ApplyPerSubtreeFuncs(original, sfns...)
 }
 
-// perNodeAdds is the .../ Parent. It has a child (directory) for each original child (both
-// directories and files). The children contain the PerNodeFunc.Apply outputs.
-type perNodeAdds struct {
-	fsnode.FileInfo
-	original fsnode.Parent
-	fns      []PerNodeFunc
+type converted struct{ fn PerNodeFunc }
+
+func (c converted) Apply(ctx context.Context, n fsnode.T) (PerSubtreeFunc, []fsnode.T, error) {
+	adds, err := c.fn.Apply(ctx, n)
+	return c, adds, err
 }
 
-var (
-	_ fsnode.Parent    = (*perNodeAdds)(nil)
-	_ fsnode.Cacheable = (*perNodeAdds)(nil)
-)
-
-func (n *perNodeAdds) Child(ctx context.Context, name string) (fsnode.T, error) {
-	child, err := n.original.Child(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return n.newAddsForChild(child), nil
-}
-func (n *perNodeAdds) Children() fsnode.Iterator {
-	// TODO: Filter out any conflicting ... to be consistent with Child.
-	return fsnode.MapIterator(n.original.Children(), func(_ context.Context, child fsnode.T) (fsnode.T, error) {
-		return n.newAddsForChild(child), nil
-	})
-}
-func (n *perNodeAdds) FSNodeT() {}
-
-func (n *perNodeAdds) newAddsForChild(original fsnode.T) fsnode.Parent {
-	return fsnode.NewParent(
-		fsnode.NewDirInfo(original.Name()).
-			WithModTime(original.ModTime()).
-			// Derived directory must be executable to be usable, even if original file wasn't.
-			WithModePerm(original.Mode().Perm()|0111).
-			WithCacheableFor(fsnode.CacheableFor(original)),
-		fsnode.FuncChildren(func(ctx context.Context) ([]fsnode.T, error) {
-			adds := make(map[string]fsnode.T)
-			for _, fn := range n.fns {
-				fnAdds, err := fn.Apply(ctx, original)
-				if err != nil {
-					return nil, fmt.Errorf("addfs: error running func %v: %w", fn, err)
-				}
-				for _, add := range fnAdds {
-					if _, exists := adds[add.Name()]; exists {
-						// TODO: Consider returning an error here. Or merging the added trees?
-						log.Error.Printf("addfs %s: conflict for added name: %s", original.Name(), add.Name())
-					}
-					adds[add.Name()] = add
-				}
-			}
-			wrapped := make([]fsnode.T, 0, len(adds))
-			for _, add := range adds {
-				wrapped = append(wrapped, perNodeRecurse(add, n.fns))
-			}
-			return wrapped, nil
-		}),
-	)
-}
-
-func perNodeRecurse(node fsnode.T, fns []PerNodeFunc) fsnode.T {
-	parent, ok := node.(fsnode.Parent)
-	if !ok {
-		return node
-	}
-	return ApplyPerNodeFuncs(parent, fns...)
-}
+func AsSubtree(fn PerNodeFunc) PerSubtreeFunc { return converted{fn} }
