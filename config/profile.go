@@ -142,6 +142,8 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
+
+	"github.com/grailbio/base/must"
 )
 
 func init() {
@@ -434,9 +436,12 @@ func (p *Profile) Instance(name string, ptr interface{}) error {
 	}
 	_, file, line, _ := runtime.Caller(1)
 	p.mu.Lock()
-	err := p.getLocked(name, ptrv, file, line)
-	p.mu.Unlock()
-	return err
+	defer p.mu.Unlock()
+	cfg, err := p.getSelfConfigLocked()
+	if err != nil {
+		return err
+	}
+	return p.getLocked(name, ptrv, file, line, cfg.strictParams)
 }
 
 func (p *Profile) PrintTo(w io.Writer) error {
@@ -487,7 +492,23 @@ func (p *Profile) docs(inst *instance) map[string]string {
 	return docs
 }
 
-func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line int) error {
+func (p *Profile) getSelfConfigLocked() (selfConfig, error) {
+	if _, ok := p.cached[selfInstance]; !ok {
+		// TODO: Consider enforcing strictness for the selfConfig instance, too.
+		if err := p.getLocked(selfInstance, reflect.Value{}, "internal", 0, false); err != nil {
+			return selfConfig{}, fmt.Errorf("getting internal config: %w", err)
+		}
+	}
+	v, ok := p.cached[selfInstance]
+	must.True(ok)
+	s, ok := v.(selfConfig)
+	if !ok {
+		return selfConfig{}, fmt.Errorf("config instance %q is the wrong type: %T", selfInstance, v)
+	}
+	return s, nil
+}
+
+func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line int, strict bool) error {
 	if v, ok := p.cached[name]; ok {
 		return assign(name, v, ptr, file, line)
 	}
@@ -525,6 +546,15 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 	instance := newConstructor()
 	ct.configure(instance)
 
+	if strict {
+		for pname := range resolved {
+			if _, ok := instance.params[pname]; ok {
+				continue
+			}
+			return fmt.Errorf("unexpected param %q for instance %q", pname, name)
+		}
+	}
+
 	for pname, param := range instance.params {
 		val, ok := resolved[pname]
 		if !ok {
@@ -546,7 +576,7 @@ func (p *Profile) getLocked(name string, ptr reflect.Value, file string, line in
 				}
 				continue // nil: skip
 			}
-			if err := p.getLocked(string(indir), reflect.ValueOf(param.ifaceptr), param.file, param.line); err != nil {
+			if err := p.getLocked(string(indir), reflect.ValueOf(param.ifaceptr), param.file, param.line, strict); err != nil {
 				return err
 			}
 			continue

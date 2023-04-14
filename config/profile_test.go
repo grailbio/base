@@ -448,3 +448,32 @@ func TestInstanceNames(t *testing.T) {
 		}
 	}
 }
+
+func TestStrict(t *testing.T) {
+	const (
+		param = "unrecognized-param"
+		text  = "param test/custom " + param + " = 0"
+	)
+	p := New()
+	if err := p.Parse(strings.NewReader(text)); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Instance("test/custom", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	p = New()
+	if err := p.Set("config.strict-params", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Parse(strings.NewReader(text)); err != nil {
+		t.Fatal(err)
+	}
+	err := p.Instance("test/custom", nil)
+	if err == nil {
+		t.Fatal("expected err")
+	}
+	if e := err.Error(); !strings.Contains(e, param) {
+		t.Fatalf("expected err to mention param name, got: %s", e)
+	}
+}
