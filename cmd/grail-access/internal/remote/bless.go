@@ -192,10 +192,6 @@ url='{{.url}}'
 # sha256 is the expected SHA-256 hash of the grail-access binary.
 sha256='{{.sha256}}'
 
-blessRemotesDataHome="${HOME}/.local/share"
-if [ ! -z ${XDG_DATA_HOME+x} ]; then
-	blessRemotesDataHome="${XDG_DATA_HOME}"
-fi
 # path is the path at which will we ultimately place the grail-access binary.
 path="{{.path}}"
 dir="$(dirname "${path}")"
