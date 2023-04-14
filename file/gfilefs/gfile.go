@@ -365,8 +365,7 @@ type directRead struct {
 		ioctx.ReaderAt
 		ioctx.Closer
 	}
-	r   io.ReadSeeker
-	off int64
+	r io.ReadSeeker
 }
 
 var _ ioOps = (*directRead)(nil)
