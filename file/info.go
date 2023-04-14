@@ -9,6 +9,7 @@ import (
 )
 
 // Info represents file metadata.
+// TODO(josh): Consider implementing full os.FileInfo.
 type Info interface {
 	// Size returns the length of the file in bytes for regular files; system-dependent for others
 	Size() int64

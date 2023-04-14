@@ -4,60 +4,66 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/file/x/parlist"
 	"github.com/grailbio/base/log"
+	"github.com/grailbio/base/must"
 )
 
 // List implements file.Implementation interface.
 func (impl *s3Impl) List(ctx context.Context, dir string, recurse bool) file.Lister {
+	batch := impl.ListBatch(ctx, dir, parlist.ListOpts{Recursive: recurse})
+	return parlist.NewAdapter(ctx, batch)
+}
+
+var _ parlist.Implementation = (*s3Impl)(nil)
+
+// ListOpts implements parlist.Implementation. It's experimental and should not be used directly.
+func (impl *s3Impl) ListBatch(ctx context.Context, dir string, opts parlist.ListOpts) parlist.BatchLister {
 	scheme, bucket, key, err := ParseURL(dir)
 	if err != nil {
-		return &s3Lister{ctx: ctx, dir: dir, err: err}
+		return &s3BatchLister{dir: dir, err: err}
 	}
 	if bucket == "" {
-		if recurse {
-			return &s3Lister{ctx: ctx, dir: dir,
+		if opts.Recursive {
+			return &s3BatchLister{dir: dir,
 				err: fmt.Errorf("list %s: ListBuckets cannot be combined with recurse option", dir)}
 		}
 		clients, clientsErr := impl.provider.Get(ctx, "ListAllMyBuckets", dir)
 		if clientsErr != nil {
-			return &s3Lister{ctx: ctx, dir: dir, err: clientsErr}
+			return &s3BatchLister{dir: dir, err: clientsErr}
 		}
 		return &s3BucketLister{
-			ctx:     ctx,
 			scheme:  scheme,
 			clients: clients,
 		}
 	}
 	clients, err := impl.provider.Get(ctx, "ListBucket", dir)
 	if err != nil {
-		return &s3Lister{ctx: ctx, dir: dir, err: err}
+		return &s3BatchLister{dir: dir, err: err}
 	}
-	return &s3Lister{
-		ctx:     ctx,
-		policy:  newRetryPolicy(clients, file.Opts{}),
-		dir:     dir,
-		scheme:  scheme,
-		bucket:  bucket,
-		prefix:  key,
-		recurse: recurse,
+	return &s3BatchLister{
+		policy: newRetryPolicy(clients, file.Opts{}),
+		dir:    dir,
+		scheme: scheme,
+		bucket: bucket,
+		prefix: key,
+		opts:   opts,
 	}
 }
 
-type s3Lister struct {
-	ctx                         context.Context
-	policy                      retryPolicy
+type s3BatchLister struct {
+	policy retryPolicy
+	// TODO(josh): Remove dir.
 	dir, scheme, bucket, prefix string
+	opts                        parlist.ListOpts
 
-	object  s3Obj
-	objects []s3Obj
-	token   *string
-	err     error
-	done    bool
-	recurse bool
+	token *string
+	err   error
 
 	// consecutiveEmptyResponses counts how many times S3's ListObjectsV2WithContext returned
 	// 0 records (either contents or common prefixes) consecutively.
@@ -65,52 +71,21 @@ type s3Lister struct {
 	consecutiveEmptyResponses int
 }
 
-type s3Obj struct {
-	obj *s3.Object
-	cp  *string
-}
-
-func (o s3Obj) name() string {
-	if o.obj == nil {
-		return *o.cp
-	}
-	return *o.obj.Key
-}
+var _ parlist.BatchLister = (*s3BatchLister)(nil)
 
 // Scan implements Lister.Scan
-func (l *s3Lister) Scan() bool {
+func (l *s3BatchLister) Scan(ctx context.Context) (batch []parlist.Info, more bool) {
+	// TODO: Use a for-loop just around the request retry rather than the whole body.
 	for {
 		if l.err != nil {
-			return false
-		}
-		l.err = l.ctx.Err()
-		if l.err != nil {
-			return false
-		}
-		if len(l.objects) > 0 {
-			l.object, l.objects = l.objects[0], l.objects[1:]
-			ll := len(l.prefix)
-			// Ignore keys whose path component isn't exactly equal to l.prefix.  For
-			// example, if l.prefix="foo/bar", then we yield "foo/bar" and
-			// "foo/bar/baz", but not "foo/barbaz".
-			keyVal := l.object.name()
-			if ll > 0 && len(keyVal) > ll {
-				if l.prefix[ll-1] == '/' {
-					// Treat prefix "foo/bar/" as "foo/bar".
-					ll--
-				}
-				if keyVal[ll] != '/' {
-					continue
-				}
-			}
-			return true
-		}
-		if l.done {
-			return false
+			return nil, false
 		}
 
-		var prefix string
-		if l.showDirs() && !strings.HasSuffix(l.prefix, pathSeparator) && l.prefix != "" {
+		var (
+			prefix   string
+			showDirs = !l.opts.Recursive
+		)
+		if showDirs && !strings.HasSuffix(l.prefix, pathSeparator) && l.prefix != "" {
 			prefix = l.prefix + pathSeparator
 		} else {
 			prefix = l.prefix
@@ -121,22 +96,31 @@ func (l *s3Lister) Scan() bool {
 			ContinuationToken: l.token,
 			Prefix:            aws.String(prefix),
 		}
-
-		if l.showDirs() {
+		if l.opts.StartAfter != "" {
+			if len(prefix) == 0 || prefix[len(prefix)-1:] == pathSeparator {
+				req.StartAfter = aws.String(prefix + l.opts.StartAfter)
+			} else {
+				req.StartAfter = aws.String(prefix + pathSeparator + l.opts.StartAfter)
+			}
+		}
+		if l.opts.BatchSizeHint > 0 {
+			req.MaxKeys = aws.Int64(int64(l.opts.BatchSizeHint))
+		}
+		if showDirs {
 			req.Delimiter = aws.String(pathSeparator)
 		}
 		var ids s3RequestIDs
-		res, err := l.policy.client().ListObjectsV2WithContext(l.ctx, req, ids.captureOption())
-		if l.policy.shouldRetry(l.ctx, err, l.dir) {
+		res, err := l.policy.client().ListObjectsV2WithContext(ctx, req, ids.captureOption())
+		if l.policy.shouldRetry(ctx, err, l.dir) {
 			continue
 		}
 		if err != nil {
 			l.err = annotate(err, ids, &l.policy, fmt.Sprintf("s3file.list s3://%s/%s", l.bucket, l.prefix))
-			return false
+			return nil, false
 		}
 		l.token = res.NextContinuationToken
 		nRecords := len(res.Contents)
-		if l.showDirs() {
+		if showDirs {
 			nRecords += len(res.CommonPrefixes)
 		}
 		if nRecords > 0 {
@@ -147,55 +131,73 @@ func (l *s3Lister) Scan() bool {
 				log.Printf("s3file.list.scan: warning: S3 returned empty response %d consecutive times", n)
 			}
 		}
-		l.objects = make([]s3Obj, 0, nRecords)
-		for _, objVal := range res.Contents {
-			l.objects = append(l.objects, s3Obj{obj: objVal})
+
+		batch = make([]parlist.Info, 0, nRecords)
+		for _, obj := range res.Contents {
+			relPath := *obj.Key
+			if !l.keepObj(relPath) {
+				continue
+			}
+			batch = append(batch, s3Obj{
+				path:    fmt.Sprintf("%s://%s/%s", l.scheme, l.bucket, relPath),
+				size:    *obj.Size,
+				modTime: *obj.LastModified,
+				eTag:    *obj.ETag,
+			})
 		}
-		if l.showDirs() { // add the pseudo Dirs
+
+		if showDirs {
 			for _, cpVal := range res.CommonPrefixes {
 				// Follow the Linux convention that directories do not come back with a trailing /
-				// when read by ListDir.  To determine it is a directory, it is necessary to
-				// call implementation.Stat on the path and check IsDir()
+				// when read by ListDir.
 				pseudoDirName := *cpVal.Prefix
+				if !l.keepObj(pseudoDirName) {
+					continue
+				}
 				if strings.HasSuffix(pseudoDirName, pathSeparator) {
 					pseudoDirName = pseudoDirName[:len(pseudoDirName)-1]
 				}
-				l.objects = append(l.objects, s3Obj{cp: &pseudoDirName})
+				batch = append(batch, s3Obj{
+					path:  fmt.Sprintf("%s://%s/%s", l.scheme, l.bucket, pseudoDirName),
+					isDir: true,
+				})
 			}
 		}
 
-		l.done = !aws.BoolValue(res.IsTruncated)
+		return batch, aws.BoolValue(res.IsTruncated)
 	}
 }
 
-// Path implements Lister.Path
-func (l *s3Lister) Path() string {
-	return fmt.Sprintf("%s://%s/%s", l.scheme, l.bucket, l.object.name())
-}
-
-// Info implements Lister.Info
-func (l *s3Lister) Info() file.Info {
-	if obj := l.object.obj; obj != nil {
-		return &s3Info{
-			size:    *obj.Size,
-			modTime: *obj.LastModified,
-			etag:    *obj.ETag,
+// keepObj skips keys whose path component isn't exactly equal to l.prefix.  For
+// example, if l.prefix == "foo/bar", then we yield "foo/bar" and
+// "foo/bar/baz", but not "foo/barbaz".
+func (l *s3BatchLister) keepObj(objPath string) bool {
+	ll := len(l.prefix)
+	must.Truef(l.prefix == objPath[:ll], "%s, %s", l.prefix, objPath)
+	if ll > 0 && len(objPath) > ll {
+		if l.prefix[ll-1] == '/' {
+			// Treat prefix "foo/bar/" as "foo/bar".
+			ll--
+		}
+		if objPath[ll] != '/' {
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
-// IsDir implements Lister.IsDir
-func (l *s3Lister) IsDir() bool {
-	return l.object.cp != nil
+func (l *s3BatchLister) Err() error { return l.err }
+
+type s3Obj struct {
+	path    string
+	isDir   bool
+	size    int64
+	modTime time.Time
+	eTag    string
 }
 
-// Err returns an error, if any.
-func (l *s3Lister) Err() error {
-	return l.err
-}
-
-// showDirs controls whether CommonPrefixes are returned during a scan
-func (l *s3Lister) showDirs() bool {
-	return !l.recurse
-}
+func (o s3Obj) Path() string       { return o.path }
+func (o s3Obj) IsDir() bool        { return o.isDir }
+func (o s3Obj) Size() int64        { return o.size }
+func (o s3Obj) ModTime() time.Time { return o.modTime }
+func (o s3Obj) ETag() string       { return o.eTag }

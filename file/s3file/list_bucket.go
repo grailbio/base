@@ -10,31 +10,37 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/grailbio/base/errors"
 	"github.com/grailbio/base/file"
+	"github.com/grailbio/base/file/x/parlist"
 	"github.com/grailbio/base/log"
 	"github.com/grailbio/base/traverse"
 )
 
 type s3BucketLister struct {
-	ctx     context.Context
 	clients []s3iface.S3API
 	scheme  string
 
-	err     error
-	listed  bool
-	bucket  string
-	buckets []string
+	err  error
+	done bool
 }
 
-func (l *s3BucketLister) Scan() bool {
-	if !l.listed {
-		l.buckets, l.err = combineClientBuckets(l.ctx, l.clients)
-		l.listed = true
+func (l *s3BucketLister) Scan(ctx context.Context) (batch []parlist.Info, more bool) {
+	if l.done {
+		return nil, false
 	}
-	if l.err != nil || len(l.buckets) == 0 {
-		return false
+	var buckets []string
+	buckets, l.err = combineClientBuckets(ctx, l.clients)
+	l.done = true
+	if l.err != nil || len(buckets) == 0 {
+		return nil, false
 	}
-	l.bucket, l.buckets = l.buckets[0], l.buckets[1:]
-	return true
+	batch = make([]parlist.Info, len(buckets))
+	for i, bucket := range buckets {
+		batch[i] = s3Obj{
+			path:  fmt.Sprintf("%s://%s", l.scheme, bucket),
+			isDir: true,
+		}
+	}
+	return batch, false
 }
 
 // combineClientBuckets returns the union of buckets from each client, since each may have
@@ -90,17 +96,4 @@ func listClientBuckets(ctx context.Context, client s3iface.S3API) ([]string, err
 	}
 }
 
-func (l *s3BucketLister) Path() string {
-	return fmt.Sprintf("%s://%s", l.scheme, l.bucket)
-}
-
-func (l *s3BucketLister) Info() file.Info { return nil }
-
-func (l *s3BucketLister) IsDir() bool {
-	return true
-}
-
-// Err returns an error, if any.
-func (l *s3BucketLister) Err() error {
-	return l.err
-}
+func (l *s3BucketLister) Err() error { return l.err }
